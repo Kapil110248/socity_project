@@ -1,27 +1,16 @@
 const express = require('express');
-const prisma = require('../lib/prisma');
+const VendorController = require('../controllers/Vendor.controller');
 const { authenticate, authorize } = require('../middlewares/auth.middleware');
 
 const router = express.Router();
 
-router.get('/', authenticate, async (req, res) => {
-  try {
-    const vendors = await prisma.vendor.findMany({ where: { societyId: req.user.societyId } });
-    res.json(vendors);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+router.get('/', authenticate, VendorController.listSocietalVendors);
+router.post('/', authenticate, authorize(['ADMIN', 'SUPER_ADMIN']), VendorController.createVendor);
 
-router.post('/', authenticate, authorize(['ADMIN']), async (req, res) => {
-  try {
-    const vendor = await prisma.vendor.create({
-      data: { ...req.body, societyId: req.user.societyId }
-    });
-    res.status(201).json(vendor);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+// Super Admin
+router.get('/all', authenticate, authorize(['SUPER_ADMIN']), VendorController.listAllVendors);
+router.patch('/:id/status', authenticate, authorize(['SUPER_ADMIN']), VendorController.updateVendorStatus);
+router.delete('/:id', authenticate, authorize(['SUPER_ADMIN']), VendorController.deleteVendor);
+router.get('/stats', authenticate, authorize(['SUPER_ADMIN']), VendorController.getStats);
 
 module.exports = router;

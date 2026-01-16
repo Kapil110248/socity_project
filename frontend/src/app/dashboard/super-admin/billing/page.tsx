@@ -23,31 +23,56 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { RoleGuard } from '@/components/auth/role-guard'
+import { useQuery } from '@tanstack/react-query'
+import api from '@/lib/api'
 
-const revenueData = [
-  { month: 'Jul', revenue: 3200000 },
-  { month: 'Aug', revenue: 3450000 },
-  { month: 'Sep', revenue: 3800000 },
-  { month: 'Oct', revenue: 4100000 },
-  { month: 'Nov', revenue: 4350000 },
-  { month: 'Dec', revenue: 4567890 },
-]
-
-const subscriptionStats = [
-  { plan: 'Basic', societies: 45, mrr: 450000, color: 'bg-gray-500' },
-  { plan: 'Professional', societies: 78, mrr: 1560000, color: 'bg-blue-500' },
-  { plan: 'Enterprise', societies: 33, mrr: 2475000, color: 'bg-purple-500' },
-]
-
-const recentTransactions = [
-  { id: 1, society: 'Green Valley Apartments', amount: 75000, type: 'Subscription', date: '2024-12-20', status: 'completed' },
-  { id: 2, society: 'Sunrise Heights', amount: 20000, type: 'Subscription', date: '2024-12-19', status: 'completed' },
-  { id: 3, society: 'Lake View Residency', amount: 75000, type: 'Subscription', date: '2024-12-18', status: 'completed' },
-  { id: 4, society: 'Palm Gardens', amount: 20000, type: 'Setup Fee', date: '2024-12-17', status: 'pending' },
-]
+// Mock types/interfaces for platform stats
+interface PlatformStats {
+  platformStats: {
+    totalSocieties: number;
+    monthlyRevenue: number;
+  };
+  societyGrowthData: any[];
+  revenueData: any[];
+  subscriptionStats: any[];
+}
 
 export default function PlatformBillingPage() {
-  const totalMRR = subscriptionStats.reduce((sum, stat) => sum + stat.mrr, 0)
+  const { data: stats, isLoading: isStatsLoading } = useQuery<PlatformStats>({
+    queryKey: ['platform-stats'],
+    queryFn: async () => {
+      const response = await api.get('/reports/platform-stats')
+      return response.data
+    }
+  })
+
+  const { data: transactions = [], isLoading: isTxLoading } = useQuery<any[]>({
+    queryKey: ['platform-transactions'],
+    queryFn: async () => {
+      const response = await api.get('/transactions')
+      return response.data
+    }
+  })
+
+  if (isStatsLoading || !stats) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    )
+  }
+
+  const { platformStats, revenueData, subscriptionStats } = stats
+  // For totalMRR in subscriptions we calculate based on existing stats
+  const totalMRR = platformStats.monthlyRevenue;
+  const recentTransactions = transactions.slice(0, 5).map(tx => ({
+    id: tx.id,
+    society: tx.society?.name || 'N/A',
+    amount: tx.amount,
+    type: tx.category || tx.type,
+    date: new Date(tx.date).toLocaleDateString(),
+    status: tx.status.toLowerCase()
+  }));
 
   return (
     <RoleGuard allowedRoles={['super_admin']}>
@@ -165,14 +190,14 @@ export default function PlatformBillingPage() {
                         <span className="font-medium">{plan.plan}</span>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold">₹{(plan.mrr / 100000).toFixed(1)}L/mo</p>
+                        <p className="font-bold">₹{((plan.societies * 10000) / 100000).toFixed(1)}L/mo</p>
                         <p className="text-xs text-gray-500">{plan.societies} societies</p>
                       </div>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
                         className={`${plan.color} h-2 rounded-full`}
-                        style={{ width: `${(plan.mrr / totalMRR) * 100}%` }}
+                        style={{ width: `${(plan.societies / platformStats.totalSocieties) * 100}%` }}
                       />
                     </div>
                   </div>

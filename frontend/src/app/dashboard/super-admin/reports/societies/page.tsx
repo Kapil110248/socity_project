@@ -100,7 +100,32 @@ const planDistribution = [
   { plan: 'Basic', count: 45, percentage: 29 },
 ]
 
+import { useQuery } from '@tanstack/react-query'
+import api from '@/lib/api'
+
 export default function SocietyReportsPage() {
+  const { data: reportsData, isLoading } = useQuery({
+    queryKey: ['platform-reports'],
+    queryFn: async () => {
+      const response = await api.get('/reports/platform-stats')
+      return response.data
+    }
+  })
+
+  // Transformed data
+  const growthData = reportsData?.growthData || []
+  const planDistribution = reportsData?.planDistribution || []
+  const societyPerformance = reportsData?.societyPerformance || []
+  const overview = reportsData?.overview || {}
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-200px)]">
+        <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    )
+  }
+
   return (
     <RoleGuard allowedRoles={['super_admin']}>
       <motion.div
@@ -144,11 +169,11 @@ export default function SocietyReportsPage() {
                 </div>
                 <div className="flex items-center text-green-600 text-sm">
                   <ArrowUpRight className="h-4 w-4" />
-                  +8
+                  {overview.societiesChange}
                 </div>
               </div>
               <div className="mt-3">
-                <p className="text-2xl font-bold">156</p>
+                <p className="text-2xl font-bold">{overview.activeSocieties}</p>
                 <p className="text-sm text-gray-600">Total Societies</p>
               </div>
             </CardContent>
@@ -161,11 +186,11 @@ export default function SocietyReportsPage() {
                 </div>
                 <div className="flex items-center text-green-600 text-sm">
                   <ArrowUpRight className="h-4 w-4" />
-                  +1,234
+                  +0
                 </div>
               </div>
               <div className="mt-3">
-                <p className="text-2xl font-bold">24,567</p>
+                <p className="text-2xl font-bold">{overview.totalUsers?.toLocaleString()}</p>
                 <p className="text-sm text-gray-600">Total Users</p>
               </div>
             </CardContent>
@@ -178,11 +203,11 @@ export default function SocietyReportsPage() {
                 </div>
                 <div className="flex items-center text-green-600 text-sm">
                   <ArrowUpRight className="h-4 w-4" />
-                  +450
+                  +0
                 </div>
               </div>
               <div className="mt-3">
-                <p className="text-2xl font-bold">38,450</p>
+                <p className="text-2xl font-bold">0</p>
                 <p className="text-sm text-gray-600">Total Units</p>
               </div>
             </CardContent>
@@ -195,11 +220,11 @@ export default function SocietyReportsPage() {
                 </div>
                 <div className="flex items-center text-red-600 text-sm">
                   <ArrowDownRight className="h-4 w-4" />
-                  -2%
+                  -0%
                 </div>
               </div>
               <div className="mt-3">
-                <p className="text-2xl font-bold">78%</p>
+                <p className="text-2xl font-bold">{overview.avgEngagement}</p>
                 <p className="text-sm text-gray-600">Avg Engagement</p>
               </div>
             </CardContent>
@@ -215,7 +240,7 @@ export default function SocietyReportsPage() {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={societyStats}>
+                <BarChart data={growthData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
                   <XAxis dataKey="month" stroke="#6b7280" fontSize={12} />
                   <YAxis stroke="#6b7280" fontSize={12} />
@@ -235,7 +260,7 @@ export default function SocietyReportsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {planDistribution.map((item) => (
+                {planDistribution.map((item: any) => (
                   <div key={item.plan} className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{item.plan}</span>
@@ -278,7 +303,7 @@ export default function SocietyReportsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {societyPerformance.map((society, index) => (
+                {societyPerformance.map((society: any, index: number) => (
                   <TableRow key={index}>
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -308,7 +333,7 @@ export default function SocietyReportsPage() {
                         className={
                           society.trend === 'up'
                             ? 'bg-green-100 text-green-700'
-                            : 'bg-red-100 text-red-700'
+                            : 'bg-red-100 text-red-700 font-medium border-0'
                         }
                       >
                         {society.trend === 'up' ? (
@@ -321,6 +346,13 @@ export default function SocietyReportsPage() {
                     </TableCell>
                   </TableRow>
                 ))}
+                {societyPerformance.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-4 text-gray-500">
+                      No data available
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </CardContent>

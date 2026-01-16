@@ -49,13 +49,45 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import toast from 'react-hot-toast'
-import { useUserStore } from '@/lib/stores/user-store'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '@/lib/api'
 
 export default function SuperAdminB2CUsers() {
-    const { users, addUser } = useUserStore()
+    const queryClient = useQueryClient()
     const [searchQuery, setSearchQuery] = useState('')
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [showCredentials, setShowCredentials] = useState(false)
+
+    const { data: users = [], isLoading } = useQuery<any[]>({
+        queryKey: ['b2c-users'],
+        queryFn: async () => {
+            const response = await api.get('/auth/all')
+            return response.data.filter((u: any) => u.role === 'individual')
+        }
+    })
+
+    const addUserMutation = useMutation({
+        mutationFn: async (userData: any) => {
+            const response = await api.post('/auth/register', { 
+                ...userData, 
+                role: 'INDIVIDUAL' 
+            })
+            return response.data
+        },
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: ['b2c-users'] })
+            setCreatedCredentials({ 
+                email: data.user.email, 
+                password: newUser.password || 'As provided' 
+            })
+            setIsAddDialogOpen(false)
+            setNewUser({ name: '', email: '', phone: '', password: '' })
+            toast.success('B2C user created successfully')
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.error || 'Failed to create user')
+        }
+    })
 
     // New User Form State
     const [newUser, setNewUser] = useState({
@@ -68,7 +100,7 @@ export default function SuperAdminB2CUsers() {
     // Credentials State for Success Modal
     const [createdCredentials, setCreatedCredentials] = useState<{ email: string, password: string } | null>(null)
 
-    const filteredUsers = users.filter(user =>
+    const filteredUsers = users.filter((user: any) =>
         user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         user.email.toLowerCase().includes(searchQuery.toLowerCase())
     )
@@ -78,27 +110,7 @@ export default function SuperAdminB2CUsers() {
             toast.error('Please fill in Name, Email and Phone')
             return
         }
-
-        // Generate a random password if not provided
-        const password = newUser.password || Math.random().toString(36).slice(-8)
-
-        const userToAdd = {
-            id: `b2c-${Date.now()}`,
-            name: newUser.name,
-            email: newUser.email,
-            phone: newUser.phone,
-            registeredAt: new Date().toISOString().split('T')[0],
-            activeBarcodes: 0,
-            serviceRequests: 0,
-            status: 'active' as const,
-            password: password
-        }
-
-        addUser(userToAdd)
-        setCreatedCredentials({ email: newUser.email, password: password })
-        setIsAddDialogOpen(false)
-        setNewUser({ name: '', email: '', phone: '', password: '' })
-        toast.success('Individual client created successfully!')
+        addUserMutation.mutate(newUser)
     }
 
     const copyToClipboard = (text: string) => {
@@ -171,7 +183,19 @@ export default function SuperAdminB2CUsers() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredUsers.map((user) => (
+                            {isLoading ? (
+                                <TableRow>
+                                    <TableCell colSpan={7} className="text-center py-10">
+                                        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                                    </TableCell>
+                                </TableRow>
+                            ) : filteredUsers.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={7} className="text-center py-10 text-gray-500 font-bold">
+                                        No individual clients found.
+                                    </TableCell>
+                                </TableRow>
+                            ) : filteredUsers.map((user: any) => (
                                 <TableRow key={user.id} className="border-gray-50 group hover:bg-gray-50/50 transition-colors">
                                     <TableCell className="px-8 py-6">
                                         <div className="flex items-center gap-3">

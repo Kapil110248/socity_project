@@ -22,51 +22,71 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
-import { useServiceStore } from '@/lib/stores/service-store'
-import { mockPlatformVendors } from '@/lib/mocks/platform-vendors'
-import { ServiceInquiry } from '@/types/services'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '@/lib/api'
 import { toast } from 'react-hot-toast'
 
 export default function SuperAdminLeadTrackingPage() {
-    const { inquiries, assignVendorToInquiry } = useServiceStore()
+    const queryClient = useQueryClient()
     const [searchTerm, setSearchTerm] = useState('')
-    const [selectedInquiry, setSelectedInquiry] = useState<ServiceInquiry | null>(null)
+    const [selectedInquiry, setSelectedInquiry] = useState<any | null>(null)
     const [selectedVendorId, setSelectedVendorId] = useState<string>('')
     const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false)
 
-    const filteredInquiries = inquiries.filter(inq =>
+    const { data: inquiries = [], isLoading: isInqLoading } = useQuery<any[]>({
+        queryKey: ['service-inquiries'],
+        queryFn: async () => {
+            const response = await api.get('/services/inquiries')
+            return response.data
+        }
+    })
+
+    const { data: vendors = [], isLoading: isVendorsLoading } = useQuery<any[]>({
+        queryKey: ['super-admin-vendors'],
+        queryFn: async () => {
+            const response = await api.get('/vendors/all')
+            return response.data
+        }
+    })
+
+    const assignVendorMutation = useMutation({
+        mutationFn: async ({ id, vendorId, vendorName }: { id: string, vendorId: string, vendorName: string }) => {
+            const response = await api.put(`/services/inquiries/${id}/assign`, { vendorId, vendorName })
+            return response.data
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['service-inquiries'] })
+            toast.success('Vendor assigned successfully')
+            setIsAssignDialogOpen(false)
+            setSelectedInquiry(null)
+            setSelectedVendorId('')
+        }
+    })
+
+    const filteredInquiries = inquiries.filter((inq: any) =>
         inq.residentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         inq.serviceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         inq.unit.toLowerCase().includes(searchTerm.toLowerCase())
     )
 
-    const getMatchingVendors = (serviceId: string) => {
-        // Map service inquiry ID to vendor category
-        const mapping: Record<string, string> = {
-            'pest': 'cleaner',
-            'cleaning': 'cleaner',
-            'carpenter': 'carpenter',
-            'water_pump': 'electrician',
-            'tank_cleaning': 'cleaner',
-            'interior': 'other',
-            'cctv': 'security',
-            'smart_locks': 'security',
-            'internet': 'other',
-        }
-        const targetCategory = mapping[serviceId] || 'other'
-        return mockPlatformVendors.filter(v => v.category === targetCategory || v.vendorType === 'platform')
+    const getMatchingVendors = (serviceName: string) => {
+        // Simple matching logic for now
+        return vendors.filter((v: any) => 
+            v.serviceType.toLowerCase().includes(serviceName.toLowerCase()) || 
+            v.vendorType === 'platform'
+        )
     }
 
     const handleAssign = () => {
         if (!selectedInquiry || !selectedVendorId) return
-        const vendor = mockPlatformVendors.find(v => v.id === selectedVendorId)
+        const vendor = vendors.find((v: any) => String(v.id) === selectedVendorId)
         if (!vendor) return
 
-        assignVendorToInquiry(selectedInquiry.id, vendor.id, vendor.name)
-        toast.success(`Vendor ${vendor.name} assigned successfully!`)
-        setIsAssignDialogOpen(false)
-        setSelectedInquiry(null)
-        setSelectedVendorId('')
+        assignVendorMutation.mutate({ 
+            id: selectedInquiry.id, 
+            vendorId: String(vendor.id), 
+            vendorName: vendor.name 
+        })
     }
 
     const statusColors: Record<string, string> = {

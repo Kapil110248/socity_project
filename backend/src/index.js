@@ -12,6 +12,12 @@ const societyRoutes = require('./routes/society.routes');
 const vendorRoutes = require('./routes/vendor.routes');
 const parkingRoutes = require('./routes/parking.routes');
 const reportRoutes = require('./routes/report.routes');
+const serviceRoutes = require('./routes/service.routes');
+const emergencyRoutes = require('./routes/emergency.routes');
+const settingRoutes = require('./routes/setting.routes');
+const billingPlanRoutes = require('./routes/billing-plan.routes.js');
+const platformInvoiceRoutes = require('./routes/platform-invoice.routes.js');
+const vendorPayoutRoutes = require('./routes/vendor-payout.routes.js');
 
 const app = express();
 
@@ -27,6 +33,12 @@ app.use('/api/society', societyRoutes);
 app.use('/api/vendors', vendorRoutes);
 app.use('/api/parking', parkingRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/services', serviceRoutes);
+app.use('/api/emergency', emergencyRoutes);
+app.use('/api/settings', settingRoutes);
+app.use('/api/billing-plans', billingPlanRoutes);
+app.use('/api/platform-invoices', platformInvoiceRoutes);
+app.use('/api/vendor-payouts', vendorPayoutRoutes);
 
 const PORT = process.env.PORT || 9000;
 

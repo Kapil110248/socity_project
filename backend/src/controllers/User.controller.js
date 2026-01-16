@@ -113,6 +113,65 @@ class UserController {
       res.status(500).json({ error: error.message });
     }
   }
+
+  static async getAllUsers(req, res) {
+    try {
+      const users = await prisma.user.findMany({
+        include: { society: true }
+      });
+      const formattedUsers = users.map(u => ({
+        ...u,
+        role: u.role.toLowerCase(),
+        societyName: u.society?.name || 'N/A'
+      }));
+      res.json(formattedUsers);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async updateUserStatus(req, res) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      const user = await prisma.user.update({
+        where: { id: parseInt(id) },
+        data: { status: status.toUpperCase() }
+      });
+      res.json(user);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async getUserStats(req, res) {
+    try {
+      const totalAdmins = await prisma.user.count({
+        where: { role: 'ADMIN' }
+      });
+
+      const activeAdmins = await prisma.user.count({
+        where: { role: 'ADMIN', status: 'ACTIVE' }
+      });
+
+      const pendingAdmins = await prisma.user.count({
+        where: { role: 'ADMIN', status: 'PENDING' }
+      });
+
+      const suspendedAdmins = await prisma.user.count({
+        where: { role: 'ADMIN', status: 'SUSPENDED' }
+      });
+
+      res.json({
+        totalAdmins,
+        activeAdmins,
+        pendingAdmins,
+        suspendedAdmins
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
 }
 
 module.exports = UserController;

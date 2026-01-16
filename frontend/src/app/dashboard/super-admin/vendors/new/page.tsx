@@ -11,15 +11,33 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useRouter } from 'next/navigation'
 import { RoleGuard } from '@/components/auth/role-guard'
 
+import { useMutation } from '@tanstack/react-query'
+import api from '@/lib/api'
+import { toast } from 'react-hot-toast'
+
 export default function NewPlatformVendorPage() {
     const router = useRouter()
     const [formData, setFormData] = useState({
         name: '',
         email: '',
-        phone: '',
-        category: '',
+        contact: '',
+        serviceType: '',
         username: '',
         password: '',
+    })
+
+    const createVendorMutation = useMutation({
+        mutationFn: async (data: any) => {
+            const response = await api.post('/vendors', data)
+            return response.data
+        },
+        onSuccess: () => {
+            toast.success('Platform vendor created successfully')
+            router.push('/dashboard/super-admin/vendors')
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.error || 'Failed to create vendor')
+        }
     })
 
     const handleChange = (field: string, value: string) => {
@@ -28,14 +46,7 @@ export default function NewPlatformVendorPage() {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
-        // Mock save logic
-        console.log('Saving Platform Vendor:', {
-            ...formData,
-            ownerType: 'super_admin',
-            vendorType: 'platform',
-            status: 'active',
-        })
-        router.push('/dashboard/super-admin/vendors')
+        createVendorMutation.mutate(formData)
     }
 
     return (
@@ -88,7 +99,11 @@ export default function NewPlatformVendorPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="category">Service Category *</Label>
-                                    <Select onValueChange={(val) => handleChange('category', val)} required>
+                                    <Select 
+                                        value={formData.serviceType}
+                                        onValueChange={(val) => handleChange('serviceType', val)} 
+                                        required
+                                    >
                                         <SelectTrigger className="rounded-xl border-gray-200">
                                             <SelectValue placeholder="Select category" />
                                         </SelectTrigger>
@@ -126,8 +141,8 @@ export default function NewPlatformVendorPage() {
                                             type="tel"
                                             placeholder="+91 98765 43210"
                                             className="pl-10 rounded-xl border-gray-200"
-                                            value={formData.phone}
-                                            onChange={(e) => handleChange('phone', e.target.value)}
+                                            value={formData.contact}
+                                            onChange={(e) => handleChange('contact', e.target.value)}
                                             required
                                         />
                                     </div>

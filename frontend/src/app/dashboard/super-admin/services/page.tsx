@@ -33,21 +33,82 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { useServiceStore } from '@/lib/stores/service-store'
-import { iconMap } from '@/lib/constants/icons'
-import { ServiceCategory, ServiceProvider, ServiceVariant } from '@/types/services'
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { iconMap } from '@/lib/constants/icons'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '@/lib/api'
+import toast from 'react-hot-toast'
+
+// Local types if needed or just use any for now but let's try to be clean
+interface ServiceVariant {
+    id: string;
+    name: string;
+    price: string;
+    description?: string;
+}
+
+interface ServiceCategory {
+    id: string;
+    name: string;
+    description: string;
+    icon: string;
+    color: string;
+    variants: ServiceVariant[];
+}
 
 export default function AdminServicesPage() {
-    const { categories, addCategory, updateCategory, deleteCategory } = useServiceStore()
+    const queryClient = useQueryClient()
     const [searchTerm, setSearchTerm] = useState('')
     const [isAddServiceOpen, setIsAddServiceOpen] = useState(false)
     const [editingCategory, setEditingCategory] = useState<ServiceCategory | null>(null)
+
+    const { data: categories = [], isLoading } = useQuery<ServiceCategory[]>({
+        queryKey: ['service-categories'],
+        queryFn: async () => {
+            const response = await api.get('/services/categories')
+            return response.data
+        }
+    })
+
+    const createMutation = useMutation({
+        mutationFn: async (data: any) => {
+            const response = await api.post('/services/categories', data)
+            return response.data
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['service-categories'] })
+            toast.success('Service category created')
+            setIsAddServiceOpen(false)
+        }
+    })
+
+    const updateMutation = useMutation({
+        mutationFn: async ({ id, data }: { id: string, data: any }) => {
+            const response = await api.put(`/services/categories/${id}`, data)
+            return response.data
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['service-categories'] })
+            toast.success('Service category updated')
+            setIsAddServiceOpen(false)
+        }
+    })
+
+    const deleteMutation = useMutation({
+        mutationFn: async (id: string) => {
+            const response = await api.delete(`/services/categories/${id}`)
+            return response.data
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['service-categories'] })
+            toast.success('Service category deleted')
+        }
+    })
 
     // New Service Form State
     const [formData, setFormData] = useState<Partial<ServiceCategory>>({
@@ -91,36 +152,33 @@ export default function AdminServicesPage() {
 
     const handleDelete = (id: string) => {
         if (confirm('Are you sure you want to delete this service category?')) {
-            deleteCategory(id)
+            deleteMutation.mutate(id)
         }
     }
 
     const handleSaveService = () => {
         if (!formData.name || !formData.description) return
 
-        const categoryData: ServiceCategory = {
+        const categoryData = {
             id: editingCategory ? editingCategory.id : formData.name!.toLowerCase().replace(/\s+/g, '_'),
             name: formData.name!,
             description: formData.description!,
-            icon: editingCategory ? editingCategory.icon : 'Wrench', // Preserve or default
-            color: editingCategory ? editingCategory.color : 'blue', // Preserve or default
-            providers: editingCategory ? editingCategory.providers : [], // Preserve existing content
+            icon: editingCategory ? editingCategory.icon : 'Wrench',
+            color: editingCategory ? editingCategory.color : 'blue',
             variants: formData.variants || []
         }
 
         if (editingCategory) {
-            updateCategory(categoryData)
+            updateMutation.mutate({ id: editingCategory.id, data: categoryData })
         } else {
-            addCategory(categoryData)
+            createMutation.mutate(categoryData)
         }
-
-        setIsAddServiceOpen(false)
     }
 
     const handleAddVariant = () => {
         if (!newVariant.name || !newVariant.price) return
 
-        setFormData(prev => ({
+        setFormData((prev: any) => ({
             ...prev,
             variants: [...(prev.variants || []), {
                 id: Math.random().toString(36).substr(2, 9),
@@ -138,9 +196,9 @@ export default function AdminServicesPage() {
     }
 
     const handleRemoveVariant = (index: number) => {
-        setFormData(prev => ({
+        setFormData((prev: any) => ({
             ...prev,
-            variants: prev.variants?.filter((_, i) => i !== index)
+            variants: prev.variants?.filter((_: any, i: number) => i !== index)
         }))
     }
 
@@ -176,8 +234,12 @@ export default function AdminServicesPage() {
 
             {/* Service Categories Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredCategories.map((category) => {
-                    const Icon = iconMap[category.icon] || Building2
+                {isLoading ? (
+                    <div className="col-span-full flex justify-center py-12">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-500" />
+                    </div>
+                ) : filteredCategories.map((category: ServiceCategory) => {
+                    const Icon = (iconMap as any)[category.icon] || Building2
 
                     return (
                         <Card key={category.id} className="border-0 shadow-md hover:shadow-lg transition-all group overflow-hidden">
@@ -317,7 +379,7 @@ export default function AdminServicesPage() {
 
                             {/* List of added variants */}
                             <div className="space-y-2">
-                                {formData.variants?.map((variant, index) => (
+                                {formData.variants?.map((variant: ServiceVariant, index: number) => (
                                     <div key={index} className="flex items-center justify-between bg-white border p-3 rounded-lg shadow-sm">
                                         <div className="flex items-center gap-3">
                                             <div className="h-8 w-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center">

@@ -7,8 +7,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useServiceStore } from '@/lib/stores/service-store'
-import { mockPlatformVendors } from '@/lib/mocks/platform-vendors'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -16,17 +14,48 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { toast } from 'react-hot-toast'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '@/lib/api'
 
 export default function SuperAdminLeadsPage() {
-    const { inquiries, assignVendorToInquiry } = useServiceStore()
+    const queryClient = useQueryClient()
     const [searchQuery, setSearchQuery] = useState('')
-
     const [leadType, setLeadType] = useState<string>('all')
 
-    const filteredInquiries = inquiries.filter(inq => {
-        const matchesSearch = inq.residentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            inq.serviceName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            inq.unit.toLowerCase().includes(searchQuery.toLowerCase())
+    const { data: inquiries = [], isLoading } = useQuery<any[]>({
+        queryKey: ['platform-inquiries'],
+        queryFn: async () => {
+            const response = await api.get('/services/inquiries')
+            return response.data
+        }
+    })
+
+    const { data: vendors = [] } = useQuery<any[]>({
+        queryKey: ['super-admin-vendors'],
+        queryFn: async () => {
+            const response = await api.get('/vendors/all')
+            return response.data
+        }
+    })
+
+    const assignVendorMutation = useMutation({
+        mutationFn: async ({ inquiryId, vendorId, vendorName }: { inquiryId: string; vendorId: string; vendorName: string }) => {
+            const response = await api.patch(`/services/inquiries/${inquiryId}/assign`, { vendorId, vendorName })
+            return response.data
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['platform-inquiries'] })
+            toast.success(`Vendor assigned successfully!`)
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.error || 'Failed to assign vendor')
+        }
+    })
+
+    const filteredInquiries = inquiries.filter((inq: any) => {
+        const matchesSearch = (inq.residentName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (inq.serviceName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (inq.unit || '').toLowerCase().includes(searchQuery.toLowerCase())
 
         const matchesType = leadType === 'all' || inq.source === leadType
 
@@ -34,12 +63,11 @@ export default function SuperAdminLeadsPage() {
     })
 
     const handleAssignVendor = (inquiryId: string, vendorId: string, vendorName: string) => {
-        assignVendorToInquiry(inquiryId, vendorId, vendorName)
-        toast.success(`Vendor ${vendorName} assigned successfully!`)
+        assignVendorMutation.mutate({ inquiryId, vendorId, vendorName })
     }
 
     const getStatusBadge = (status: string) => {
-        switch (status) {
+        switch (status?.toLowerCase()) {
             case 'pending':
                 return <Badge className="bg-yellow-100 text-yellow-700 hover:bg-yellow-100 border-yellow-200">Pending</Badge>
             case 'booked':
@@ -49,6 +77,14 @@ export default function SuperAdminLeadsPage() {
             default:
                 return <Badge variant="outline">{status}</Badge>
         }
+    }
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+        )
     }
 
     return (
@@ -165,15 +201,18 @@ export default function SuperAdminLeadsPage() {
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 border-0 shadow-2xl ring-1 ring-black/5">
-                                                {mockPlatformVendors.map((vendor) => (
+                                                {vendors.map((vendor: any) => (
                                                     <DropdownMenuItem
                                                         key={vendor.id}
                                                         className="rounded-xl px-4 py-2.5 font-medium cursor-pointer focus:bg-blue-50 focus:text-blue-700"
-                                                        onClick={() => handleAssignVendor(inq.id, vendor.id, vendor.name)}
+                                                        onClick={() => handleAssignVendor(inq.id, vendor.id.toString(), vendor.name)}
                                                     >
                                                         {vendor.name}
                                                     </DropdownMenuItem>
                                                 ))}
+                                                {vendors.length === 0 && (
+                                                    <div className="p-4 text-center text-xs text-gray-400 font-medium">No vendors found</div>
+                                                )}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </div>

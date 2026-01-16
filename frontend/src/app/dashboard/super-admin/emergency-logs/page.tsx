@@ -21,15 +21,43 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { useEmergencyStore } from '@/lib/stores/emergency-store'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '@/lib/api'
 import toast from 'react-hot-toast'
 
 export default function SuperAdminEmergencyLogs() {
-    const { logs, barcodes, updateBarcodeStatus } = useEmergencyStore()
+    const queryClient = useQueryClient()
     const [searchQuery, setSearchQuery] = useState('')
     const [filter, setFilter] = useState<'all' | 'emergency' | 'normal'>('all')
 
-    const filteredLogs = logs.filter(log => {
+    const { data: logs = [], isLoading: isLogsLoading } = useQuery<any[]>({
+        queryKey: ['emergency-logs'],
+        queryFn: async () => {
+            const response = await api.get('/emergency/logs')
+            return response.data
+        }
+    })
+
+    const { data: barcodes = [], isLoading: isBarcodesLoading } = useQuery<any[]>({
+        queryKey: ['emergency-barcodes'],
+        queryFn: async () => {
+            const response = await api.get('/emergency/barcodes')
+            return response.data
+        }
+    })
+
+    const updateStatusMutation = useMutation({
+        mutationFn: async ({ id, status }: { id: string, status: string }) => {
+            const response = await api.put(`/emergency/barcodes/${id}/status`, { status })
+            return response.data
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['emergency-barcodes'] })
+            toast.success('Barcode status updated')
+        }
+    })
+
+    const filteredLogs = logs.filter((log: any) => {
         const matchesSearch =
             log.visitorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
             log.residentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -42,8 +70,7 @@ export default function SuperAdminEmergencyLogs() {
     })
 
     const handleDisableBarcode = (barcodeId: string) => {
-        updateBarcodeStatus(barcodeId, 'disabled')
-        toast.success(`Barcode ${barcodeId} has been disabled.`)
+        updateStatusMutation.mutate({ id: barcodeId, status: 'disabled' })
     }
 
     return (

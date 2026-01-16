@@ -22,56 +22,65 @@ import {
 } from '@/components/ui/select'
 import { RoleGuard } from '@/components/auth/role-guard'
 
-const stats = [
-  {
-    title: 'Total Revenue',
-    value: '₹45,67,890',
-    change: '+12.5%',
-    trend: 'up',
-    icon: CreditCard,
-    color: 'bg-green-500',
-  },
-  {
-    title: 'Active Societies',
-    value: '156',
-    change: '+8 this month',
-    trend: 'up',
-    icon: Building2,
-    color: 'bg-blue-500',
-  },
-  {
-    title: 'Total Users',
-    value: '24,567',
-    change: '+1,234',
-    trend: 'up',
-    icon: Users,
-    color: 'bg-purple-500',
-  },
-  {
-    title: 'Avg. Engagement',
-    value: '78%',
-    change: '-2.3%',
-    trend: 'down',
-    icon: TrendingUp,
-    color: 'bg-orange-500',
-  },
-]
-
-const revenueByPlan = [
-  { plan: 'Enterprise', revenue: '₹25,00,000', societies: 12, percentage: 55 },
-  { plan: 'Professional', revenue: '₹15,00,000', societies: 45, percentage: 33 },
-  { plan: 'Basic', revenue: '₹5,67,890', societies: 99, percentage: 12 },
-]
-
-const topSocieties = [
-  { name: 'Green Valley Apartments', users: 1203, revenue: '₹4,50,000' },
-  { name: 'Lake View Residency', users: 945, revenue: '₹3,80,000' },
-  { name: 'Sunrise Heights', users: 856, revenue: '₹3,20,000' },
-  { name: 'Royal Enclave', users: 780, revenue: '₹2,90,000' },
-  { name: 'Silver Oaks Society', users: 512, revenue: '₹1,80,000' },
-]
+import { useQuery } from '@tanstack/react-query'
+import api from '@/lib/api'
 
 export default function PlatformReportsPage() {
+  const { data: reportsData, isLoading } = useQuery({
+    queryKey: ['platform-reports'],
+    queryFn: async () => {
+      const response = await api.get('/reports/platform-stats')
+      return response.data
+    }
+  })
+
+  // Transformed data
+  const statsOverview = [
+    {
+      title: 'Total Revenue',
+      value: reportsData?.overview?.totalRevenue || '₹0',
+      change: reportsData?.overview?.revenueChange || '+0%',
+      trend: 'up',
+      icon: CreditCard,
+      color: 'bg-green-500',
+    },
+    {
+      title: 'Active Societies',
+      value: reportsData?.overview?.activeSocieties?.toString() || '0',
+      change: reportsData?.overview?.societiesChange || '+0 this month',
+      trend: 'up',
+      icon: Building2,
+      color: 'bg-blue-500',
+    },
+    {
+      title: 'Total Users',
+      value: reportsData?.overview?.totalUsers?.toLocaleString() || '0',
+      change: '+0', // Could be dynamic
+      trend: 'up',
+      icon: Users,
+      color: 'bg-purple-500',
+    },
+    {
+      title: 'Avg. Engagement',
+      value: reportsData?.overview?.avgEngagement || '0%',
+      change: '-0%',
+      trend: 'down',
+      icon: TrendingUp,
+      color: 'bg-orange-500',
+    },
+  ]
+
+  const revenueByPlan = reportsData?.revenueByPlan || []
+  const topSocieties = reportsData?.topSocieties || []
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-200px)]">
+        <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    )
+  }
+
   return (
     <RoleGuard allowedRoles={['super_admin']}>
       <motion.div
@@ -107,7 +116,7 @@ export default function PlatformReportsPage() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {stats.map((stat, index) => {
+          {statsOverview.map((stat, index) => {
             const Icon = stat.icon
             return (
               <Card key={index} className="border-0 shadow-md">
@@ -147,7 +156,7 @@ export default function PlatformReportsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {revenueByPlan.map((item, index) => (
+                {revenueByPlan.map((item: any, index: number) => (
                   <div key={index} className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div>
@@ -164,6 +173,9 @@ export default function PlatformReportsPage() {
                     </div>
                   </div>
                 ))}
+                {revenueByPlan.length === 0 && (
+                  <p className="text-center py-4 text-gray-500">No data available</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -175,7 +187,7 @@ export default function PlatformReportsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {topSocieties.map((society, index) => (
+                {topSocieties.map((society: any, index: number) => (
                   <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-purple-700 font-semibold">
@@ -183,12 +195,15 @@ export default function PlatformReportsPage() {
                       </div>
                       <div>
                         <p className="font-medium">{society.name}</p>
-                        <p className="text-sm text-gray-500">{society.users} users</p>
+                        <p className="text-sm text-gray-500">{society.users.toLocaleString()} users</p>
                       </div>
                     </div>
                     <p className="font-semibold text-green-600">{society.revenue}</p>
                   </div>
                 ))}
+                {topSocieties.length === 0 && (
+                  <p className="text-center py-4 text-gray-500">No data available</p>
+                )}
               </div>
             </CardContent>
           </Card>

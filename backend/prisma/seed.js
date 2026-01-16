@@ -62,7 +62,115 @@ async function main() {
     }
   })
 
-  console.log('Seeding completed successfully!')
+  // Create Service Categories
+  await prisma.serviceCategory.createMany({
+    data: [
+      {
+        id: 'pest_control',
+        name: 'Pest Control',
+        description: 'Professional termite and pest management services',
+        icon: 'Shield',
+        color: 'blue'
+      },
+      {
+        id: 'cleaning',
+        name: 'Deep Cleaning',
+        description: 'Home and sofa deep cleaning services',
+        icon: 'Wrench',
+        color: 'green'
+      }
+    ],
+    skipDuplicates: true
+  });
+
+  await prisma.serviceVariant.createMany({
+    data: [
+      { name: 'General Pest', price: '₹999', categoryId: 'pest_control' },
+      { name: 'Termite Treatment', price: '₹4999', categoryId: 'pest_control' },
+      { name: 'Full Home Clean', price: '₹2999', categoryId: 'cleaning' }
+    ],
+    skipDuplicates: true
+  });
+
+  await prisma.serviceInquiry.createMany({
+    data: [
+      {
+        residentName: 'John Doe',
+        unit: 'A-101',
+        serviceName: 'General Pest',
+        serviceId: 'pest_control',
+        status: 'pending',
+        source: 'resident',
+        type: 'service',
+        societyId: society.id
+      },
+      {
+        residentName: 'Jane Smith',
+        unit: 'B-202',
+        serviceName: 'Full Home Clean',
+        serviceId: 'cleaning',
+        status: 'booked',
+        vendorName: 'Premium Cleaners',
+        source: 'society',
+        type: 'service',
+        societyId: society.id
+      },
+      {
+        residentName: 'Robert Brown',
+        unit: 'C-303',
+        serviceName: 'AC Repair',
+        serviceId: 'repair',
+        status: 'pending',
+        source: 'individual',
+        type: 'individual',
+        societyId: null
+      }
+    ],
+    skipDuplicates: true
+  });
+
+  await prisma.emergencyLog.createMany({
+    data: [
+      {
+        visitorName: 'Unknown Delivery',
+        visitorPhone: '9876543210',
+        residentName: 'John Doe',
+        unit: 'A-101',
+        isEmergency: true,
+        reason: 'Unauthorized entry attempt',
+        barcodeId: 'EB-12345',
+        societyId: society.id
+      }
+    ],
+    skipDuplicates: true
+  });
+
+  // Create pending societies
+  await prisma.society.createMany({
+    data: [
+      {
+        name: 'Palm Gardens',
+        city: 'Chennai',
+        state: 'Tamil Nadu',
+        code: 'PALM1234',
+        status: 'PENDING',
+        subscriptionPlan: 'PROFESSIONAL',
+        address: 'Old Mahabalipuram Rd, Chennai'
+      },
+      {
+        name: 'Metro Heights',
+        city: 'Kolkata',
+        state: 'West Bengal',
+        code: 'METR5678',
+        status: 'PENDING',
+        subscriptionPlan: 'BASIC',
+        address: 'Salt Lake Sector V, Kolkata'
+      }
+    ],
+    skipDuplicates: true
+  });
+
+  console.log('Seeding completed');
 }
 
 main()

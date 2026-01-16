@@ -8,4 +8,12 @@ router.get('/units', authenticate, SocietyController.getUnits);
 router.patch('/units/:id/ownership', authenticate, authorize(['ADMIN']), SocietyController.updateOwnership);
 router.post('/notices', authenticate, authorize(['ADMIN']), SocietyController.postNotice);
 
+// Super Admin
+router.get('/stats', authenticate, authorize(['SUPER_ADMIN']), SocietyController.getStats);
+router.get('/all', authenticate, authorize(['SUPER_ADMIN']), SocietyController.getAllSocieties);
+router.post('/', authenticate, authorize(['SUPER_ADMIN']), SocietyController.createSociety);
+router.put('/:id', authenticate, authorize(['SUPER_ADMIN']), SocietyController.updateSociety);
+router.patch('/:id/status', authenticate, authorize(['SUPER_ADMIN']), SocietyController.updateSocietyStatus);
+router.delete('/:id', authenticate, authorize(['SUPER_ADMIN']), SocietyController.deleteSociety);
+
 module.exports = router;

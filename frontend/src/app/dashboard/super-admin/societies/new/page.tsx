@@ -26,8 +26,13 @@ import {
 import { RoleGuard } from '@/components/auth/role-guard'
 import Link from 'next/link'
 
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '@/lib/api'
+import { toast } from 'react-hot-toast'
+
 export default function AddSocietyPage() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [formData, setFormData] = useState({
     name: '',
     address: '',
@@ -35,18 +40,31 @@ export default function AddSocietyPage() {
     state: '',
     pincode: '',
     units: '',
-    plan: '',
+    plan: 'basic',
     adminName: '',
     adminEmail: '',
     adminPassword: '',
     adminPhone: '',
   })
 
+  const createMutation = useMutation({
+    mutationFn: async (data: typeof formData) => {
+      const response = await api.post('/society', data)
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['super-admin-societies'] })
+      toast.success('Society created successfully')
+      router.push('/dashboard/super-admin/societies')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Failed to create society')
+    }
+  })
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle form submission
-    console.log('Form submitted:', formData)
-    router.push('/dashboard/super-admin/societies')
+    createMutation.mutate(formData)
   }
 
   const handleChange = (field: string, value: string) => {
@@ -190,7 +208,7 @@ export default function AddSocietyPage() {
           </Card>
 
           {/* Admin Details */}
-          {/* <Card className="border-0 shadow-md">
+          <Card className="border-0 shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
@@ -247,16 +265,20 @@ export default function AddSocietyPage() {
                 </div>
               </div>
             </CardContent>
-          </Card> */}
+          </Card>
 
           {/* Actions */}
           <div className="flex justify-end gap-4">
             <Link href="/dashboard/super-admin/societies">
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline" type="button">Cancel</Button>
             </Link>
-            <Button type="submit" className="bg-purple-600 hover:bg-purple-700">
+            <Button 
+                type="submit" 
+                className="bg-purple-600 hover:bg-purple-700"
+                disabled={createMutation.isPending}
+            >
               <Save className="h-4 w-4 mr-2" />
-              Create Society
+              {createMutation.isPending ? 'Creating...' : 'Create Society'}
             </Button>
           </div>
         </form>

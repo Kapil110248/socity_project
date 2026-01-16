@@ -23,37 +23,88 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { mockPlatformVendors, mockVendorCommissions } from '@/lib/mocks/platform-vendors'
 import { useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { cn } from '@/lib/utils/cn'
 
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '@/lib/api'
+
 export default function VendorPaymentsPage() {
+    const queryClient = useQueryClient()
     const [open, setOpen] = useState(false)
     const [formData, setFormData] = useState({
+        vendorId: '',
         vendorName: '',
         societyName: '',
         commissionPercent: '',
         dealValue: '',
         payableAmount: '',
         date: new Date().toISOString().split('T')[0],
-        status: 'Pending',
+        status: 'PENDING',
         remarks: ''
+    })
+
+    const { data: payouts = [], isLoading } = useQuery<any[]>({
+        queryKey: ['vendor-payouts'],
+        queryFn: async () => {
+            const response = await api.get('/vendor-payouts')
+            return response.data
+        }
+    })
+
+    const { data: stats } = useQuery({
+        queryKey: ['payout-stats'],
+        queryFn: async () => {
+            const response = await api.get('/vendor-payouts/stats')
+            return response.data
+        }
+    })
+
+    const { data: vendors = [] } = useQuery<any[]>({
+        queryKey: ['super-admin-vendors'],
+        queryFn: async () => {
+            const response = await api.get('/vendors/all')
+            return response.data
+        }
+    })
+
+    const recordPayoutMutation = useMutation({
+        mutationFn: async (data: any) => {
+            const response = await api.post('/vendor-payouts', data)
+            return response.data
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['vendor-payouts'] })
+            queryClient.invalidateQueries({ queryKey: ['payout-stats'] })
+            toast.success('Payment recorded successfully!')
+            setOpen(false)
+            setFormData({
+                vendorId: '',
+                vendorName: '',
+                societyName: '',
+                commissionPercent: '',
+                dealValue: '',
+                payableAmount: '',
+                date: new Date().toISOString().split('T')[0],
+                status: 'PENDING',
+                remarks: ''
+            })
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.error || 'Failed to record payout')
+        }
     })
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
-        toast.success('Payment recorded successfully!')
-        setOpen(false)
-        setFormData({
-            vendorName: '',
-            societyName: '',
-            commissionPercent: '',
-            dealValue: '',
-            payableAmount: '',
-            date: new Date().toISOString().split('T')[0],
-            status: 'Pending',
-            remarks: ''
+        const calculatedPayable = formData.payableAmount === '' 
+            ? (Number(formData.dealValue) * Number(formData.commissionPercent)) / 100
+            : Number(formData.payableAmount)
+        
+        recordPayoutMutation.mutate({
+            ...formData,
+            payableAmount: calculatedPayable
         })
     }
 
@@ -94,16 +145,22 @@ export default function VendorPaymentsPage() {
                                     <div className="space-y-2">
                                         <Label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Vendor Partner *</Label>
                                         <Select
-                                            value={formData.vendorName}
-                                            onValueChange={(val) => setFormData({ ...formData, vendorName: val })}
+                                            value={formData.vendorId}
+                                            onValueChange={(val) => {
+                                                const vendor = vendors.find(v => v.id.toString() === val)
+                                                setFormData({ ...formData, vendorId: val, vendorName: vendor?.name || '' })
+                                            }}
                                         >
                                             <SelectTrigger className="h-12 rounded-2xl border-0 ring-1 ring-black/5 bg-white shadow-sm font-bold">
                                                 <SelectValue placeholder="Select a vendor" />
                                             </SelectTrigger>
                                             <SelectContent className="rounded-2xl border-0 shadow-xl ring-1 ring-black/5">
-                                                {mockPlatformVendors.map(v => (
-                                                    <SelectItem key={v.id} value={v.name} className="rounded-xl my-1 font-medium">{v.name}</SelectItem>
+                                                {vendors.map((v: any) => (
+                                                    <SelectItem key={v.id} value={v.id.toString()} className="rounded-xl my-1 font-medium">{v.name}</SelectItem>
                                                 ))}
+                                                {vendors.length === 0 && (
+                                                    <div className="p-4 text-center text-xs text-gray-400 font-medium">No vendors found</div>
+                                                )}
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -230,7 +287,7 @@ export default function VendorPaymentsPage() {
                         </div>
                         <div>
                             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total Society Revenue</p>
-                            <p className="text-3xl font-black text-gray-900">₹80,000</p>
+                            <p className="text-3xl font-black text-gray-900">₹{(stats?.totalSocietyRevenue || 0).toLocaleString()}</p>
                         </div>
                     </div>
                 </Card>
@@ -241,7 +298,7 @@ export default function VendorPaymentsPage() {
                         </div>
                         <div>
                             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Commission Payable</p>
-                            <p className="text-3xl font-black text-gray-900">₹7,400</p>
+                            <p className="text-3xl font-black text-gray-900">₹{(stats?.commissionPayable || 0).toLocaleString()}</p>
                         </div>
                     </div>
                 </Card>
@@ -252,7 +309,7 @@ export default function VendorPaymentsPage() {
                         </div>
                         <div>
                             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Pending Payouts</p>
-                            <p className="text-3xl font-black text-gray-900">₹2,400</p>
+                            <p className="text-3xl font-black text-gray-900">₹{(stats?.pendingPayouts || 0).toLocaleString()}</p>
                         </div>
                     </div>
                 </Card>
@@ -276,7 +333,15 @@ export default function VendorPaymentsPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                            {mockVendorCommissions.map((log, index) => (
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan={6} className="px-8 py-12 text-center">
+                                        <div className="flex items-center justify-center">
+                                            <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : payouts.map((log: any, index: number) => (
                                 <motion.tr
                                     key={log.id}
                                     initial={{ opacity: 0, x: -20 }}
@@ -287,22 +352,22 @@ export default function VendorPaymentsPage() {
                                     <td className="px-8 py-6">
                                         <div>
                                             <p className="font-bold text-gray-900">{log.vendorName}</p>
-                                            <p className="text-xs text-blue-600 font-medium">{log.societyName}</p>
+                                            <p className="text-xs text-blue-600 font-medium">{log.societyName || 'Platform'}</p>
                                         </div>
                                     </td>
                                     <td className="px-8 py-6 text-center font-bold text-gray-700">
                                         {log.commissionPercent}%
                                     </td>
                                     <td className="px-8 py-6 text-center font-bold text-gray-900">
-                                        ₹{log.dealValue.toLocaleString()}
+                                        ₹{log.dealValue?.toLocaleString()}
                                     </td>
                                     <td className="px-8 py-6 text-center">
                                         <span className="inline-flex items-center px-3 py-1 rounded-full bg-teal-50 text-teal-700 font-bold text-xs ring-1 ring-teal-100">
-                                            ₹{log.payableAmount.toLocaleString()}
+                                            ₹{log.payableAmount?.toLocaleString()}
                                         </span>
                                     </td>
                                     <td className="px-8 py-6 text-center">
-                                        <Badge className={log.status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}>
+                                        <Badge className={log.status === 'PAID' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}>
                                             {log.status}
                                         </Badge>
                                     </td>
@@ -311,6 +376,13 @@ export default function VendorPaymentsPage() {
                                     </td>
                                 </motion.tr>
                             ))}
+                            {!isLoading && payouts.length === 0 && (
+                                <tr>
+                                    <td colSpan={6} className="px-8 py-12 text-center text-gray-400 font-medium">
+                                        No payments recorded yet
+                                    </td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 </div>

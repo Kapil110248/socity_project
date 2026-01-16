@@ -15,6 +15,9 @@ import {
   Ban,
   Building2,
 } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '@/lib/api'
+import toast from 'react-hot-toast'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -36,79 +39,58 @@ import {
 } from '@/components/ui/table'
 import { RoleGuard } from '@/components/auth/role-guard'
 
-// Mock data for platform users (Society Admins)
-const platformUsers = [
-  {
-    id: 1,
-    name: 'Rajesh Kumar',
-    email: 'rajesh@greenvalley.com',
-    role: 'Society Admin',
-    society: 'Green Valley Apartments',
-    status: 'active',
-    lastLogin: '2 hours ago',
-  },
-  {
-    id: 2,
-    name: 'Priya Sharma',
-    email: 'priya@sunriseheights.com',
-    role: 'Society Admin',
-    society: 'Sunrise Heights',
-    status: 'active',
-    lastLogin: '1 day ago',
-  },
-  {
-    id: 3,
-    name: 'Vikram Singh',
-    email: 'vikram@palmgardens.com',
-    role: 'Society Admin',
-    society: 'Palm Gardens',
-    status: 'pending',
-    lastLogin: 'Never',
-  },
-  {
-    id: 4,
-    name: 'Neha Patel',
-    email: 'neha@silveroaks.com',
-    role: 'Society Admin',
-    society: 'Silver Oaks Society',
-    status: 'active',
-    lastLogin: '5 hours ago',
-  },
-  {
-    id: 5,
-    name: 'Arjun Reddy',
-    email: 'arjun@lakeview.com',
-    role: 'Society Admin',
-    society: 'Lake View Residency',
-    status: 'active',
-    lastLogin: '3 days ago',
-  },
-  {
-    id: 6,
-    name: 'Amit Gupta',
-    email: 'amit@royalenclave.com',
-    role: 'Society Admin',
-    society: 'Royal Enclave',
-    status: 'suspended',
-    lastLogin: '30 days ago',
-  },
-]
-
-const stats = [
-  { title: 'Total Admins', value: '312', icon: Users, color: 'bg-blue-500' },
-  { title: 'Active', value: '298', icon: UserCheck, color: 'bg-green-500' },
-  { title: 'Pending', value: '8', icon: Shield, color: 'bg-orange-500' },
-  { title: 'Suspended', value: '6', icon: UserX, color: 'bg-red-500' },
-]
+// Mock data removed
 
 export default function PlatformUsersPage() {
+  const queryClient = useQueryClient()
   const [searchQuery, setSearchQuery] = useState('')
 
+  const { data: users = [], isLoading } = useQuery<any[]>({
+    queryKey: ['platform-users'],
+    queryFn: async () => {
+      const response = await api.get('/auth/all')
+      return response.data
+    }
+  })
+
+  const { data: userStats } = useQuery({
+    queryKey: ['auth-stats'],
+    queryFn: async () => {
+      const response = await api.get('/auth/stats')
+      return response.data
+    }
+  })
+
+  const dynamicStats = [
+    { title: 'Total Admins', value: userStats?.totalAdmins || '0', icon: Users, color: 'bg-blue-500' },
+    { title: 'Active', value: userStats?.activeAdmins || '0', icon: UserCheck, color: 'bg-green-500' },
+    { title: 'Pending', value: userStats?.pendingAdmins || '0', icon: Shield, color: 'bg-orange-500' },
+    { title: 'Suspended', value: userStats?.suspendedAdmins || '0', icon: UserX, color: 'bg-red-500' },
+  ]
+
+  // Filter for admins and other non-resident/non-guard platform roles if needed
+  // For now let's show only admins to match the stats and page title
+  const platformUsers = users.filter(u => u.role === 'admin');
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      const response = await api.patch(`/auth/${id}/status`, { status })
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['platform-users'] })
+      toast.success('User status updated successfully')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Failed to update status')
+    }
+  })
+
   const filteredUsers = platformUsers.filter(
-    (user) =>
+    (user: any) =>
       user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.society.toLowerCase().includes(searchQuery.toLowerCase())
+      (user.societyName && user.societyName.toLowerCase().includes(searchQuery.toLowerCase()))
   )
 
   const getStatusBadge = (status: string) => {
@@ -139,7 +121,7 @@ export default function PlatformUsersPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {stats.map((stat, index) => {
+          {dynamicStats.map((stat, index) => {
             const Icon = stat.icon
             return (
               <Card key={index} className="border-0 shadow-md">
@@ -198,13 +180,26 @@ export default function PlatformUsersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user) => (
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-10">
+                      <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    </TableCell>
+                  </TableRow>
+                ) : filteredUsers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-10 text-gray-500">
+                      No users found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredUsers.map((user: any) => (
                   <TableRow key={user.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="h-9 w-9">
                           <AvatarFallback className="bg-purple-100 text-purple-700">
-                            {user.name.split(' ').map(n => n[0]).join('')}
+                            {user.name.split(' ').map((n: string) => n[0]).join('')}
                           </AvatarFallback>
                         </Avatar>
                         <div>
@@ -216,7 +211,7 @@ export default function PlatformUsersPage() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Building2 className="h-3 w-3 text-gray-400" />
-                        <span className="text-sm">{user.society}</span>
+                        <span className="text-sm">{user.societyName}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -242,15 +237,23 @@ export default function PlatformUsersPage() {
                             <Edit className="h-4 w-4 mr-2" />
                             Edit User
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">
-                            <Ban className="h-4 w-4 mr-2" />
-                            Suspend User
-                          </DropdownMenuItem>
+                          {user.status === 'suspended' ? (
+                            <DropdownMenuItem onClick={() => updateStatusMutation.mutate({ id: user.id, status: 'ACTIVE' })}>
+                              <UserCheck className="h-4 w-4 mr-2" />
+                              Activate User
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem className="text-red-600" onClick={() => updateStatusMutation.mutate({ id: user.id, status: 'SUSPENDED' })}>
+                              <Ban className="h-4 w-4 mr-2" />
+                              Suspend User
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))}
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>

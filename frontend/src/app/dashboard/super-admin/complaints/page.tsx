@@ -6,36 +6,53 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { mockServiceComplaints } from '@/lib/mocks/services'
+import { useQuery } from '@tanstack/react-query'
+import api from '@/lib/api'
 import { ComplaintsTable } from '@/components/complaints/complaints-table'
 
 export default function SuperAdminComplaintsPage() {
+    const { data: complaints = [], isLoading } = useQuery<any[]>({
+        queryKey: ['super-admin-complaints'],
+        queryFn: async () => {
+            const response = await api.get('/complaints')
+            return response.data
+        }
+    })
+
     const stats = [
         {
             title: 'Total Complaints',
-            value: mockServiceComplaints.length,
+            value: complaints.length,
             icon: MessageSquare,
             color: 'bg-blue-500',
         },
         {
-            title: 'Society Issues',
-            value: mockServiceComplaints.filter(c => c.source === 'society').length,
-            icon: Building2,
-            color: 'bg-purple-500',
+            title: 'Resolved',
+            value: complaints.filter((c: any) => c.status === 'RESOLVED').length,
+            icon: CheckCircle2,
+            color: 'bg-green-500',
         },
         {
-            title: 'Resident Issues',
-            value: mockServiceComplaints.filter(c => c.source === 'resident').length,
-            icon: Users,
+            title: 'Pending',
+            value: complaints.filter((c: any) => c.status === 'PENDING').length,
+            icon: Clock,
             color: 'bg-orange-500',
         },
         {
-            title: 'Individual Issues',
-            value: mockServiceComplaints.filter(c => c.source === 'individual').length,
-            icon: User,
-            color: 'bg-blue-500',
+            title: 'High Priority',
+            value: complaints.filter((c: any) => c.priority === 'HIGH').length,
+            icon: AlertCircle,
+            color: 'bg-red-500',
         },
     ]
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+        )
+    }
 
     return (
         <div className="space-y-6">
@@ -77,37 +94,24 @@ export default function SuperAdminComplaintsPage() {
                 <CardHeader className="pb-2">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <CardTitle className="text-lg font-semibold">Complaints List</CardTitle>
-                        <div className="flex items-center gap-2">
-                            <div className="relative">
-                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                <Input placeholder="Search complaints..." className="pl-9 w-[250px]" />
-                            </div>
-                            <Button variant="outline" size="icon">
-                                <Filter className="h-4 w-4" />
-                            </Button>
-                        </div>
                     </div>
                 </CardHeader>
                 <CardContent>
                     <Tabs defaultValue="all" className="w-full">
-                        <TabsList className="mb-4 grid w-full grid-cols-4 lg:w-[400px]">
+                        <TabsList className="mb-4 grid w-full grid-cols-3 lg:w-[300px]">
                             <TabsTrigger value="all">All</TabsTrigger>
-                            <TabsTrigger value="society">Society</TabsTrigger>
-                            <TabsTrigger value="resident">Resident</TabsTrigger>
-                            <TabsTrigger value="individual">Individual</TabsTrigger>
+                            <TabsTrigger value="PENDING">Pending</TabsTrigger>
+                            <TabsTrigger value="RESOLVED">Resolved</TabsTrigger>
                         </TabsList>
 
                         <TabsContent value="all">
-                            <ComplaintsTable complaints={mockServiceComplaints} />
+                            <ComplaintsTable complaints={complaints} />
                         </TabsContent>
-                        <TabsContent value="society">
-                            <ComplaintsTable complaints={mockServiceComplaints.filter(c => c.source === 'society')} showSource={false} />
+                        <TabsContent value="PENDING">
+                            <ComplaintsTable complaints={complaints.filter((c: any) => c.status === 'PENDING')} />
                         </TabsContent>
-                        <TabsContent value="resident">
-                            <ComplaintsTable complaints={mockServiceComplaints.filter(c => c.source === 'resident')} showSource={false} />
-                        </TabsContent>
-                        <TabsContent value="individual">
-                            <ComplaintsTable complaints={mockServiceComplaints.filter(c => c.source === 'individual')} showSource={false} />
+                        <TabsContent value="RESOLVED">
+                            <ComplaintsTable complaints={complaints.filter((c: any) => c.status === 'RESOLVED')} />
                         </TabsContent>
                     </Tabs>
                 </CardContent>

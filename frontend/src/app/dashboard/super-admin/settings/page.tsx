@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Settings,
@@ -12,8 +12,6 @@ import {
   Database,
   Smartphone,
   Save,
-  ToggleLeft,
-  ToggleRight,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,11 +20,15 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { RoleGuard } from '@/components/auth/role-guard'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '@/lib/api'
+import { toast } from 'react-hot-toast'
 
 export default function SystemSettingsPage() {
+  const queryClient = useQueryClient()
   const [settings, setSettings] = useState({
-    platformName: 'IGATESECURITY Society Management',
-    supportEmail: 'support@IGATESECURITY.com',
+    platformName: 'Societly Platform',
+    supportEmail: 'support@societly.com',
     maintenanceMode: false,
     newRegistrations: true,
     emailNotifications: true,
@@ -37,8 +39,58 @@ export default function SystemSettingsPage() {
     maxLoginAttempts: '5',
   })
 
+  const { data: backendSettings, isLoading } = useQuery({
+    queryKey: ['system-settings'],
+    queryFn: async () => {
+      const response = await api.get('/settings')
+      return response.data
+    }
+  })
+
+  useEffect(() => {
+    if (backendSettings && Object.keys(backendSettings).length > 0) {
+      setSettings(prev => ({
+        ...prev,
+        ...backendSettings,
+        // Convert strings from backend back to appropriate types if necessary
+        maintenanceMode: backendSettings.maintenanceMode === 'true',
+        newRegistrations: backendSettings.newRegistrations === 'true',
+        emailNotifications: backendSettings.emailNotifications === 'true',
+        smsNotifications: backendSettings.smsNotifications === 'true',
+        pushNotifications: backendSettings.pushNotifications === 'true',
+        twoFactorRequired: backendSettings.twoFactorRequired === 'true',
+      }))
+    }
+  }, [backendSettings])
+
+  const saveSettingsMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await api.post('/settings', data)
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['system-settings'] })
+      toast.success('System settings updated successfully')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Failed to save settings')
+    }
+  })
+
   const handleToggle = (key: string) => {
     setSettings((prev) => ({ ...prev, [key]: !prev[key as keyof typeof prev] }))
+  }
+
+  const handleSave = () => {
+    saveSettingsMutation.mutate(settings)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    )
   }
 
   return (
@@ -54,9 +106,17 @@ export default function SystemSettingsPage() {
             <h1 className="text-2xl font-bold text-gray-900">System Settings</h1>
             <p className="text-gray-600">Configure platform-wide settings and preferences</p>
           </div>
-          <Button className="bg-purple-600 hover:bg-purple-700">
-            <Save className="h-4 w-4 mr-2" />
-            Save Changes
+          <Button 
+            className="bg-purple-600 hover:bg-purple-700"
+            onClick={handleSave}
+            disabled={saveSettingsMutation.isPending}
+          >
+            {saveSettingsMutation.isPending ? 'Saving...' : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                Save Changes
+              </>
+            )}
           </Button>
         </div>
 

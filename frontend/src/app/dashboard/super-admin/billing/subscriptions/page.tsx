@@ -53,46 +53,15 @@ import {
 } from '@/components/ui/select'
 import { RoleGuard } from '@/components/auth/role-guard'
 
-const initialPlans = [
-  {
-    id: 1,
-    name: 'Basic Plan',
-    type: 'Monthly',
-    price: '₹10,000',
-    description: 'Essential features for small societies.',
-    status: 'active',
-  },
-  {
-    id: 2,
-    name: 'Pro Plan',
-    type: 'Monthly',
-    price: '₹20,000',
-    description: 'Advanced features for growing communities.',
-    status: 'active',
-  },
-  {
-    id: 3,
-    name: 'Enterprise Plan',
-    type: 'Yearly',
-    price: '₹1,50,000',
-    description: 'All-inclusive detailed management suite.',
-    status: 'active',
-  },
-  {
-    id: 4,
-    name: 'Trial Plan',
-    type: 'Monthly',
-    price: '₹0',
-    description: 'Free trial for 1 month.',
-    status: 'inactive',
-  },
-]
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '@/lib/api'
+import toast from 'react-hot-toast'
 
 export default function SubscriptionsPage() {
+  const queryClient = useQueryClient()
   const [searchQuery, setSearchQuery] = useState('')
-  const [plans, setPlans] = useState(initialPlans)
   const [isAddOpen, setIsAddOpen] = useState(false)
-  const [editPlan, setEditPlan] = useState<typeof initialPlans[0] | null>(null)
+  const [editPlan, setEditPlan] = useState<any | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
 
   const [newPlan, setNewPlan] = useState({
@@ -100,7 +69,67 @@ export default function SubscriptionsPage() {
     type: 'Monthly',
     price: '',
     description: '',
-    status: 'active' as const
+    status: 'active'
+  })
+
+  const { data: plans = [], isLoading } = useQuery<any[]>({
+    queryKey: ['billing-plans'],
+    queryFn: async () => {
+      const response = await api.get('/billing-plans')
+      return response.data
+    }
+  })
+
+  const createMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await api.post('/billing-plans', data)
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['billing-plans'] })
+      toast.success('Subscription plan created')
+      setIsAddOpen(false)
+      setNewPlan({
+        name: '',
+        type: 'Monthly',
+        price: '',
+        description: '',
+        status: 'active'
+      })
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Failed to create plan')
+    }
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number, data: any }) => {
+      const response = await api.put(`/billing-plans/${id}`, data)
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['billing-plans'] })
+      toast.success('Subscription plan updated')
+      setEditPlan(null)
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Failed to update plan')
+    }
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await api.delete(`/billing-plans/${id}`)
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['billing-plans'] })
+      toast.success('Subscription plan deleted')
+      setDeleteId(null)
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Failed to delete plan')
+    }
   })
 
   const filteredPlans = plans.filter(
@@ -111,34 +140,17 @@ export default function SubscriptionsPage() {
 
   const handleAddPlan = () => {
     if (!newPlan.name || !newPlan.price) return
-
-    const planToAdd = {
-      id: plans.length + 1,
-      ...newPlan,
-    }
-
-    setPlans([...plans, planToAdd])
-    setIsAddOpen(false)
-    setNewPlan({
-      name: '',
-      type: 'Monthly',
-      price: '',
-      description: '',
-      status: 'active'
-    })
+    createMutation.mutate(newPlan)
   }
 
   const handleUpdatePlan = () => {
     if (!editPlan) return
-    const updatedPlans = plans.map(p => p.id === editPlan.id ? editPlan : p)
-    setPlans(updatedPlans)
-    setEditPlan(null)
+    updateMutation.mutate({ id: editPlan.id, data: editPlan })
   }
 
   const handleDeletePlan = () => {
     if (deleteId === null) return
-    setPlans(plans.filter(p => p.id !== deleteId))
-    setDeleteId(null)
+    deleteMutation.mutate(deleteId)
   }
 
   return (
@@ -241,8 +253,21 @@ export default function SubscriptionsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredPlans.map((plan) => (
-                  <TableRow key={plan.id}>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-10">
+                      <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    </TableCell>
+                  </TableRow>
+                ) : filteredPlans.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-10 text-gray-500">
+                      No plans found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredPlans.map((plan) => (
+                    <TableRow key={plan.id}>
                     <TableCell>
                       <div className="font-bold text-gray-900">{plan.name}</div>
                     </TableCell>
@@ -284,7 +309,7 @@ export default function SubscriptionsPage() {
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))}
+                )))}
               </TableBody>
             </Table>
           </CardContent>

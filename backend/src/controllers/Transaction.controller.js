@@ -3,8 +3,14 @@ const prisma = require('../lib/prisma');
 class TransactionController {
   static async list(req, res) {
     try {
+      const where = {};
+      if (req.user.role !== 'SUPER_ADMIN') {
+        where.societyId = req.user.societyId;
+      }
+
       const transactions = await prisma.transaction.findMany({
-        where: { societyId: req.user.societyId },
+        where,
+        include: { society: { select: { name: true } } },
         orderBy: { date: 'desc' }
       });
       res.json(transactions);

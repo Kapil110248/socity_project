@@ -4,12 +4,14 @@ class ComplaintController {
   static async list(req, res) {
     try {
       const { status, category, priority, search } = req.query;
-      const where = {
-        societyId: req.user.societyId
-      };
+      const where = {};
 
       if (req.user.role === 'RESIDENT') {
         where.reportedById = req.user.id;
+      }
+
+      if (req.user.role !== 'SUPER_ADMIN') {
+        where.societyId = req.user.societyId;
       }
 
       if (status) where.status = status;

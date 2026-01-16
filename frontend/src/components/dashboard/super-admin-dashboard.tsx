@@ -163,8 +163,8 @@ export function SuperAdminDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs sm:text-sm font-medium text-white/90">Total Societies</p>
-                  <h3 className="text-2xl sm:text-3xl font-bold text-white mt-1">{platformStats.totalSocieties}</h3>
-                  <p className="text-xs text-white/70 mt-1">{platformStats.activeSocieties} active</p>
+                  <h3 className="text-2xl sm:text-3xl font-bold text-white mt-1">{platformStats?.totalSocieties || 0}</h3>
+                  <p className="text-xs text-white/70 mt-1">{platformStats?.activeSocieties || 0} active</p>
                 </div>
                 <div className="p-2 sm:p-3 bg-white/20 rounded-xl">
                   <Building2 className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
@@ -180,8 +180,8 @@ export function SuperAdminDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs sm:text-sm font-medium text-white/90">Total Users</p>
-                  <h3 className="text-2xl sm:text-3xl font-bold text-white mt-1">{(platformStats.totalUsers / 1000).toFixed(1)}K</h3>
-                  <p className="text-xs text-white/70 mt-1">{(platformStats.activeUsers / 1000).toFixed(1)}K active</p>
+                  <h3 className="text-2xl sm:text-3xl font-bold text-white mt-1">{((platformStats?.totalUsers || 0) / 1000).toFixed(1)}K</h3>
+                  <p className="text-xs text-white/70 mt-1">{((platformStats?.activeUsers || 0) / 1000).toFixed(1)}K active</p>
                 </div>
                 <div className="p-2 sm:p-3 bg-white/20 rounded-xl">
                   <Users className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
@@ -197,7 +197,7 @@ export function SuperAdminDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs sm:text-sm font-medium text-white/90">Monthly Revenue</p>
-                  <h3 className="text-2xl sm:text-3xl font-bold text-white mt-1">₹{(platformStats.monthlyRevenue / 100000).toFixed(1)}L</h3>
+                  <h3 className="text-2xl sm:text-3xl font-bold text-white mt-1">₹{((platformStats?.monthlyRevenue || 0) / 100000).toFixed(1)}L</h3>
                   <p className="text-xs text-white/70 mt-1">+12% from last month</p>
                 </div>
                 <div className="p-2 sm:p-3 bg-white/20 rounded-xl">
@@ -214,8 +214,8 @@ export function SuperAdminDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs sm:text-sm font-medium text-white/90">Pending Approvals</p>
-                  <h3 className="text-2xl sm:text-3xl font-bold text-white mt-1">{platformStats.pendingApprovals}</h3>
-                  <p className="text-xs text-white/70 mt-1">{platformStats.pendingSocieties} societies waiting</p>
+                  <h3 className="text-2xl sm:text-3xl font-bold text-white mt-1">{platformStats?.pendingApprovals || 0}</h3>
+                  <p className="text-xs text-white/70 mt-1">{platformStats?.pendingSocieties || 0} societies waiting</p>
                 </div>
                 <div className="p-2 sm:p-3 bg-white/20 rounded-xl">
                   <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
@@ -243,32 +243,32 @@ export function SuperAdminDashboard() {
               <div className="bg-gradient-to-br from-green-50 to-emerald-100 rounded-xl p-4 border border-green-200 text-center">
                 <Server className="h-6 w-6 text-green-600 mx-auto mb-2" />
                 <p className="text-xs text-gray-600">Server Uptime</p>
-                <p className="text-xl font-bold text-green-700">{systemHealth.serverUptime}</p>
+                <p className="text-xl font-bold text-green-700">{systemHealth?.serverUptime || 'N/A'}</p>
               </div>
               <div className="bg-gradient-to-br from-blue-50 to-cyan-100 rounded-xl p-4 border border-blue-200 text-center">
                 <Zap className="h-6 w-6 text-blue-600 mx-auto mb-2" />
                 <p className="text-xs text-gray-600">API Latency</p>
-                <p className="text-xl font-bold text-blue-700">{systemHealth.apiLatency}</p>
+                <p className="text-xl font-bold text-blue-700">{systemHealth?.apiLatency || 'N/A'}</p>
               </div>
               <div className="bg-gradient-to-br from-purple-50 to-violet-100 rounded-xl p-4 border border-purple-200 text-center">
                 <Database className="h-6 w-6 text-purple-600 mx-auto mb-2" />
                 <p className="text-xs text-gray-600">Database Size</p>
-                <p className="text-xl font-bold text-purple-700">{systemHealth.databaseSize}</p>
+                <p className="text-xl font-bold text-purple-700">{systemHealth?.databaseSize || 'N/A'}</p>
               </div>
               <div className="bg-gradient-to-br from-orange-50 to-amber-100 rounded-xl p-4 border border-orange-200 text-center">
                 <Globe className="h-6 w-6 text-orange-600 mx-auto mb-2" />
                 <p className="text-xs text-gray-600">Connections</p>
-                <p className="text-xl font-bold text-orange-700">{systemHealth.activeConnections}</p>
+                <p className="text-xl font-bold text-orange-700">{systemHealth?.activeConnections || 'N/A'}</p>
               </div>
               <div className="bg-gradient-to-br from-pink-50 to-rose-100 rounded-xl p-4 border border-pink-200 text-center">
                 <Cpu className="h-6 w-6 text-pink-600 mx-auto mb-2" />
                 <p className="text-xs text-gray-600">CPU Usage</p>
-                <p className="text-xl font-bold text-pink-700">{systemHealth.cpuUsage}%</p>
+                <p className="text-xl font-bold text-pink-700">{systemHealth?.cpuUsage || 0}%</p>
               </div>
               <div className="bg-gradient-to-br from-indigo-50 to-blue-100 rounded-xl p-4 border border-indigo-200 text-center">
                 <HardDrive className="h-6 w-6 text-indigo-600 mx-auto mb-2" />
                 <p className="text-xs text-gray-600">Memory Usage</p>
-                <p className="text-xl font-bold text-indigo-700">{systemHealth.memoryUsage}%</p>
+                <p className="text-xl font-bold text-indigo-700">{systemHealth?.memoryUsage || 0}%</p>
               </div>
             </div>
           </CardContent>
@@ -286,7 +286,7 @@ export function SuperAdminDashboard() {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={societyGrowthData}>
+                <AreaChart data={societyGrowthData || []}>
                   <defs>
                     <linearGradient id="societyGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
@@ -313,7 +313,7 @@ export function SuperAdminDashboard() {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={revenueData}>
+                <BarChart data={revenueData || []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
                   <XAxis dataKey="month" stroke="#6b7280" fontSize={12} />
                   <YAxis stroke="#6b7280" fontSize={12} tickFormatter={(v) => `${v / 100000}L`} />
@@ -342,7 +342,7 @@ export function SuperAdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {recentSocieties.map((society) => (
+                {(recentSocieties || []).map((society) => (
                   <div
                     key={society.id}
                     className="flex items-center justify-between p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors"
@@ -397,7 +397,7 @@ export function SuperAdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {subscriptionStats.map((plan) => (
+                {(subscriptionStats || []).map((plan) => (
                   <div key={plan.plan} className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-gray-700">{plan.plan}</span>
@@ -406,7 +406,7 @@ export function SuperAdminDashboard() {
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
                         className={`${plan.color} h-2 rounded-full`}
-                        style={{ width: `${(plan.societies / platformStats.totalSocieties) * 100}%` }}
+                        style={{ width: `${(plan.societies / (platformStats?.totalSocieties || 1)) * 100}%` }}
                       />
                     </div>
                   </div>
