@@ -1,0 +1,131 @@
+'use client'
+
+import { useState } from 'react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Plus, ShoppingBag, Upload } from 'lucide-react'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+
+export function CreateListingDialog() {
+    const [open, setOpen] = useState(false)
+    const [type, setType] = useState('sell')
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <Button className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2">
+                    <Plus className="h-4 w-4" />
+                    Create Listing
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-xl">
+                        <ShoppingBag className="h-5 w-5 text-indigo-600" />
+                        Post Ad
+                    </DialogTitle>
+                </DialogHeader>
+
+                <div className="space-y-4 py-4">
+                    <div className="space-y-3">
+                        <Label>I want to...</Label>
+                        <RadioGroup defaultValue="sell" value={type} onValueChange={setType} className="flex gap-4">
+                            <div className="flex items-center space-x-2 border p-3 rounded-lg flex-1 cursor-pointer hover:bg-gray-50">
+                                <RadioGroupItem value="sell" id="r-sell" />
+                                <Label htmlFor="r-sell" className="cursor-pointer font-medium">Sell Item</Label>
+                            </div>
+                            <div className="flex items-center space-x-2 border p-3 rounded-lg flex-1 cursor-pointer hover:bg-gray-50">
+                                <RadioGroupItem value="buy" id="r-buy" />
+                                <Label htmlFor="r-buy" className="cursor-pointer font-medium">Buy / Request</Label>
+                            </div>
+                        </RadioGroup>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Item Name</Label>
+                        <Input placeholder="e.g. Wooden Sofa, Kids Bicycle" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label>Category</Label>
+                            <Select>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="furniture">Furniture</SelectItem>
+                                    <SelectItem value="electronics">Electronics</SelectItem>
+                                    <SelectItem value="vehicles">Vehicles</SelectItem>
+                                    <SelectItem value="clothing">Clothing</SelectItem>
+                                    <SelectItem value="other">Other</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Condition</Label>
+                            <Select disabled={type === 'buy'}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder={type === 'buy' ? 'Any' : "Select"} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="new">New</SelectItem>
+                                    <SelectItem value="like_new">Like New</SelectItem>
+                                    <SelectItem value="good">Good</SelectItem>
+                                    <SelectItem value="fair">Fair</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label>Price (₹)</Label>
+                            <Input type="number" placeholder="0" />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Price Type</Label>
+                            <Select>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="fixed">Fixed</SelectItem>
+                                    <SelectItem value="negotiable">Negotiable</SelectItem>
+                                    <SelectItem value="free">Free</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Description</Label>
+                        <Textarea placeholder="Describe the item, features, usage duration, etc." rows={3} />
+                    </div>
+
+                    {type === 'sell' && (
+                        <div className="space-y-2">
+                            <Label>Upload Photos</Label>
+                            <div className="border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center text-gray-500 hover:bg-gray-50 cursor-pointer">
+                                <Upload className="h-8 w-8 mb-2 text-gray-400" />
+                                <span className="text-sm">Click to upload images</span>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex justify-end gap-3 pt-4 border-t mt-4">
+                        <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+                        <Button className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => setOpen(false)}>
+                            Post Now
+                        </Button>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+    )
+}

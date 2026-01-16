@@ -1,0 +1,266 @@
+'use client'
+
+import { useState } from 'react'
+import { motion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
+import {
+  Building2,
+  MapPin,
+  Users,
+  Mail,
+  Phone,
+  ArrowLeft,
+  Save,
+} from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { RoleGuard } from '@/components/auth/role-guard'
+import Link from 'next/link'
+
+export default function AddSocietyPage() {
+  const router = useRouter()
+  const [formData, setFormData] = useState({
+    name: '',
+    address: '',
+    city: '',
+    state: '',
+    pincode: '',
+    units: '',
+    plan: '',
+    adminName: '',
+    adminEmail: '',
+    adminPassword: '',
+    adminPhone: '',
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    // Handle form submission
+    console.log('Form submitted:', formData)
+    router.push('/dashboard/super-admin/societies')
+  }
+
+  const handleChange = (field: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }))
+  }
+
+  return (
+    <RoleGuard allowedRoles={['super_admin']}>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-6"
+      >
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard/super-admin/societies">
+            <Button variant="outline" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Add New Society</h1>
+            <p className="text-gray-600">Register a new society on the platform</p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Society Details */}
+          <Card className="border-0 shadow-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                Society Details
+              </CardTitle>
+              <CardDescription>Basic information about the society</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Society Name *</Label>
+                  <Input
+                    id="name"
+                    placeholder="Enter society name"
+                    value={formData.name}
+                    onChange={(e) => handleChange('name', e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="units">Number of Units *</Label>
+                  <Input
+                    id="units"
+                    type="number"
+                    placeholder="e.g., 250"
+                    value={formData.units}
+                    onChange={(e) => handleChange('units', e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="address">Address *</Label>
+                <Input
+                  id="address"
+                  placeholder="Enter full address"
+                  value={formData.address}
+                  onChange={(e) => handleChange('address', e.target.value)}
+                  required
+                />
+              </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="city">City *</Label>
+                  <Input
+                    id="city"
+                    placeholder="Enter city"
+                    value={formData.city}
+                    onChange={(e) => handleChange('city', e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="state">State *</Label>
+                  <Select value={formData.state} onValueChange={(v) => handleChange('state', v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select state" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Maharashtra">Maharashtra</SelectItem>
+                      <SelectItem value="Karnataka">Karnataka</SelectItem>
+                      <SelectItem value="Tamil Nadu">Tamil Nadu</SelectItem>
+                      <SelectItem value="Telangana">Telangana</SelectItem>
+                      <SelectItem value="Gujarat">Gujarat</SelectItem>
+                      <SelectItem value="Delhi">Delhi</SelectItem>
+                      <SelectItem value="West Bengal">West Bengal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pincode">Pincode *</Label>
+                  <Input
+                    id="pincode"
+                    placeholder="Enter pincode"
+                    value={formData.pincode}
+                    onChange={(e) => handleChange('pincode', e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Subscription Plan */}
+          <Card className="border-0 shadow-md">
+            <CardHeader>
+              <CardTitle>Subscription Plan</CardTitle>
+              <CardDescription>Select the appropriate plan for the society</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-3">
+                {[
+                  { value: 'basic', label: 'Basic', price: '₹10,000/month', features: 'Up to 100 units' },
+                  { value: 'professional', label: 'Professional', price: '₹20,000/month', features: 'Up to 300 units' },
+                  { value: 'enterprise', label: 'Enterprise', price: '₹75,000/month', features: 'Unlimited units' },
+                ].map((plan) => (
+                  <div
+                    key={plan.value}
+                    className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${formData.plan === plan.value
+                      ? 'border-purple-500 bg-purple-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    onClick={() => handleChange('plan', plan.value)}
+                  >
+                    <h4 className="font-semibold">{plan.label}</h4>
+                    <p className="text-lg font-bold text-purple-600">{plan.price}</p>
+                    <p className="text-sm text-gray-500">{plan.features}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Admin Details */}
+          {/* <Card className="border-0 shadow-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Society Admin Details
+              </CardTitle>
+              <CardDescription>Primary contact person for the society</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="adminName">Admin Name *</Label>
+                  <Input
+                    id="adminName"
+                    placeholder="Enter admin name"
+                    value={formData.adminName}
+                    onChange={(e) => handleChange('adminName', e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="adminEmail">Admin Email *</Label>
+                  <Input
+                    id="adminEmail"
+                    type="email"
+                    placeholder="Enter admin email"
+                    value={formData.adminEmail}
+                    onChange={(e) => handleChange('adminEmail', e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="adminPassword">Admin Password *</Label>
+                  <Input
+                    id="adminPassword"
+                    type="password"
+                    placeholder="Enter admin password"
+                    value={formData.adminPassword}
+                    onChange={(e) => handleChange('adminPassword', e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="adminPhone">Admin Phone *</Label>
+                  <Input
+                    id="adminPhone"
+                    type="tel"
+                    placeholder="Enter admin phone number"
+                    value={formData.adminPhone}
+                    onChange={(e) => handleChange('adminPhone', e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card> */}
+
+          {/* Actions */}
+          <div className="flex justify-end gap-4">
+            <Link href="/dashboard/super-admin/societies">
+              <Button variant="outline">Cancel</Button>
+            </Link>
+            <Button type="submit" className="bg-purple-600 hover:bg-purple-700">
+              <Save className="h-4 w-4 mr-2" />
+              Create Society
+            </Button>
+          </div>
+        </form>
+      </motion.div>
+    </RoleGuard >
+  )
+}
