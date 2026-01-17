@@ -1,5 +1,7 @@
 export const API_CONFIG = {
   BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9000/api',
+  
+  // Authentication & Users
   AUTH: {
     LOGIN: '/auth/login',
     REGISTER: '/auth/register',
@@ -13,45 +15,207 @@ export const API_CONFIG = {
     DELETE_USER: (id: number | string) => `/auth/${id}`,
     UPDATE_STATUS: (id: number | string) => `/auth/${id}/status`,
   },
+
+  // Society Management
   SOCIETY: {
     LIST: '/society',
     CREATE: '/society',
     UPDATE: (id: number | string) => `/society/${id}`,
     DELETE: (id: number | string) => `/society/${id}`,
     GET: (id: number | string) => `/society/${id}`,
-    ALL: '/society/all', // Dropdown list
+    ALL: '/society/all',
+    MEMBERS: '/society/members',
+    ADMIN_STATS: '/society/admin-dashboard-stats',
   },
+
+  // Units
+  UNIT: {
+    LIST: '/units',
+    GET: (id: number | string) => `/units/${id}`,
+    CREATE: '/units',
+    UPDATE: (id: number | string) => `/units/${id}`,
+    DELETE: (id: number | string) => `/units/${id}`,
+  },
+
+  // Residents Directory
+  RESIDENT: {
+    LIST: '/society/members',
+    DIRECTORY: '/society/members?type=directory',
+  },
+
+  // Complaints / Helpdesk
+  COMPLAINT: {
+    LIST: '/complaints',
+    CREATE: '/complaints',
+    GET: (id: number | string) => `/complaints/${id}`,
+    UPDATE_STATUS: (id: number | string) => `/complaints/${id}/status`,
+    ASSIGN: (id: number | string) => `/complaints/${id}/assign`,
+    ADD_COMMENT: (id: number | string) => `/complaints/${id}/comments`,
+  },
+
+  // Visitors & Security
+  VISITOR: {
+    LIST: '/visitors',
+    CREATE: '/visitors',
+    GET: (id: number | string) => `/visitors/${id}`,
+    UPDATE_STATUS: (id: number | string) => `/visitors/${id}/status`,
+    LOGS: '/visitors/logs',
+  },
+
+  // Parking
+  PARKING: {
+    SLOTS: '/parking',
+    CREATE: '/parking',
+    UPDATE: (id: number | string) => `/parking/${id}`,
+    DELETE: (id: number | string) => `/parking/${id}`,
+    PAYMENTS: '/parking/payments',
+  },
+
+  // Vehicles
+  VEHICLE: {
+    LIST: '/vehicles',
+    STATS: '/vehicles/stats',
+    REGISTER: '/vehicles/register',
+    REMOVE: (id: number | string) => `/vehicles/${id}`,
+  },
+
+  // Parcels
+  PARCEL: {
+    LIST: '/parcels',
+    GET: (id: number | string) => `/parcels/${id}`,
+    CREATE: '/parcels',
+    UPDATE_STATUS: (id: number | string) => `/parcels/${id}/status`,
+    DELETE: (id: number | string) => `/parcels/${id}`,
+  },
+
+  // Staff (Guards & Maids)
+  STAFF: {
+    LIST: '/staff',
+    GUARDS: '/staff/guards',
+    MAIDS: '/staff/maids',
+    CREATE: '/staff',
+    UPDATE_STATUS: (id: number | string) => `/staff/${id}/status`,
+    DELETE: (id: number | string) => `/staff/${id}`,
+  },
+
+  // Amenities
+  AMENITY: {
+    LIST: '/amenities',
+    GET: (id: number | string) => `/amenities/${id}`,
+    CREATE: '/amenities',
+    UPDATE: (id: number | string) => `/amenities/${id}`,
+    DELETE: (id: number | string) => `/amenities/${id}`,
+    BOOKINGS: '/amenities/bookings/all',
+    BOOK: '/amenities/bookings',
+  },
+
+  // Notices
+  NOTICE: {
+    LIST: '/notices',
+    GET: (id: number | string) => `/notices/${id}`,
+    CREATE: '/notices',
+    UPDATE: (id: number | string) => `/notices/${id}`,
+    DELETE: (id: number | string) => `/notices/${id}`,
+  },
+
+  // Events
+  EVENT: {
+    LIST: '/events',
+    GET: (id: number | string) => `/events/${id}`,
+    CREATE: '/events',
+    UPDATE: (id: number | string) => `/events/${id}`,
+    DELETE: (id: number | string) => `/events/${id}`,
+  },
+
+  // Meetings
+  MEETING: {
+    LIST: '/meetings',
+    GET: (id: number | string) => `/meetings/${id}`,
+    CREATE: '/meetings',
+    UPDATE: (id: number | string) => `/meetings/${id}`,
+    DELETE: (id: number | string) => `/meetings/${id}`,
+  },
+
+  // Assets
+  ASSET: {
+    LIST: '/assets',
+    STATS: '/assets/stats',
+    GET: (id: number | string) => `/assets/${id}`,
+    CREATE: '/assets',
+    UPDATE: (id: number | string) => `/assets/${id}`,
+    DELETE: (id: number | string) => `/assets/${id}`,
+  },
+
+  // Documents
+  DOCUMENT: {
+    LIST: '/documents',
+    GET: (id: number | string) => `/documents/${id}`,
+    CREATE: '/documents',
+    DELETE: (id: number | string) => `/documents/${id}`,
+  },
+
+  // Vendors
+  VENDOR: {
+    LIST: '/vendors',
+    GET: (id: number | string) => `/vendors/${id}`,
+    CREATE: '/vendors',
+    UPDATE: (id: number | string) => `/vendors/${id}`,
+    DELETE: (id: number | string) => `/vendors/${id}`,
+  },
+
+  // Vendor Payouts
+  PAYOUT: {
+    LIST: '/vendor-payouts',
+    UPDATE_STATUS: (id: number | string) => `/vendor-payouts/${id}/status`,
+  },
+
+  // Transactions / Accounting
+  TRANSACTION: {
+    LIST: '/transactions',
+    CREATE: '/transactions',
+    GET: (id: number | string) => `/transactions/${id}`,
+    UPDATE: (id: number | string) => `/transactions/${id}`,
+    DELETE: (id: number | string) => `/transactions/${id}`,
+    STATS: '/transactions/stats',
+  },
+
+  // Emergency
   EMERGENCY: {
     LOGS: '/emergency/logs',
     BARCODES: '/emergency/barcodes',
     UPDATE_BARCODE_STATUS: (id: string) => `/emergency/barcodes/${id}/status`,
     RESET_BARCODES: '/emergency/barcodes/reset',
+    // Alerts
+    CREATE_ALERT: '/emergency/alerts',
+    LIST_ALERTS: '/emergency/alerts',
+    GET_ALERT: (id: number | string) => `/emergency/alerts/${id}`,
+    RESOLVE_ALERT: (id: number | string) => `/emergency/alerts/${id}/resolve`,
+    // Contacts
+    LIST_CONTACTS: '/emergency/contacts',
+    ADD_CONTACT: '/emergency/contacts',
+    UPDATE_CONTACT: (id: number | string) => `/emergency/contacts/${id}`,
+    DELETE_CONTACT: (id: number | string) => `/emergency/contacts/${id}`,
   },
+
+  // Services
   SERVICE: {
     CATEGORIES: '/services/categories',
     CATEGORY_DETAILS: (id: string) => `/services/categories/${id}`,
     INQUIRIES: '/services/inquiries',
     ASSIGN_VENDOR: (id: string) => `/services/inquiries/${id}/assign`,
   },
-  COMPLAINT: {
-    LIST: '/complaints',
-    CREATE: '/complaints',
-    UPDATE_STATUS: (id: number | string) => `/complaints/${id}/status`,
-    ADD_COMMENT: (id: number | string) => `/complaints/${id}/comments`,
-  },
-  VENDOR: {
-    LIST: '/vendors',
-    CREATE: '/vendors',
-    UPDATE: (id: number | string) => `/vendors/${id}`,
-    DELETE: (id: number | string) => `/vendors/${id}`,
-  },
+
+  // Billing
   BILLING: {
     INVOICES: '/billing/invoices',
     GENERATE: '/billing/invoices/generate',
     STATS: '/billing/stats',
+    DEFAULTERS: '/billing/defaulters',
   },
-  PAYOUT: {
-    LIST: '/payouts',
-    UPDATE_STATUS: (id: number | string) => `/payouts/${id}/status`,
-  }
+
+  // Reports
+  REPORT: {
+    PLATFORM_STATS: '/reports/platform-stats',
+    SOCIETY_STATS: '/reports/society-stats',
+  },
 };

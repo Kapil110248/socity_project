@@ -10,6 +10,7 @@ router.put('/categories/:id', authenticate, authorize(['SUPER_ADMIN']), ServiceC
 router.delete('/categories/:id', authenticate, authorize(['SUPER_ADMIN']), ServiceCategoryController.deleteCategory);
 
 router.get('/inquiries', authenticate, ServiceInquiryController.listInquiries);
+router.post('/inquiries', authenticate, ServiceInquiryController.createInquiry);
 router.put('/inquiries/:id/assign', authenticate, authorize(['SUPER_ADMIN']), ServiceInquiryController.assignVendor);
 router.patch('/inquiries/:id/assign', authenticate, authorize(['SUPER_ADMIN']), ServiceInquiryController.assignVendor);
 

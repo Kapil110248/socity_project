@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { TrendingUp, ClipboardList, UserCheck, Clock, MapPin, Search } from 'lucide-react'
+import { TrendingUp, ClipboardList, UserCheck, Clock, MapPin, Search, Building2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,6 +29,7 @@ import { toast } from 'react-hot-toast'
 export default function SuperAdminLeadTrackingPage() {
     const queryClient = useQueryClient()
     const [searchTerm, setSearchTerm] = useState('')
+    const [selectedSociety, setSelectedSociety] = useState<string>('all')
     const [selectedInquiry, setSelectedInquiry] = useState<any | null>(null)
     const [selectedVendorId, setSelectedVendorId] = useState<string>('')
     const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false)
@@ -37,6 +38,14 @@ export default function SuperAdminLeadTrackingPage() {
         queryKey: ['service-inquiries'],
         queryFn: async () => {
             const response = await api.get('/services/inquiries')
+            return response.data
+        }
+    })
+
+    const { data: societies = [] } = useQuery<any[]>({
+        queryKey: ['all-societies'],
+        queryFn: async () => {
+            const response = await api.get('/society/all')
             return response.data
         }
     })
@@ -63,16 +72,21 @@ export default function SuperAdminLeadTrackingPage() {
         }
     })
 
-    const filteredInquiries = inquiries.filter((inq: any) =>
-        inq.residentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        inq.serviceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        inq.unit.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    const filteredInquiries = inquiries.filter((inq: any) => {
+        const matchesSearch = 
+            inq.residentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            inq.serviceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            inq.unit.toLowerCase().includes(searchTerm.toLowerCase())
+        
+        const matchesSociety = selectedSociety === 'all' || String(inq.societyId) === selectedSociety
+        
+        return matchesSearch && matchesSociety
+    })
 
     const getMatchingVendors = (serviceName: string) => {
-        // Simple matching logic for now
+        if (!serviceName) return vendors
         return vendors.filter((v: any) => 
-            v.serviceType.toLowerCase().includes(serviceName.toLowerCase()) || 
+            v.serviceType?.toLowerCase().includes(serviceName.toLowerCase()) || 
             v.vendorType === 'platform'
         )
     }
@@ -155,14 +169,27 @@ export default function SuperAdminLeadTrackingPage() {
             <Card className="border-0 shadow-sm bg-white rounded-[40px] ring-1 ring-black/5 overflow-hidden">
                 <div className="p-8 border-b border-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <h2 className="text-xl font-bold text-gray-900">Platform Service Enquiries</h2>
-                    <div className="relative w-full md:w-72">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <Input
-                            placeholder="Search enquiries..."
-                            className="pl-9"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                    <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+                        <div className="relative w-full md:w-64">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <Input
+                                placeholder="Search enquiries..."
+                                className="pl-9 h-11 rounded-2xl"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <Select value={selectedSociety} onValueChange={setSelectedSociety}>
+                            <SelectTrigger className="w-full md:w-64 h-11 rounded-2xl">
+                                <SelectValue placeholder="Filter by Society" />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-2xl">
+                                <SelectItem value="all">All Societies</SelectItem>
+                                {societies.map((soc: any) => (
+                                    <SelectItem key={soc.id} value={String(soc.id)}>{soc.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -170,6 +197,7 @@ export default function SuperAdminLeadTrackingPage() {
                         <thead>
                             <tr className="bg-gray-50/50">
                                 <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Resident / Unit</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Society</th>
                                 <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Service Requested</th>
                                 <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
                                 <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Vendor</th>
@@ -190,6 +218,16 @@ export default function SuperAdminLeadTrackingPage() {
                                             <span className="font-bold text-gray-900">{inquiry.residentName}</span>
                                             <span className="text-xs text-gray-500 flex items-center gap-1">
                                                 <MapPin className="h-3 w-3" /> {inquiry.unit}
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td className="px-8 py-6">
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-7 w-7 rounded-lg bg-indigo-50 flex items-center justify-center">
+                                                <Building2 className="h-4 w-4 text-indigo-600" />
+                                            </div>
+                                            <span className="font-bold text-gray-700 text-sm whitespace-nowrap">
+                                                {inquiry.society?.name || 'Platform Level'}
                                             </span>
                                         </div>
                                     </td>
@@ -272,8 +310,8 @@ export default function SuperAdminLeadTrackingPage() {
                                     <SelectValue placeholder="Choose a vendor..." />
                                 </SelectTrigger>
                                 <SelectContent className="rounded-2xl border-0 shadow-2xl ring-1 ring-black/5">
-                                    {selectedInquiry && getMatchingVendors(selectedInquiry.serviceId).map(vendor => (
-                                        <SelectItem key={vendor.id} value={vendor.id} className="rounded-xl p-3 font-bold">
+                                    {selectedInquiry && getMatchingVendors(selectedInquiry.serviceName).map((vendor: any) => (
+                                        <SelectItem key={vendor.id} value={String(vendor.id)} className="rounded-xl p-3 font-bold">
                                             <div className="flex items-center gap-3">
                                                 <div className="h-8 w-8 rounded-full bg-teal-50 flex items-center justify-center text-teal-600 text-[10px]">
                                                     {vendor.name.substring(0, 2)}

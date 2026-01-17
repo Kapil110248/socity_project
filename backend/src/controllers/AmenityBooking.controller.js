@@ -38,6 +38,25 @@ class AmenityBookingController {
       res.status(500).json({ error: error.message });
     }
   }
+
+  static async update(req, res) {
+    try {
+      const { id } = req.params;
+      const { status, startTime, endTime } = req.body;
+      const booking = await prisma.amenityBooking.update({
+        where: { id: parseInt(id) },
+        data: {
+          status,
+          startTime: startTime ? new Date(startTime) : undefined,
+          endTime: endTime ? new Date(endTime) : undefined
+        }
+      });
+      res.json(booking);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
 }
 
 module.exports = AmenityBookingController;
+

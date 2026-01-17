@@ -17,5 +17,9 @@ export const ServiceManagementService = {
     assignVendor: async (inquiryId: string, vendorData: { vendorId: string, vendorName: string }) => {
         const response = await api.patch(API_CONFIG.SERVICE.ASSIGN_VENDOR(inquiryId), vendorData);
         return response.data;
+    },
+    createInquiry: async (inquiryData: any) => {
+        const response = await api.post(API_CONFIG.SERVICE.INQUIRIES, inquiryData);
+        return response.data;
     }
 };

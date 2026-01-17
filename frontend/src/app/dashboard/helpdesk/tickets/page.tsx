@@ -36,65 +36,80 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuthStore } from '@/lib/stores/auth-store'
-import { mockTickets } from '@/lib/mocks/tickets'
 import { SupportTicket, TicketStatus } from '@/types/tickets'
 import Link from 'next/link'
 import { cn } from '@/lib/utils/cn'
 import { CreateTicketDialog } from '@/components/tickets/create-ticket-dialog'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '@/lib/api'
+import toast from 'react-hot-toast'
 
 const categories = ['All', 'Technical', 'Maintenance', 'Other']
 
 export default function HelpdeskTicketsPage() {
   const { user } = useAuthStore()
+  const queryClient = useQueryClient()
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState('all')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [isDialogOpen, setIsDialogOpen] = useState(false)
 
-  // Role Visibility Logic
-  // TODO: Connect with real API filters later
+  const { data: tickets = [], isLoading } = useQuery<any[]>({
+    queryKey: ['tickets', activeTab, selectedCategory, searchQuery],
+    queryFn: async () => {
+      const params = new URLSearchParams()
+      if (activeTab !== 'all') params.append('status', activeTab.toUpperCase().replace('-', '_'))
+      if (selectedCategory !== 'all') params.append('category', selectedCategory)
+      if (searchQuery) params.append('search', searchQuery)
+      
+      const response = await api.get(`/complaints?${params.toString()}`)
+      return response.data
+    },
+  })
+
+  // Basic search filter for UI (secondary filter)
   const filteredTickets = useMemo(() => {
-    return mockTickets.filter((ticket) => {
-      // 1. Basic search filter
+    return tickets.filter((ticket) => {
+      // Basic search filter
       const matchesSearch =
         ticket.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ticket.id.toLowerCase().includes(searchQuery.toLowerCase())
+        String(ticket.id).toLowerCase().includes(searchQuery.toLowerCase())
 
       if (!matchesSearch) return false
 
-      // 2. Category filter
+      // Category filter
       if (selectedCategory !== 'all' && ticket.category.toLowerCase() !== selectedCategory.toLowerCase()) {
         return false
       }
 
-      // 3. Tab filter (Status)
-      if (activeTab !== 'all' && ticket.status !== activeTab) {
+      // Tab filter (Status)
+      if (activeTab !== 'all' && ticket.status.toLowerCase() !== activeTab.toLowerCase().replace('-', '_')) {
         return false
       }
 
-      // 4. Role-based Visibility Rules
-      if (user?.role === 'resident' || user?.role === 'committee') {
-        return ticket.residentId === user.id
-      }
-
-      if (user?.role === 'admin') {
-        if (ticket.isPrivate) {
-          return ticket.handlerId === user.id
-        }
-        return true
-      }
-
-      if (user?.role === 'super_admin') {
-        return !ticket.isPrivate
-      }
-
-      return false
+      return true
     })
-  }, [user, searchQuery, activeTab, selectedCategory])
+  }, [tickets, searchQuery, activeTab, selectedCategory])
+
+  const createMutation = useMutation({
+    mutationFn: (data: any) => api.post('/complaints', {
+      ...data,
+      priority: data.priority.toUpperCase(),
+      category: data.category
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets'] })
+      toast.success('Ticket created successfully!')
+      setIsDialogOpen(false)
+    },
+    onError: (error: any) => {
+      toast.error('Failed to create ticket: ' + (error.response?.data?.error || error.message))
+    }
+  })
 
   const stats = useMemo(() => {
-    const total = filteredTickets.length
-    const getCount = (status: TicketStatus) => filteredTickets.filter(t => t.status === status).length
+    const total = tickets.length
+    const getCount = (status: string) => tickets.filter((t: any) => t.status.toLowerCase() === status.toLowerCase().replace('-', '_')).length
 
     return [
       { label: 'Open', value: getCount('open'), color: 'bg-blue-500', percentage: total ? Math.round((getCount('open') / total) * 100) : 0 },
@@ -102,11 +117,13 @@ export default function HelpdeskTicketsPage() {
       { label: 'Resolved', value: getCount('resolved'), color: 'bg-green-500', percentage: total ? Math.round((getCount('resolved') / total) * 100) : 0 },
       { label: 'Closed', value: getCount('closed'), color: 'bg-gray-500', percentage: total ? Math.round((getCount('closed') / total) * 100) : 0 },
     ]
-  }, [filteredTickets])
+  }, [tickets])
 
   const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'critical': return 'bg-red-600'
+    const p = priority.toLowerCase()
+    switch (p) {
+      case 'critical':
+      case 'urgent': return 'bg-red-600'
       case 'high': return 'bg-orange-500'
       case 'medium': return 'bg-yellow-500'
       case 'low': return 'bg-green-500'
@@ -215,7 +232,7 @@ export default function HelpdeskTicketsPage() {
       {/* Ticket Feed */}
       <div className="space-y-4">
         <AnimatePresence mode="popLayout">
-          {filteredTickets.map((ticket, index) => (
+          {filteredTickets.map((ticket: any, index: number) => (
             <motion.div
               key={ticket.id}
               initial={{ opacity: 0, y: 10 }}
@@ -319,7 +336,7 @@ export default function HelpdeskTicketsPage() {
       <CreateTicketDialog
         isOpen={isDialogOpen}
         onClose={() => setIsDialogOpen(false)}
-        onSubmit={(data) => console.log('New Ticket Data:', data)}
+        onSubmit={(data) => createMutation.mutate(data)}
       />
     </div>
   )

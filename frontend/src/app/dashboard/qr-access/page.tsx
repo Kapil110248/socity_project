@@ -59,21 +59,71 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useAuthStore } from '@/lib/stores/auth-store'
-import { useEmergencyStore } from '@/lib/stores/emergency-store'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '@/lib/api'
 import toast from 'react-hot-toast'
 
 export default function QRAccessPage() {
-  const { user } = useAuthStore()
-  const { barcodes, logs, generateBarcode, updateBarcodeStatus, regenerateBarcode, deleteBarcode } = useEmergencyStore()
+  const queryClient = useQueryClient()
 
-  const residentBarcodes = barcodes.filter(b => b.residentId === user?.id || b.residentName === user?.name)
-  const residentLogs = logs.filter(l => l.residentName === user?.name || l.unit === user?.unit)
+  // Queries
+  const { data: barcodes = [], isLoading: isLoadingBarcodes } = useQuery<any[]>({
+    queryKey: ['emergency-barcodes'],
+    queryFn: async () => {
+      const response = await api.get('/emergency/barcodes')
+      return response.data
+    }
+  })
 
+  const { data: logs = [], isLoading: isLoadingLogs } = useQuery<any[]>({
+    queryKey: ['emergency-logs'],
+    queryFn: async () => {
+      const response = await api.get('/emergency/logs')
+      return response.data
+    }
+  })
+
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: (data: { label: string; type: string }) => api.post('/emergency/barcodes', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['emergency-barcodes'] })
+      toast.success('New emergency barcode generated!')
+      setIsCreateOpen(false)
+      setNewBarcodeData({ label: '', type: 'property' })
+    },
+    onError: (error: any) => toast.error(error.response?.data?.error || 'Failed to create barcode')
+  })
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) => 
+      api.patch(`/emergency/barcodes/${id}/status`, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['emergency-barcodes'] })
+      toast.success('Status updated successfully')
+    }
+  })
+
+  const regenerateMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/emergency/barcodes/${id}/regenerate`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['emergency-barcodes'] })
+      toast.success('QR Code regenerated successfully!')
+      setIsRegenerateOpen(null)
+    }
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/emergency/barcodes/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['emergency-barcodes'] })
+      toast.success('Barcode deleted successfully')
+    }
+  })
+
+  const [activeTab, setActiveTab] = useState('active')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isRegenerateOpen, setIsRegenerateOpen] = useState<string | null>(null)
-  const [selectedBarcode, setSelectedBarcode] = useState<any>(null)
-
   const [newBarcodeData, setNewBarcodeData] = useState({
     label: '',
     type: 'property' as 'property' | 'vehicle' | 'other'
@@ -84,21 +134,25 @@ export default function QRAccessPage() {
       toast.error('Please enter a label for the barcode.')
       return
     }
-    generateBarcode({
-      residentId: user?.id || 'unknown',
-      residentName: user?.name || 'User',
-      unit: user?.unit || 'N/A',
-      label: newBarcodeData.label,
-      type: newBarcodeData.type,
-      status: 'active'
-    })
-    setIsCreateOpen(false)
-    setNewBarcodeData({ label: '', type: 'property' })
-    toast.success('New emergency barcode generated!')
+    createMutation.mutate(newBarcodeData)
   }
 
-  const handleDownloadQR = (label: string) => {
-    toast.success(`${label} QR code downloaded!`)
+  const handleDownloadQR = async (label: string, qrUrl: string) => {
+    try {
+      const response = await fetch(qrUrl)
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `emergency-qr-${label.toLowerCase().replace(/\s+/g, '-')}.png`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      toast.success(`${label} QR code downloaded!`)
+    } catch (error) {
+      toast.error('Failed to download QR code')
+    }
   }
 
   const handleCopyLink = (id: string) => {
@@ -106,6 +160,8 @@ export default function QRAccessPage() {
     navigator.clipboard.writeText(link)
     toast.success('Emergency link copied to clipboard!')
   }
+
+  const isLoading = isLoadingBarcodes || isLoadingLogs
 
   return (
     <div className="space-y-6">
@@ -132,15 +188,15 @@ export default function QRAccessPage() {
           <Tabs defaultValue="active">
             <div className="flex items-center justify-between mb-2">
               <TabsList className="bg-gray-100 rounded-xl p-1">
-                <TabsTrigger value="active" className="rounded-lg font-bold text-xs uppercase px-4">Active ({residentBarcodes.filter(b => b.status === 'active').length})</TabsTrigger>
-                <TabsTrigger value="history" className="rounded-lg font-bold text-xs uppercase px-4">All History</TabsTrigger>
+                <TabsTrigger value="active" className="rounded-lg font-bold text-xs uppercase px-4">Active ({barcodes.filter(b => b.status === 'active').length})</TabsTrigger>
+                <TabsTrigger value="history" className="rounded-lg font-bold text-xs uppercase px-4">All History ({barcodes.length})</TabsTrigger>
               </TabsList>
             </div>
 
             <TabsContent value="active" className="mt-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <AnimatePresence mode="popLayout">
-                  {residentBarcodes.filter(b => b.status === 'active').map((barcode, index) => (
+                  {barcodes.filter(b => b.status === 'active').map((barcode, index) => (
                     <motion.div
                       key={barcode.id}
                       initial={{ opacity: 0, scale: 0.95 }}
@@ -181,7 +237,7 @@ export default function QRAccessPage() {
                               variant="outline"
                               size="sm"
                               className="rounded-xl font-bold text-[10px] uppercase gap-2 h-10 border-0 ring-1 ring-black/5 hover:bg-gray-50"
-                              onClick={() => handleDownloadQR(barcode.label)}
+                              onClick={() => handleDownloadQR(barcode.label, barcode.qrCodeUrl)}
                             >
                               <Download className="h-3.5 w-3.5" />
                               Download
@@ -192,7 +248,7 @@ export default function QRAccessPage() {
                             <div className="flex items-center gap-2">
                               <Switch
                                 checked={barcode.status === 'active'}
-                                onCheckedChange={(checked) => updateBarcodeStatus(barcode.id, checked ? 'active' : 'disabled')}
+                              onCheckedChange={(checked) => statusMutation.mutate({ id: barcode.id, status: checked ? 'active' : 'disabled' })}
                               />
                               <span className="text-[10px] font-black text-gray-400 uppercase">ENABLED</span>
                             </div>
@@ -210,7 +266,7 @@ export default function QRAccessPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8 text-red-500 hover:bg-red-50 rounded-lg"
-                                onClick={() => deleteBarcode(barcode.id)}
+                                onClick={() => deleteMutation.mutate(barcode.id)}
                                 title="Delete"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -224,7 +280,7 @@ export default function QRAccessPage() {
                 </AnimatePresence>
               </div>
 
-              {residentBarcodes.filter(b => b.status === 'active').length === 0 && (
+                  {barcodes.filter(b => b.status === 'active').length === 0 && (
                 <div className="py-24 text-center bg-white rounded-[40px] border-2 border-dashed border-gray-100">
                   <QrCode className="h-12 w-12 text-gray-200 mx-auto mb-4" />
                   <h3 className="text-xl font-bold text-gray-900">No active barcodes</h3>
@@ -245,7 +301,7 @@ export default function QRAccessPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {residentBarcodes.map((barcode) => (
+                    {barcodes.map((barcode) => (
                       <TableRow key={barcode.id} className="border-gray-50">
                         <TableCell className="px-6">
                           <p className="font-bold text-gray-900">{barcode.label}</p>
@@ -304,11 +360,11 @@ export default function QRAccessPage() {
                 <History className="h-5 w-5 text-gray-400" />
                 Recent Alerts
               </h3>
-              <Badge className="bg-gray-100 text-gray-600 border-0 rounded-full text-[10px] font-black px-2">{residentLogs.length}</Badge>
+              <Badge className="bg-gray-100 text-gray-600 border-0 rounded-full text-[10px] font-black px-2">{logs.length}</Badge>
             </div>
 
             <div className="space-y-4">
-              {residentLogs.slice(0, 5).map((log) => (
+              {logs.slice(0, 5).map((log: any) => (
                 <div key={log.id} className="p-4 rounded-2xl bg-gray-50 hover:bg-gray-100 transition-colors group">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
@@ -334,7 +390,7 @@ export default function QRAccessPage() {
                 </div>
               ))}
 
-              {residentLogs.length === 0 && (
+              {logs.length === 0 && (
                 <div className="text-center py-12">
                   <Bell className="h-8 w-8 text-gray-200 mx-auto mb-2" />
                   <p className="text-xs text-gray-400 font-medium italic">No alerts yet</p>
@@ -437,9 +493,7 @@ export default function QRAccessPage() {
             <Button variant="ghost" onClick={() => setIsRegenerateOpen(null)} className="rounded-2xl h-12 font-bold px-6">Keep Old</Button>
             <Button
               onClick={() => {
-                if (isRegenerateOpen) regenerateBarcode(isRegenerateOpen)
-                setIsRegenerateOpen(null)
-                toast.success('QR Code regenerated successfully!')
+                if (isRegenerateOpen) regenerateMutation.mutate(isRegenerateOpen)
               }}
               className="bg-orange-600 hover:bg-orange-700 text-white rounded-2xl h-12 px-8 font-black shadow-lg shadow-orange-100"
             >

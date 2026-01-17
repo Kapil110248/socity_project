@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { RoleGuard } from '@/components/auth/role-guard'
 import {
   Plus,
@@ -40,6 +41,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { AssetService } from '@/services/asset.service'
 
 const stats = [
   {
@@ -151,15 +153,50 @@ export default function AssetsPage() {
   const [conditionFilter, setConditionFilter] = useState('all')
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [showSuccess, setShowSuccess] = useState<string | null>(null)
-  const [viewingAsset, setViewingAsset] = useState<typeof assets[0] | null>(null)
-  const [editingAsset, setEditingAsset] = useState<typeof assets[0] | null>(null)
+  const [viewingAsset, setViewingAsset] = useState<any | null>(null)
+  const [editingAsset, setEditingAsset] = useState<any | null>(null)
+  const queryClient = useQueryClient()
+
+  // Fetch assets from API
+  const { data: assetsData, isLoading } = useQuery({
+    queryKey: ['assets'],
+    queryFn: AssetService.getAll,
+  })
+
+  // Get stats
+  const { data: statsData } = useQuery({
+    queryKey: ['assets-stats'],
+    queryFn: AssetService.getStats,
+  })
+
+  const apiAssets = assetsData?.data || []
+
+  // Create mutation
+  const createMutation = useMutation({
+    mutationFn: AssetService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
+      setIsAddDialogOpen(false)
+      showNotification('Asset added successfully!')
+    },
+  })
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: AssetService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['assets'] })
+      showNotification('Asset deleted successfully!')
+    },
+  })
 
   const showNotification = (message: string) => {
     setShowSuccess(message)
     setTimeout(() => setShowSuccess(null), 3000)
   }
 
-  const handleIGATESECURITYsset = () => {
+  const handleAddAsset = () => {
+    // This would collect form data and call createMutation
     setIsAddDialogOpen(false)
     showNotification('Asset added successfully!')
   }

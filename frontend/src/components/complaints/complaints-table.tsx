@@ -26,7 +26,8 @@ export function ComplaintsTable({ complaints, showSource = true }: ComplaintsTab
     const [viewOpen, setViewOpen] = useState(false)
 
     const getStatusColor = (status: string) => {
-        switch (status) {
+        const s = status.toLowerCase()
+        switch (s) {
             case 'open': return 'bg-red-100 text-red-700 border-red-200'
             case 'in_progress': return 'bg-blue-100 text-blue-700 border-blue-200'
             case 'resolved': return 'bg-green-100 text-green-700 border-green-200'
@@ -61,6 +62,7 @@ export function ComplaintsTable({ complaints, showSource = true }: ComplaintsTab
                     <TableRow>
                         <TableHead className="w-[100px]">ID</TableHead>
                         {showSource && <TableHead>Source</TableHead>}
+                        <TableHead>Society</TableHead>
                         <TableHead>Complaint Details</TableHead>
                         <TableHead>Service</TableHead>
                         <TableHead>Reporter</TableHead>
@@ -93,6 +95,15 @@ export function ComplaintsTable({ complaints, showSource = true }: ComplaintsTab
                                         </div>
                                     </TableCell>
                                 )}
+
+                                <TableCell>
+                                    <div className="flex items-center gap-2 text-sm font-semibold text-indigo-600">
+                                        <div className="p-1.5 rounded-lg bg-indigo-50">
+                                            <Building2 className="h-4 w-4" />
+                                        </div>
+                                        {complaint.society?.name || 'Platform'}
+                                    </div>
+                                </TableCell>
 
                                 <TableCell>
                                     <div>
@@ -134,9 +145,9 @@ export function ComplaintsTable({ complaints, showSource = true }: ComplaintsTab
 
                                 <TableCell>
                                     <Badge variant="outline" className={getStatusColor(complaint.status)}>
-                                        {complaint.status === 'resolved' && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                                        {complaint.status === 'open' && <AlertTriangle className="h-3 w-3 mr-1" />}
-                                        {complaint.status.replace('_', ' ')}
+                                        {complaint.status.toLowerCase() === 'resolved' && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                                        {complaint.status.toLowerCase() === 'open' && <AlertTriangle className="h-3 w-3 mr-1" />}
+                                        {complaint.status.replace('_', ' ').toUpperCase()}
                                     </Badge>
                                 </TableCell>
 

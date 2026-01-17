@@ -5,6 +5,8 @@ import { ThemeProvider } from "@/components/providers/theme-provider";
 import { Toaster } from "react-hot-toast";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { AuthInitializer } from "@/components/auth-initializer";
+import EmergencyNotificationListener from "@/components/emergency/EmergencyNotificationListener";
+import ComplaintNotificationListener from "@/components/complaints/ComplaintNotificationListener";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -32,6 +34,8 @@ export default function RootLayout({
         >
           <QueryProvider>
             <AuthInitializer />
+            <EmergencyNotificationListener />
+            <ComplaintNotificationListener />
             {children}
             <Toaster position="top-right" />
           </QueryProvider>

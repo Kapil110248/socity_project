@@ -11,11 +11,53 @@ class ServiceInquiryController {
 
       const inquiries = await prisma.serviceInquiry.findMany({
         where,
+        include: {
+          society: {
+            select: { name: true }
+          }
+        },
         orderBy: { createdAt: 'desc' }
       });
       res.json(inquiries);
     } catch (error) {
       console.error('List Inquiries Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async createInquiry(req, res) {
+    try {
+      const { 
+        residentName, 
+        unit, 
+        phone, 
+        serviceName, 
+        serviceId, 
+        type, 
+        preferredDate, 
+        preferredTime, 
+        notes 
+      } = req.body;
+
+      const inquiry = await prisma.serviceInquiry.create({
+        data: {
+          residentName,
+          unit,
+          phone,
+          serviceName,
+          serviceId,
+          type: type || 'service',
+          preferredDate,
+          preferredTime,
+          notes,
+          societyId: req.user.societyId,
+          residentId: req.user.id
+        }
+      });
+
+      res.status(201).json(inquiry);
+    } catch (error) {
+      console.error('Create Inquiry Error:', error);
       res.status(500).json({ error: error.message });
     }
   }

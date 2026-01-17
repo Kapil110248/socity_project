@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { RoleGuard } from '@/components/auth/role-guard'
 import {
     Calendar,
@@ -39,56 +40,68 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-
-// Mock data for meetings
-const meetings = [
-    {
-        id: 'MTG-001',
-        title: 'Monthly Committee Meeting',
-        date: '2025-01-15',
-        time: '18:30',
-        location: 'Clubhouse Main Hall',
-        type: 'physical',
-        status: 'scheduled',
-        agenda: '1. Finance review for Dec\n2. Security patrol updates\n3. Garden renovation progress',
-        attendees: ['Secretary', 'Treasurer', 'Community Manager', 'Block A Rep'],
-        organizer: 'Secretary',
-    },
-    {
-        id: 'MTG-002',
-        title: 'Emergency Security Review',
-        date: '2025-01-10',
-        time: '10:00',
-        location: 'Zoom Meeting',
-        type: 'online',
-        status: 'completed',
-        agenda: 'Emergency meeting to discuss recent gate incidents and patrol logs.',
-        attendees: ['Security Head', 'Community Manager', 'Secretary'],
-        organizer: 'Community Manager',
-    },
-    {
-        id: 'MTG-003',
-        title: 'Vendor Procurement Review',
-        date: '2025-01-20',
-        time: '14:00',
-        location: 'Conference Room 1',
-        type: 'physical',
-        status: 'scheduled',
-        agenda: 'Selecting maintenance vendors for the next quarter.',
-        attendees: ['Treasurer', 'Admin Team'],
-        organizer: 'Treasurer',
-    },
-]
+import { MeetingService } from '@/services/meeting.service'
 
 export default function MeetingsPage() {
     const [searchQuery, setSearchQuery] = useState('')
     const [isModalOpen, setIsModalOpen] = useState(false)
+    const [formData, setFormData] = useState({
+        title: '',
+        date: '',
+        time: '',
+        location: '',
+        type: 'physical',
+        description: '',
+    })
+    const queryClient = useQueryClient()
 
-    const filteredMeetings = meetings.filter(
-        (m) =>
-            m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            m.agenda.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    // Fetch meetings from API
+    const { data: meetingsData, isLoading } = useQuery({
+        queryKey: ['meetings'],
+        queryFn: MeetingService.getAll,
+    })
+
+    const meetings = meetingsData?.data || []
+
+    // Create meeting mutation
+    const createMutation = useMutation({
+        mutationFn: MeetingService.create,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['meetings'] })
+            setIsModalOpen(false)
+            setFormData({ title: '', date: '', time: '', location: '', type: 'physical', description: '' })
+        },
+    })
+
+    const handleCreate = () => {
+        createMutation.mutate({
+            title: formData.title,
+            date: formData.date,
+            time: formData.time,
+            location: formData.location,
+            description: formData.description,
+        })
+    }
+
+    interface Meeting {
+  id: number;
+  title: string;
+  description?: string;
+  agenda?: string;
+  status: string;
+  date: string;
+  time: string;
+  location: string;
+  type: string;
+  attendees: string[];
+}
+
+// Replace implicit any with explicit Meeting type
+const filteredMeetings = meetings.filter((m: Meeting) =>
+  m.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  m.description?.toLowerCase().includes(searchQuery.toLowerCase())
+);
+
 
     return (
         <RoleGuard allowedRoles={['admin']}>
@@ -170,7 +183,7 @@ export default function MeetingsPage() {
 
                 {/* Meeting Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {filteredMeetings.map((meeting) => (
+                    {filteredMeetings.map((meeting: Meeting) => (
                         <motion.div key={meeting.id} layout>
                             <Card className="h-full hover:shadow-md transition-shadow">
                                 <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
@@ -220,12 +233,12 @@ export default function MeetingsPage() {
                                     <div className="flex items-center justify-between pt-4 border-t">
                                         <div className="flex items-center gap-2">
                                             <div className="flex -space-x-2">
-                                                {meeting.attendees.map((_, i) => (
+                                                {meeting.attendees.map((attendee: string, i: number) => (
                                                     <div
                                                         key={i}
                                                         className="h-7 w-7 rounded-full border-2 border-white bg-teal-100 flex items-center justify-center text-[10px] font-bold text-teal-700"
                                                     >
-                                                        {meeting.attendees[i].charAt(0)}
+                                                        {attendee.charAt(0)}
                                                     </div>
                                                 ))}
                                             </div>
@@ -240,6 +253,7 @@ export default function MeetingsPage() {
                             </Card>
                         </motion.div>
                     ))}
+
                 </div>
             </div>
         </RoleGuard>

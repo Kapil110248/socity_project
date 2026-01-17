@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   MessageSquare,
   Send,
@@ -10,136 +10,133 @@ import {
   Video,
   MoreVertical,
   Paperclip,
-  Image,
+  Image as ImageIcon,
   Smile,
   CheckCheck,
-  Clock,
-  User,
   Building,
   ChevronLeft,
+  Wrench,
+  ShieldCheck,
+  Users,
+  CreditCard,
 } from 'lucide-react'
-import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { useAuthStore } from '@/lib/stores/auth-store'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { chatService } from '@/services/chat.service'
+import { getSocket } from '@/lib/socket'
+import { format } from 'date-fns'
 
-const conversations = [
-  {
-    id: 1,
-    name: 'Admin Support',
-    lastMessage: 'Your complaint has been resolved',
-    time: '10:30 AM',
-    unread: 0,
-    avatar: 'AS',
-    online: true,
-    type: 'admin',
-  },
-  {
-    id: 2,
-    name: 'Maintenance Team',
-    lastMessage: 'Plumber will visit tomorrow at 10 AM',
-    time: '9:45 AM',
-    unread: 2,
-    avatar: 'MT',
-    online: true,
-    type: 'team',
-  },
-  {
-    id: 3,
-    name: 'Security Desk',
-    lastMessage: 'Guest has been verified',
-    time: 'Yesterday',
-    unread: 0,
-    avatar: 'SD',
-    online: false,
-    type: 'security',
-  },
-  {
-    id: 4,
-    name: 'Committee President',
-    lastMessage: 'Meeting scheduled for Sunday',
-    time: 'Yesterday',
-    unread: 1,
-    avatar: 'CP',
-    online: false,
-    type: 'committee',
-  },
-  {
-    id: 5,
-    name: 'Accounts Department',
-    lastMessage: 'Please check your updated bill',
-    time: '2 days ago',
-    unread: 0,
-    avatar: 'AD',
-    online: true,
-    type: 'accounts',
-  },
-]
-
-const messages = [
-  {
-    id: 1,
-    sender: 'me',
-    message: 'Hi, I have a water leakage issue in my bathroom',
-    time: '10:00 AM',
-    status: 'read',
-  },
-  {
-    id: 2,
-    sender: 'admin',
-    message: 'Hello! Sorry to hear that. Can you please share some photos of the leakage?',
-    time: '10:02 AM',
-  },
-  {
-    id: 3,
-    sender: 'me',
-    message: 'Sure, here are the photos',
-    time: '10:05 AM',
-    status: 'read',
-    hasAttachment: true,
-    attachmentType: 'image',
-  },
-  {
-    id: 4,
-    sender: 'admin',
-    message: 'Thank you for sharing. I can see the issue. Our plumber will visit your unit tomorrow between 10 AM - 12 PM. Will that work for you?',
-    time: '10:10 AM',
-  },
-  {
-    id: 5,
-    sender: 'me',
-    message: 'Yes, that works. Thank you!',
-    time: '10:12 AM',
-    status: 'read',
-  },
-  {
-    id: 6,
-    sender: 'admin',
-    message: 'Great! I have raised ticket TKT-001 for this. You can track the status from your dashboard. Is there anything else I can help you with?',
-    time: '10:15 AM',
-  },
-  {
-    id: 7,
-    sender: 'me',
-    message: 'No, that\'s all. Thanks for the quick response!',
-    time: '10:16 AM',
-    status: 'delivered',
-  },
+const SUPPORT_CHANNELS = [
+  { type: 'SUPPORT_ADMIN', name: 'Admin Support', avatar: 'AS', icon: Building },
+  { type: 'SUPPORT_MAINTENANCE', name: 'Maintenance Team', avatar: 'MT', icon: Wrench },
+  { type: 'SUPPORT_SECURITY', name: 'Security Desk', avatar: 'SD', icon: ShieldCheck },
+  { type: 'SUPPORT_COMMITTEE', name: 'Committee President', avatar: 'CP', icon: Users },
+  { type: 'SUPPORT_ACCOUNTS', name: 'Accounts Department', avatar: 'AD', icon: CreditCard },
 ]
 
 export default function HelpdeskChatPage() {
-  const [selectedChat, setSelectedChat] = useState(conversations[0])
+  const { user } = useAuthStore()
+  const queryClient = useQueryClient()
+  const [selectedChatId, setSelectedChatId] = useState<number | null>(null)
   const [newMessage, setNewMessage] = useState('')
   const [showMobileChat, setShowMobileChat] = useState(false)
+  const scrollEndRef = useRef<HTMLDivElement>(null)
+
+  // Fetch Conversations
+  const { data: conversations = [] } = useQuery({
+    queryKey: ['conversations'],
+    queryFn: chatService.listConversations
+  })
+
+  // Selected Conversation Data
+  const selectedChat = conversations.find(c => c.id === selectedChatId)
+
+  // Fetch Messages
+  const { data: messages = [] } = useQuery({
+    queryKey: ['messages', selectedChatId],
+    queryFn: () => selectedChatId ? chatService.getMessages(selectedChatId) : Promise.resolve([]),
+    enabled: !!selectedChatId
+  })
+
+  // Mutations
+  const sendMutation = useMutation({
+    mutationFn: chatService.sendMessage,
+    onSuccess: () => {
+      setNewMessage('')
+      queryClient.invalidateQueries({ queryKey: ['messages', selectedChatId] })
+    },
+    onError: (error: any) => {
+      toast.error('Failed to send message: ' + (error.response?.data?.error || error.message))
+    }
+  })
+
+  const startMutation = useMutation({
+    mutationFn: chatService.startConversation,
+    onSuccess: (newConv) => {
+      queryClient.invalidateQueries({ queryKey: ['conversations'] })
+      setSelectedChatId(newConv.id)
+      toast.success('Conversation started')
+    },
+    onError: (error: any) => {
+      toast.error('Failed to start chat: ' + (error.response?.data?.error || error.message))
+    }
+  })
+
+  // Socket.io ... (unchanged)
+
+  // ...
+
+  const handleChannelClick = (type: string, existingId?: number) => {
+    if (existingId && existingId !== -1) {
+      setSelectedChatId(existingId)
+      setShowMobileChat(true)
+    } else {
+      startMutation.mutate(type)
+      setShowMobileChat(true)
+    }
+  }
+
+  // Combined List for UI
+  const displayConversations = useMemo(() => {
+    const userRole = user?.role?.toUpperCase();
+    if (userRole === 'RESIDENT') {
+      return SUPPORT_CHANNELS.map(channel => {
+        const existing = conversations.find(c => c.type === channel.type)
+        const lastMsg = existing?.messages?.[0]
+        return {
+          ...channel,
+          id: existing?.id || -1,
+          lastMessage: lastMsg?.content || 'Start a conversation',
+          time: existing?.updatedAt ? format(new Date(existing.updatedAt), 'hh:mm a') : '',
+          unread: 0,
+          online: true,
+          existingId: existing?.id
+        }
+      })
+    }
+    return conversations.map(c => ({
+      id: c.id,
+      name: c.participant?.name || c.type.split('_')[1],
+      lastMessage: c.messages?.[0]?.content || 'Empty chat',
+      time: format(new Date(c.updatedAt), 'hh:mm a'),
+      unread: 0,
+      avatar: c.participant?.name?.substring(0, 2) || 'U',
+      online: true,
+      type: c.type,
+      existingId: c.id // Explicitly adding existingId for Admins
+    }))
+  }, [conversations, user])
 
   return (
     <div className="h-[calc(100vh-100px)] bg-gray-50">
       <div className="h-full flex">
         {/* Conversations List */}
         <div className={`w-full md:w-80 bg-white border-r flex flex-col ${showMobileChat ? 'hidden md:flex' : 'flex'}`}>
-          {/* Header */}
           <div className="p-4 border-b">
             <h2 className="text-xl font-bold flex items-center gap-2">
               <MessageSquare className="h-6 w-6 text-blue-600" />
@@ -147,26 +144,24 @@ export default function HelpdeskChatPage() {
             </h2>
             <div className="mt-3 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input placeholder="Search conversations..." className="pl-10" />
+              <Input placeholder="Search conversations..." className="pl-10 h-10 rounded-xl" />
             </div>
           </div>
 
-          {/* Conversations */}
           <ScrollArea className="flex-1">
-            {conversations.map((conv) => (
+            {displayConversations.map((conv) => (
               <motion.div
-                key={conv.id}
+                key={conv.type || conv.id}
                 whileHover={{ backgroundColor: '#f3f4f6' }}
-                onClick={() => {
-                  setSelectedChat(conv)
-                  setShowMobileChat(true)
-                }}
-                className={`p-4 border-b cursor-pointer ${selectedChat.id === conv.id ? 'bg-blue-50' : ''}`}
+                onClick={() => handleChannelClick(conv.type, (conv as any).existingId)}
+                className={`p-4 border-b cursor-pointer transition-colors ${selectedChatId === conv.id ? 'bg-blue-50' : ''}`}
               >
                 <div className="flex items-start gap-3">
                   <div className="relative">
-                    <Avatar>
-                      <AvatarFallback className="bg-blue-100 text-blue-600">{conv.avatar}</AvatarFallback>
+                    <Avatar className="h-10 w-10 border-2 border-white shadow-sm">
+                      <AvatarFallback className="bg-blue-100 text-blue-600 font-bold">
+                        {conv.avatar}
+                      </AvatarFallback>
                     </Avatar>
                     {conv.online && (
                       <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
@@ -174,15 +169,10 @@ export default function HelpdeskChatPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <p className="font-medium truncate">{conv.name}</p>
-                      <span className="text-xs text-gray-500">{conv.time}</span>
+                      <p className="font-semibold text-sm truncate">{conv.name}</p>
+                      <span className="text-[10px] text-gray-500 font-medium">{conv.time}</span>
                     </div>
-                    <div className="flex items-center justify-between mt-1">
-                      <p className="text-sm text-gray-600 truncate">{conv.lastMessage}</p>
-                      {conv.unread > 0 && (
-                        <Badge className="bg-blue-600 text-white text-xs">{conv.unread}</Badge>
-                      )}
-                    </div>
+                    <p className="text-xs text-gray-600 truncate mt-0.5">{conv.lastMessage}</p>
                   </div>
                 </div>
               </motion.div>
@@ -192,107 +182,114 @@ export default function HelpdeskChatPage() {
 
         {/* Chat Area */}
         <div className={`flex-1 flex flex-col bg-white ${!showMobileChat ? 'hidden md:flex' : 'flex'}`}>
-          {/* Chat Header */}
-          <div className="p-4 border-b flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="md:hidden"
-                onClick={() => setShowMobileChat(false)}
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </Button>
-              <Avatar>
-                <AvatarFallback className="bg-blue-100 text-blue-600">{selectedChat.avatar}</AvatarFallback>
-              </Avatar>
-              <div>
-                <p className="font-medium">{selectedChat.name}</p>
-                <p className="text-xs text-green-600">{selectedChat.online ? 'Online' : 'Offline'}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm">
-                <Phone className="h-5 w-5" />
-              </Button>
-              <Button variant="ghost" size="sm">
-                <Video className="h-5 w-5" />
-              </Button>
-              <Button variant="ghost" size="sm">
-                <MoreVertical className="h-5 w-5" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Messages */}
-          <ScrollArea className="flex-1 p-4">
-            <div className="space-y-4">
-              {messages.map((msg) => (
-                <motion.div
-                  key={msg.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[70%] rounded-2xl p-3 ${
-                      msg.sender === 'me'
-                        ? 'bg-blue-600 text-white rounded-br-md'
-                        : 'bg-gray-100 text-gray-900 rounded-bl-md'
-                    }`}
+          {selectedChat ? (
+            <>
+              {/* Chat Header */}
+              <div className="p-4 border-b flex items-center justify-between bg-white/80 backdrop-blur-md sticky top-0 z-10">
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="md:hidden p-0 h-8 w-8"
+                    onClick={() => setShowMobileChat(false)}
                   >
-                    <p>{msg.message}</p>
-                    {msg.hasAttachment && (
-                      <div className="mt-2 bg-white/20 rounded-lg p-2 flex items-center gap-2">
-                        <Image className="h-4 w-4" />
-                        <span className="text-sm">2 images attached</span>
-                      </div>
-                    )}
-                    <div className={`flex items-center justify-end gap-1 mt-1 text-xs ${msg.sender === 'me' ? 'text-blue-100' : 'text-gray-500'}`}>
-                      <span>{msg.time}</span>
-                      {msg.sender === 'me' && (
-                        msg.status === 'read' ? (
-                          <CheckCheck className="h-3 w-3 text-blue-200" />
-                        ) : (
-                          <CheckCheck className="h-3 w-3" />
-                        )
-                      )}
+                    <ChevronLeft className="h-5 w-5" />
+                  </Button>
+                  <Avatar className="h-10 w-10">
+                    <AvatarFallback className="bg-blue-100 text-blue-600 font-bold">
+                      {selectedChat.participant?.name?.substring(0, 2) || selectedChat.type.split('_')[1].substring(0, 2)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-bold text-sm">{selectedChat.participant?.name || selectedChat.type.split('_')[1].replace('SUPPORT_', '')}</p>
+                    <div className="flex items-center gap-1">
+                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                      <p className="text-[10px] text-green-600 font-bold uppercase tracking-wider">Online</p>
                     </div>
                   </div>
-                </motion.div>
-              ))}
-            </div>
-          </ScrollArea>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500"><Phone className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500"><Video className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-500"><MoreVertical className="h-4 w-4" /></Button>
+                </div>
+              </div>
 
-          {/* Input Area */}
-          <div className="p-4 border-t">
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm">
-                <Paperclip className="h-5 w-5 text-gray-500" />
-              </Button>
-              <Button variant="ghost" size="sm">
-                <Image className="h-5 w-5 text-gray-500" />
-              </Button>
-              <Input
-                placeholder="Type a message..."
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                className="flex-1"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newMessage.trim()) {
-                    // Handle send
-                    setNewMessage('')
-                  }
-                }}
-              />
-              <Button variant="ghost" size="sm">
-                <Smile className="h-5 w-5 text-gray-500" />
-              </Button>
-              <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-                <Send className="h-4 w-4" />
-              </Button>
+              {/* Messages */}
+              <ScrollArea className="flex-1 p-4 bg-gray-50/50">
+                <div className="space-y-6">
+                  {messages.map((msg: any) => {
+                    const isMe = msg.senderId === parseInt(user?.id || '0')
+                    return (
+                      <motion.div
+                        key={msg.id}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[80%]`}>
+                          <div
+                            className={`rounded-2xl px-4 py-2.5 shadow-sm text-sm ${
+                              isMe
+                                ? 'bg-blue-600 text-white rounded-br-none'
+                                : 'bg-white text-gray-900 border border-gray-100 rounded-bl-none'
+                            }`}
+                          >
+                            <p className="leading-relaxed">{msg.content}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1 px-1">
+                            <span className="text-[10px] text-gray-400 font-medium">
+                              {format(new Date(msg.createdAt), 'hh:mm a')}
+                            </span>
+                            {isMe && <CheckCheck className="h-3 w-3 text-blue-500" />}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )
+                  })}
+                  <div ref={scrollEndRef} />
+                </div>
+              </ScrollArea>
+
+              {/* Input Area */}
+              <div className="p-4 bg-white border-t">
+                <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+                  <Button type="button" variant="ghost" size="icon" className="h-10 w-10 text-gray-400">
+                    <Paperclip className="h-5 w-5" />
+                  </Button>
+                  <div className="flex-1 relative">
+                    <Input
+                      placeholder="Type a message..."
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      className="h-11 pl-4 pr-10 rounded-2xl bg-gray-50 border-transparent focus:bg-white focus:border-blue-200 transition-all font-medium"
+                    />
+                    <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-gray-400 hover:text-blue-500">
+                      <Smile className="h-5 w-5" />
+                    </Button>
+                  </div>
+                  <Button 
+                    type="submit" 
+                    size="icon" 
+                    className="h-11 w-11 rounded-2xl bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200"
+                    disabled={!newMessage.trim() || sendMutation.isPending}
+                  >
+                    <Send className={`h-5 w-5 ${sendMutation.isPending ? 'animate-pulse' : ''}`} />
+                  </Button>
+                </form>
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-gray-50/30">
+              <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-4">
+                <MessageSquare className="h-10 w-10 text-blue-500 opacity-50" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">Your Conversations</h3>
+              <p className="text-sm text-gray-500 max-w-xs mt-2 font-medium">
+                Select a support channel from the list to start a real-time chat with our team.
+              </p>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

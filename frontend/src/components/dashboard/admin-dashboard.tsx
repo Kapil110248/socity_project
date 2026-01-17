@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
+import { DashboardService, AdminStats } from '@/services/dashboard.service'
 import {
   Users,
   TrendingUp,
@@ -38,6 +40,7 @@ import {
   UserX,
   Shield,
   ClipboardCheck,
+  Loader2,
 } from 'lucide-react'
 import {
   AreaChart,
@@ -61,31 +64,12 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuthStore } from '@/lib/stores/auth-store'
 
-// Income tracker data - matches IGATESECURITY design
-const incomeData = [
-  { name: 'Collected', value: 145867, color: '#3b82f6' },
-  { name: 'Balance', value: 45867, color: '#ef4444' },
-]
-
-// Monthly revenue data
-const monthlyData = [
-  { month: 'Oct', amount: 123234 },
-  { month: 'Nov', amount: 158982 },
-  { month: 'Dec', amount: 154651 },
-]
-
 // Helpdesk tickets data - matches IGATESECURITY bar chart
 const helpdeskData = [
   { month: 'Oct', open: 45, resolved: 38 },
   { month: 'Nov', open: 52, resolved: 48 },
   { month: 'Dec', open: 35, resolved: 42 },
   { month: 'Jan', open: 28, resolved: 22 },
-]
-
-// Expense data
-const expenseData = [
-  { month: 'Budget', amount: 250000 },
-  { month: 'Expense', amount: 185000 },
 ]
 
 const containerVariants = {
@@ -116,158 +100,167 @@ const amenities = [
   { name: 'Clubhouse', status: true },
 ]
 
-const recentActivities = [
-  {
-    id: 1,
-    type: 'payment',
-    user: 'Rajesh Kumar',
-    unit: 'A-205',
-    action: 'Paid maintenance of Rs. 15,000',
-    time: '5 min ago',
-    status: 'success',
-    avatar: 'RK',
-  },
-  {
-    id: 2,
-    type: 'visitor',
-    user: 'Security',
-    unit: 'B-102',
-    action: 'Visitor checked in - Delivery (Amazon)',
-    time: '12 min ago',
-    status: 'info',
-    avatar: 'SC',
-  },
-  {
-    id: 3,
-    type: 'complaint',
-    user: 'Priya Sharma',
-    unit: 'C-304',
-    action: 'Reported water leakage - High Priority',
-    time: '1 hour ago',
-    status: 'warning',
-    avatar: 'PS',
-  },
-  {
-    id: 4,
-    type: 'booking',
-    user: 'Amit Patel',
-    unit: 'D-501',
-    action: 'Booked Clubhouse for Birthday Party',
-    time: '2 hours ago',
-    status: 'success',
-    avatar: 'AP',
-  },
-]
-
-// Community Overview Data
-const communityOverview = {
-  totalUnits: 450,
-  occupiedUnits: 412,
-  vacantUnits: 38,
-  totalUsers: 1003,
-  activeUsers: 856,
-  inactiveUsers: 115,
-  pendingApprovalUsers: 32,
-  owners: 412,
-  tenants: 444,
-  neverLoggedIn: 147,
-}
-
-// Quick Stats Data
-const quickStats = [
-  {
-    title: 'Pending Approvals',
-    value: communityOverview.pendingApprovalUsers,
-    icon: ClipboardCheck,
-    bgColor: 'bg-orange-500',
-    trend: '+5 today',
-    trendUp: true,
-  },
-  {
-    title: 'Open Complaints',
-    value: 28,
-    icon: AlertCircle,
-    bgColor: 'bg-red-500',
-    trend: '-3 from yesterday',
-    trendUp: false,
-  },
-  {
-    title: 'Defaulters',
-    value: 8,
-    icon: TrendingDown,
-    bgColor: 'bg-pink-600',
-    trend: '-2 this week',
-    trendUp: false,
-  },
-  {
-    title: "Today's Visitors",
-    value: 42,
-    icon: Shield,
-    bgColor: 'bg-blue-600',
-    trend: '+12 from yesterday',
-    trendUp: true,
-  },
-]
-
-// Financial Overview Data
-const financialOverview = {
-  totalMaintenance: 1245000, // Monthly maintenance
-  maintenanceCollected: 1085000,
-  maintenancePending: 160000,
-  totalOutstanding: 195000,
-  parkingIncome: 120000,
-  amenityIncome: 85000,
-  totalAssetValue: 10600000,
-  monthlyAssetExpense: 280000,
-  pendingVendorPayments: 45000,
-  paidVendorPayments: 320000,
-}
-
 export function AdminDashboard() {
   const router = useRouter()
   const { user } = useAuthStore()
   const [showSuccess, setShowSuccess] = useState<string | null>(null)
-  const totalIncome = incomeData.reduce((sum, item) => sum + item.value, 0)
+
+  // Fetch dashboard stats from backend API
+  const { data: stats, isLoading, error } = useQuery<AdminStats>({
+    queryKey: ['admin-dashboard-stats'],
+    queryFn: DashboardService.getAdminStats,
+    refetchInterval: 60000, // Refresh every minute
+  })
 
   const showNotification = (message: string) => {
     setShowSuccess(message)
     setTimeout(() => setShowSuccess(null), 3000)
   }
 
-  // Stats matching IGATESECURITY Community Manager design (page 12, 21, 22)
-  const stats = [
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+        <span className="ml-2 text-gray-600">Loading dashboard...</span>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <AlertCircle className="h-8 w-8 text-red-500" />
+        <span className="ml-2 text-red-600">Failed to load dashboard data. Please refresh.</span>
+      </div>
+    )
+  }
+
+  // Use API data with fallbacks
+  const communityOverview = {
+    totalUnits: stats?.units.total || 0,
+    occupiedUnits: stats?.units.occupied || 0,
+    vacantUnits: stats?.units.vacant || 0,
+    totalUsers: stats?.users.total || 0,
+    activeUsers: stats?.users.active || 0,
+    inactiveUsers: stats?.users.inactive || 0,
+    pendingApprovalUsers: stats?.users.pending || 0,
+    owners: stats?.users.owners || 0,
+    tenants: stats?.users.tenants || 0,
+    neverLoggedIn: stats?.users.neverLoggedIn || 0,
+  }
+
+  const financialOverview = {
+    totalRevenue: stats?.finance.totalRevenue || 0,
+    pendingDues: stats?.finance.pendingDues || 0,
+    collectedThisMonth: stats?.finance.collectedThisMonth || 0,
+    totalExpenses: stats?.finance.totalExpenses || 0,
+    defaultersCount: stats?.finance.defaultersCount || 0,
+    // Additional properties for UI compatibility (using API or calculated values)
+    totalMaintenance: stats?.finance.totalRevenue || 0, // Total expected maintenance
+    maintenanceCollected: stats?.finance.collectedThisMonth || 0,
+    maintenancePending: stats?.finance.pendingDues || 0,
+    totalOutstanding: stats?.finance.pendingDues || 0,
+    parkingIncome: 0, // TODO: Add to backend API if needed
+    amenityIncome: 0, // TODO: Add to backend API if needed
+    totalAssetValue: stats?.finance.totalRevenue || 0,
+    monthlyAssetExpense: stats?.finance.totalExpenses || 0,
+    pendingVendorPayments: 0, // TODO: Add to backend API if needed
+  }
+
+  // Income data for pie chart
+  const incomeData = [
+    { name: 'Collected', value: financialOverview.collectedThisMonth, color: '#3b82f6' },
+    { name: 'Pending', value: financialOverview.pendingDues, color: '#ef4444' },
+  ]
+
+  // Monthly income from API
+  const monthlyData = stats?.finance.monthlyIncome || []
+
+  // Expense tracker data - matching UI layout
+  const expenseData = [
+    { month: 'Budget', amount: (stats?.finance.totalRevenue || 0) * 1.1 },
+    { month: 'Expense', amount: stats?.finance.totalExpenses || 0 },
+  ]
+
+  // Quick Stats from API
+  const quickStats = [
+    {
+      title: 'Pending Approvals',
+      value: communityOverview.pendingApprovalUsers,
+      icon: ClipboardCheck,
+      bgColor: 'bg-orange-500',
+      trend: 'pending users',
+      trendUp: true,
+    },
+    {
+      title: 'Open Complaints',
+      value: stats?.activity.openComplaints || 0,
+      icon: AlertCircle,
+      bgColor: 'bg-red-500',
+      trend: 'active issues',
+      trendUp: false,
+    },
+    {
+      title: 'Defaulters',
+      value: financialOverview.defaultersCount,
+      icon: TrendingDown,
+      bgColor: 'bg-pink-600',
+      trend: 'overdue payments',
+      trendUp: false,
+    },
+    {
+      title: "Today's Visitors",
+      value: stats?.activity.todayVisitors || 0,
+      icon: Shield,
+      bgColor: 'bg-blue-600',
+      trend: 'checked in today',
+      trendUp: true,
+    },
+  ]
+
+  // Top stats cards from API
+  const topStats = [
     {
       title: 'Total Users',
-      value: '1003',
+      value: String(communityOverview.totalUsers),
       icon: Users,
       bgColor: 'bg-blue-500',
       textColor: 'text-white',
     },
     {
       title: 'Awaiting Approvals',
-      value: '32',
+      value: String(communityOverview.pendingApprovalUsers).padStart(2, '0'),
       icon: UserCheck,
       bgColor: 'bg-orange-400',
       textColor: 'text-white',
     },
     {
       title: 'Open Meetings',
-      value: '03',
+      value: String(stats?.activity.upcomingMeetings || 0).padStart(2, '0'),
       icon: Calendar,
       bgColor: 'bg-emerald-500',
       textColor: 'text-white',
     },
     {
       title: 'Number of Defaulters',
-      value: '02',
+      value: String(financialOverview.defaultersCount).padStart(2, '0'),
       icon: TrendingDown,
       bgColor: 'bg-pink-500',
       textColor: 'text-white',
     },
   ]
 
+  // Recent activities from API
+  const recentActivities = stats?.recentActivities || []
+
+  // Defaulters list from API
+  const defaultersList = stats?.defaulters || []
+
   return (
     <motion.div
+
       variants={containerVariants}
       initial="hidden"
       animate="visible"
@@ -314,7 +307,7 @@ export function AdminDashboard() {
 
       {/* Stats Grid - IGATESECURITY Style Colored Cards */}
       <motion.div variants={containerVariants} className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {stats.map((stat, index) => {
+        {topStats.map((stat, index) => {
           const Icon = stat.icon
           return (
             <motion.div key={index} variants={itemVariants}>
@@ -694,11 +687,15 @@ export function AdminDashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-emerald-50 rounded-xl p-4 text-center">
                   <p className="text-sm text-gray-600 mb-1">Open</p>
-                  <p className="text-3xl font-bold text-emerald-600">03</p>
+                  <p className="text-3xl font-bold text-emerald-600">
+                    {String(stats?.activity.openPurchaseRequests || 0).padStart(2, '0')}
+                  </p>
                 </div>
                 <div className="bg-orange-50 rounded-xl p-4 text-center">
                   <p className="text-sm text-gray-600 mb-1">Un-Finalized</p>
-                  <p className="text-3xl font-bold text-orange-500">00</p>
+                  <p className="text-3xl font-bold text-orange-500">
+                    {String(stats?.activity.unfinalizedPurchaseRequests || 0).padStart(2, '0')}
+                  </p>
                 </div>
               </div>
               <Button
@@ -720,11 +717,11 @@ export function AdminDashboard() {
                 <div className="flex items-center gap-4 text-sm">
                   <div className="flex items-center gap-1">
                     <span className="text-blue-600 font-semibold">Open Tickets</span>
-                    <span className="text-blue-600 font-bold">109</span>
+                    <span className="text-blue-600 font-bold">{stats?.activity.openComplaints || 0}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="text-red-500 font-semibold">Escalated Tickets</span>
-                    <span className="text-red-500 font-bold">12</span>
+                    <span className="text-red-500 font-bold">0</span>
                   </div>
                 </div>
               </div>
@@ -787,15 +784,19 @@ export function AdminDashboard() {
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <p className="text-xs text-gray-500">1 Nov 2022</p>
+                    <p className="text-xs text-gray-500">
+                      {stats?.finance.incomePeriod ? new Date(stats.finance.incomePeriod.start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '1 Nov'}
+                    </p>
                     <p className="text-[10px] text-gray-400">to</p>
-                    <p className="text-xs text-gray-500">1 Dec 2022</p>
+                    <p className="text-xs text-gray-500">
+                      {stats?.finance.incomePeriod ? new Date(stats.finance.incomePeriod.end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '1 Dec'}
+                    </p>
                   </div>
                 </div>
                 <div className="flex-1 space-y-3">
                   <div className="text-center sm:text-left">
-                    <p className="text-sm text-gray-500">Balance Amount</p>
-                    <p className="text-3xl font-bold text-emerald-600">Rs. 1,45,867</p>
+                    <p className="text-sm text-gray-500">Collected Amount</p>
+                    <p className="text-3xl font-bold text-emerald-600">Rs. {financialOverview.collectedThisMonth.toLocaleString()}</p>
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center">
                     {monthlyData.map((item, idx) => (
@@ -836,7 +837,7 @@ export function AdminDashboard() {
               <CardDescription>Variance Amount</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold text-gray-800 mb-4">Rs. 2,321,213</p>
+              <p className="text-3xl font-bold text-gray-800 mb-4">Rs. {(stats?.finance.totalExpenses || 0).toLocaleString()}</p>
               <ResponsiveContainer width="100%" height={150}>
                 <BarChart data={expenseData} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
@@ -906,9 +907,9 @@ export function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
-                {recentActivities.map((activity) => (
+                {recentActivities.map((activity, index) => (
                   <div
-                    key={activity.id}
+                    key={index}
                     className="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors"
                   >
                     <Avatar className="h-10 w-10">
@@ -917,16 +918,18 @@ export function AdminDashboard() {
                           activity.status === 'error' ? 'bg-red-100 text-red-700' :
                             'bg-blue-100 text-blue-700'
                         }`}>
-                        {activity.avatar}
+                        {activity.user?.charAt(0) || 'U'}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-gray-900">{activity.user}</p>
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-gray-100">{activity.unit}</Badge>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-gray-100">{'Unit'}</Badge>
                       </div>
                       <p className="text-sm text-gray-600 truncate">{activity.action}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{activity.time}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {new Date(activity.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
                     </div>
                   </div>
                 ))}

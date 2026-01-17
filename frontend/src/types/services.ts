@@ -77,10 +77,13 @@ export interface ServiceComplaint {
     reportedById?: string
     unit?: string // Optional, for residents
     contactPhone?: string
-    status: 'open' | 'in_progress' | 'resolved' | 'closed'
+    status: 'open' | 'in_progress' | 'resolved' | 'closed' | 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED'
     priority: 'low' | 'medium' | 'high' | 'urgent'
     createdAt: string
     updatedAt?: string // For tracking updates
     assignedTo?: string
     images?: string[]
+    society?: {
+        name: string
+    }
 }

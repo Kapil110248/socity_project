@@ -104,6 +104,16 @@ model Society {
   amenities   Amenity[]
   parkingSlots ParkingSlot[]
   platformInvoices PlatformInvoice[]
+  meetings    Meeting[]
+  assets      Asset[]
+  documents   Document[]
+  parcels     Parcel[]
+  events      Event[]
+  purchaseRequests PurchaseRequest[]
+  emergencyAlerts  EmergencyAlert[]
+  emergencyContacts EmergencyContact[]
+  serviceInquiries  ServiceInquiry[]
+  conversations     Conversation[]
 }
 
 model User {
@@ -133,6 +143,13 @@ model User {
   
   bookings    AmenityBooking[]
   comments    ComplaintComment[]
+  purchaseRequests PurchaseRequest[]
+  emergencyAlerts  EmergencyAlert[]
+  serviceInquiries ServiceInquiry[]
+  
+  // Chat Relations
+  conversations Conversation[] @relation("UserConversations")
+  sentMessages ChatMessage[] @relation("SentMessages")
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -194,6 +211,7 @@ model Unit {
   
   visitors    Visitor[]
   parkingSlots ParkingSlot[]
+  parcels     Parcel[]
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -225,6 +243,9 @@ model Complaint {
   category    String   // maintenance, electrical, plumbing, etc.
   priority    Priority @default(MEDIUM)
   status      ComplaintStatus @default(OPEN)
+  
+  isPrivate       Boolean  @default(false)
+  escalatedToTech Boolean  @default(false)
   
   images      Json?    // Array of image URLs
   
@@ -357,16 +378,26 @@ model ServiceInquiry {
   id           String   @id @default(uuid())
   residentName String
   unit         String
+  phone        String?
   serviceName  String
   serviceId    String
   status       String   @default("pending")
   vendorName   String?
   vendorId     String?
   source       String?  @default("society") // society, resident, individual
-  type         String?  @default("service") // service, individual
+  type         String?  @default("service") // service, callback
+  preferredDate String?
+  preferredTime String?
+  notes         String?  @db.Text
+  
+  societyId    Int?
+  society      Society? @relation(fields: [societyId], references: [id])
+  
+  residentId   Int?
+  resident     User?    @relation(fields: [residentId], references: [id])
+  
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  societyId    Int?
 }
 
 model EmergencyLog {
@@ -387,10 +418,44 @@ model EmergencyBarcode {
   residentName String
   unit         String
   phone        String
+  label        String?  // Description for the barcode
+  type         String?  // property, vehicle, etc.
   status       String   @default("active")
   qrCodeUrl    String
   createdAt    DateTime @default(now())
   societyId    Int?
+}
+
+model EmergencyAlert {
+  id           Int      @id @default(autoincrement())
+  type         String   // fire, medical, security, disaster, panic
+  unit         String?
+  description  String?  @db.Text
+  status       String   @default("active") // active, resolved
+  resolution   String?  @db.Text
+  
+  societyId    Int
+  society      Society  @relation(fields: [societyId], references: [id])
+  
+  userId       Int
+  user         User     @relation(fields: [userId], references: [id])
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model EmergencyContact {
+  id           Int      @id @default(autoincrement())
+  name         String
+  phone        String
+  category     String   // security, fire, medical, police, custom
+  available    Boolean  @default(true)
+  
+  societyId    Int
+  society      Society  @relation(fields: [societyId], references: [id])
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model Notice {
@@ -466,4 +531,118 @@ model PlatformInvoice {
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// ==================== NEW ADMIN MODELS ====================
+
+model Meeting {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?  @db.Text
+  date        DateTime
+  time        String
+  location    String
+  attendees   Json?
+  status      String   @default("SCHEDULED") // SCHEDULED, COMPLETED, CANCELLED
+  societyId   Int
+  society     Society  @relation(fields: [societyId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Asset {
+  id           Int      @id @default(autoincrement())
+  name         String
+  category     String
+  value        Float
+  purchaseDate DateTime
+  status       String   @default("ACTIVE") // ACTIVE, UNDER_REPAIR, DISPOSED
+  societyId    Int
+  society      Society  @relation(fields: [societyId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Document {
+  id        Int      @id @default(autoincrement())
+  title     String
+  category  String   // Legal, Financial, Notices
+  fileUrl   String
+  societyId Int
+  society   Society  @relation(fields: [societyId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Parcel {
+  id            Int       @id @default(autoincrement())
+  unitId        Int
+  unit          Unit      @relation(fields: [unitId], references: [id])
+  courierName   String
+  trackingNumber String?
+  description   String?
+  receivedBy    String?
+  status        String    @default("PENDING") // PENDING, COLLECTED
+  collectedBy   String?
+  collectedAt   DateTime?
+  societyId     Int
+  society       Society   @relation(fields: [societyId], references: [id])
+  createdAt     DateTime  @default(now())
+}
+
+model Event {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?  @db.Text
+  date        DateTime
+  time        String?
+  location    String?
+  category    String?  // Festival, Meeting, Sports
+  status      String   @default("UPCOMING") // UPCOMING, ONGOING, COMPLETED
+  societyId   Int
+  society     Society  @relation(fields: [societyId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+model PurchaseRequest {
+  id           Int      @id @default(autoincrement())
+  title        String
+  description  String?
+  amount       Float
+  status       String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  societyId    Int
+  society      Society  @relation(fields: [societyId], references: [id])
+  requestedById Int
+  requestedBy  User     @relation(fields: [requestedById], references: [id])
+}
+model Conversation {
+  id          Int      @id @default(autoincrement())
+  societyId   Int
+  society     Society  @relation(fields: [societyId], references: [id])
+  
+  type        String   // SUPPORT_ADMIN, SUPPORT_MAINTENANCE, SUPPORT_SECURITY, SUPPORT_COMMITTEE, SUPPORT_ACCOUNTS
+  participantId Int?   // The Resident/User who started the support chat
+  participant  User?   @relation("UserConversations", fields: [participantId], references: [id])
+  
+  messages    ChatMessage[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([societyId, type, participantId])
+}
+
+model ChatMessage {
+  id             Int      @id @default(autoincrement())
+  conversationId Int
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  
+  senderId       Int
+  sender         User     @relation("SentMessages", fields: [senderId], references: [id])
+  
+  content        String   @db.Text
+  attachments    Json?    // Array of files/images
+  status         String   @default("sent") // sent, delivered, read
+  
+  createdAt      DateTime @default(now())
 }

@@ -45,6 +45,52 @@ class SocietyController {
     }
   }
 
+  /**
+   * Get Society Members (Residents Directory)
+   */
+  static async getMembers(req, res) {
+    try {
+      const { type } = req.query;
+      const societyId = req.user.societyId;
+
+      const whereClause = { societyId };
+      if (type === 'directory') {
+        whereClause.role = { in: ['RESIDENT', 'OWNER', 'TENANT'] };
+      }
+
+      const members = await prisma.user.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+          status: true,
+          profileImg: true,
+          createdAt: true,
+          ownedUnits: {
+            select: { id: true, block: true, number: true }
+          },
+          tenantUnits: {
+            select: { id: true, block: true, number: true }
+          }
+        },
+        orderBy: { name: 'asc' }
+      });
+
+      const formatted = members.map(m => ({
+        ...m,
+        unit: m.ownedUnits[0] || m.tenantUnits[0] || null,
+        avatar: m.profileImg,
+      }));
+
+      res.json(formatted);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
   static async getAllSocieties(req, res) {
     try {
       const societies = await prisma.society.findMany({
@@ -264,6 +310,214 @@ class SocietyController {
       res.status(500).json({ error: error.message });
     }
   }
+
+  /**
+   * Get Admin Dashboard Statistics
+   * Aggregated data for the main Admin Dashboard overview
+   */
+  static async getAdminDashboardStats(req, res) {
+    try {
+      const societyId = req.user.societyId;
+
+      // ========== USER COUNTS ==========
+      const [totalUsers, activeUsers, inactiveUsers, pendingUsers, owners, tenants, staff, neverLoggedIn] = await Promise.all([
+        prisma.user.count({ where: { societyId } }),
+        prisma.user.count({ where: { societyId, status: 'ACTIVE' } }),
+        prisma.user.count({ where: { societyId, status: 'SUSPENDED' } }),
+        prisma.user.count({ where: { societyId, status: 'PENDING' } }),
+        prisma.user.count({ where: { societyId, ownedUnits: { some: {} } } }),
+        prisma.user.count({ where: { societyId, rentedUnits: { some: {} } } }),
+        prisma.user.count({ where: { societyId, role: { in: ['GUARD', 'VENDOR', 'ACCOUNTANT'] } } }),
+        prisma.user.count({ where: { societyId, sessions: { none: {} } } }),
+      ]);
+
+      // ========== UNIT COUNTS ==========
+      const units = await prisma.unit.findMany({
+        where: { societyId },
+        select: { id: true, ownerId: true, tenantId: true }
+      });
+      const totalUnits = units.length;
+      const occupiedUnits = units.filter(u => u.ownerId || u.tenantId).length;
+      const vacantUnits = totalUnits - occupiedUnits;
+
+      // ========== FINANCIAL DATA ==========
+      const transactions = await prisma.transaction.findMany({
+        where: { societyId },
+        select: { amount: true, type: true, status: true, createdAt: true, category: true, receivedFrom: true }
+      });
+      
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+      
+      // Total revenue (all income)
+      const totalRevenue = transactions
+        .filter(t => t.type === 'INCOME')
+        .reduce((sum, t) => sum + t.amount, 0);
+      
+      // Pending dues
+      const pendingDues = transactions
+        .filter(t => t.status === 'PENDING')
+        .reduce((sum, t) => sum + t.amount, 0);
+      
+      // Collected this month
+      const collectedThisMonth = transactions
+        .filter(t => {
+          const d = new Date(t.createdAt);
+          return t.type === 'INCOME' && t.status === 'PAID' && 
+                 d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        })
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      // Total expenses
+      const totalExpenses = transactions
+        .filter(t => t.type === 'EXPENSE')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      // Monthly income data (last 3 months)
+      const monthlyIncome = [];
+      for (let i = 2; i >= 0; i--) {
+        const targetDate = new Date();
+        targetDate.setMonth(targetDate.getMonth() - i);
+        const month = targetDate.toLocaleString('default', { month: 'short' });
+        const monthNum = targetDate.getMonth();
+        const year = targetDate.getFullYear();
+        
+        const amount = transactions
+          .filter(t => {
+            const d = new Date(t.createdAt);
+            return t.type === 'INCOME' && d.getMonth() === monthNum && d.getFullYear() === year;
+          })
+          .reduce((sum, t) => sum + t.amount, 0);
+        
+        monthlyIncome.push({ month, amount });
+      }
+      
+      // ========== ACTIVITY COUNTS ==========
+      const [openComplaints, pendingVisitors, upcomingMeetings, activeVendors, todayVisitors, openPurchaseRequests, unfinalizedPurchaseRequests] = await Promise.all([
+        prisma.complaint.count({ where: { societyId, status: { in: ['OPEN', 'IN_PROGRESS'] } } }),
+        prisma.visitor.count({ where: { societyId, status: 'PENDING' } }),
+        prisma.meeting.count({ where: { societyId, status: 'SCHEDULED', date: { gte: new Date() } } }),
+        prisma.vendor.count({ where: { societyId, status: 'ACTIVE' } }),
+        prisma.visitor.count({ 
+          where: { 
+            societyId, 
+            createdAt: { gte: new Date(new Date().setHours(0,0,0,0)) } 
+          } 
+        }),
+        prisma.purchaseRequest.count({ where: { societyId, status: 'PENDING' } }),
+        prisma.purchaseRequest.count({ where: { societyId, status: 'REJECTED' } }), // Mapping Rejected as "Unfinalized" for now
+      ]);
+
+      // ========== DEFAULTERS ==========
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const defaultersList = await prisma.transaction.findMany({
+        where: {
+          societyId,
+          status: 'PENDING',
+          createdAt: { lt: thirtyDaysAgo }
+        },
+        select: {
+          receivedFrom: true,
+          amount: true,
+          category: true,
+          createdAt: true
+        },
+        orderBy: { amount: 'desc' },
+        take: 10
+      });
+
+      // ========== RECENT ACTIVITIES ==========
+      const recentActivities = [];
+      
+      // Recent payments
+      const recentPayments = await prisma.transaction.findMany({
+        where: { societyId, type: 'INCOME', status: 'PAID' },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+        select: { receivedFrom: true, amount: true, createdAt: true, category: true }
+      });
+      recentPayments.forEach(p => {
+        recentActivities.push({
+          type: 'payment',
+          user: p.receivedFrom || 'Unknown',
+          action: `Paid ${p.category} of Rs. ${p.amount.toLocaleString()}`,
+          time: p.createdAt,
+          status: 'success'
+        });
+      });
+
+      // Recent complaints
+      const recentComplaints = await prisma.complaint.findMany({
+        where: { societyId },
+        orderBy: { createdAt: 'desc' },
+        take: 2,
+        include: { reportedBy: { select: { name: true } } }
+      });
+      recentComplaints.forEach(c => {
+        recentActivities.push({
+          type: 'complaint',
+          user: c.reportedBy?.name || 'Unknown',
+          action: `Reported ${c.title} - ${c.priority} Priority`,
+          time: c.createdAt,
+          status: 'warning'
+        });
+      });
+
+      // Sort by time
+      recentActivities.sort((a, b) => new Date(b.time) - new Date(a.time));
+
+      const now = new Date();
+      const firstDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      res.json({
+        users: {
+          total: totalUsers,
+          active: activeUsers,
+          inactive: inactiveUsers,
+          pending: pendingUsers,
+          owners,
+          tenants,
+          staff,
+          neverLoggedIn,
+        },
+        units: {
+          total: totalUnits,
+          occupied: occupiedUnits,
+          vacant: vacantUnits,
+        },
+        finance: {
+          totalRevenue,
+          pendingDues,
+          collectedThisMonth,
+          totalExpenses,
+          defaultersCount: defaultersList.length,
+          monthlyIncome,
+          incomePeriod: {
+            start: firstDayOfCurrentMonth,
+            end: now
+          }
+        },
+        activity: {
+          openComplaints,
+          pendingVisitors,
+          upcomingMeetings,
+          activeVendors,
+          todayVisitors,
+          openPurchaseRequests,
+          unfinalizedPurchaseRequests,
+        },
+        defaulters: defaultersList,
+        recentActivities: recentActivities.slice(0, 5),
+      });
+
+    } catch (error) {
+      console.error('Admin Dashboard Stats Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+
 }
 
 module.exports = SocietyController;

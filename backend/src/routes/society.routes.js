@@ -7,6 +7,8 @@ const router = express.Router();
 router.get('/units', authenticate, SocietyController.getUnits);
 router.patch('/units/:id/ownership', authenticate, authorize(['ADMIN']), SocietyController.updateOwnership);
 router.post('/notices', authenticate, authorize(['ADMIN']), SocietyController.postNotice);
+router.get('/admin-dashboard-stats', authenticate, authorize(['ADMIN', 'SUPER_ADMIN']), SocietyController.getAdminDashboardStats);
+router.get('/members', authenticate, SocietyController.getMembers);
 
 // Super Admin
 router.get('/stats', authenticate, authorize(['SUPER_ADMIN']), SocietyController.getStats);

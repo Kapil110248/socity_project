@@ -24,11 +24,29 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import toast from 'react-hot-toast'
+import { useEffect } from 'react'
+import { connectPlatformAdmin, disconnectSocket } from '@/lib/socket'
 
 export default function SuperAdminEmergencyLogs() {
     const queryClient = useQueryClient()
     const [searchQuery, setSearchQuery] = useState('')
     const [filter, setFilter] = useState<'all' | 'emergency' | 'normal'>('all')
+
+    useEffect(() => {
+        const socket = connectPlatformAdmin()
+        
+        socket.on('new_emergency_alert', (alert) => {
+            console.log('Real-time emergency alert received in Super Admin Dashboard:', alert)
+            // Trigger a refresh of the logs and barcodes
+            queryClient.invalidateQueries({ queryKey: ['emergency-logs'] })
+            queryClient.invalidateQueries({ queryKey: ['emergency-barcodes'] })
+        })
+
+        return () => {
+            socket.off('new_emergency_alert')
+            disconnectSocket()
+        }
+    }, [queryClient])
 
     const { data: logs = [], isLoading: isLogsLoading } = useQuery<any[]>({
         queryKey: ['emergency-logs'],

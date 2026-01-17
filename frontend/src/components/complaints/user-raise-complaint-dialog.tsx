@@ -7,23 +7,63 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { AlertCircle, Send } from 'lucide-react'
+import { AlertCircle, Send, Loader2 } from 'lucide-react'
+import { ComplaintService } from '@/services/complaint.service'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
 
 interface UserRaiseComplaintDialogProps {
     preSelectedServiceId?: string
     preSelectedServiceName?: string
     trigger?: React.ReactNode
+    open?: boolean
+    onOpenChange?: (open: boolean) => void
 }
 
-export function UserRaiseComplaintDialog({ preSelectedServiceId, preSelectedServiceName, trigger }: UserRaiseComplaintDialogProps) {
-    const [open, setOpen] = useState(false)
-    const [serviceId, setServiceId] = useState(preSelectedServiceId || '')
+export function UserRaiseComplaintDialog({ preSelectedServiceId, preSelectedServiceName, trigger, open: externalOpen, onOpenChange: externalOnOpenChange }: UserRaiseComplaintDialogProps) {
+    const queryClient = useQueryClient()
+    const [internalOpen, setInternalOpen] = useState(false)
+    
+    const open = externalOpen !== undefined ? externalOpen : internalOpen
+    const setOpen = externalOnOpenChange !== undefined ? externalOnOpenChange : setInternalOpen
+    const [category, setCategory] = useState(preSelectedServiceId || '')
+    const [subject, setSubject] = useState('')
+    const [description, setDescription] = useState('')
 
     useEffect(() => {
         if (preSelectedServiceId) {
-            setServiceId(preSelectedServiceId)
+            setCategory(preSelectedServiceId)
         }
     }, [preSelectedServiceId])
+
+    const mutation = useMutation({
+        mutationFn: (data: any) => ComplaintService.create(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['complaints'] })
+            toast.success('Complaint submitted successfully!')
+            setOpen(false)
+            // Clear form
+            setSubject('')
+            setDescription('')
+        },
+        onError: (error: any) => {
+            toast.error('Failed to submit complaint: ' + error.message)
+        }
+    })
+
+    const handleSubmit = () => {
+        if (!subject || !description || !category) {
+            toast.error('Please fill all required fields')
+            return
+        }
+
+        mutation.mutate({
+            title: subject,
+            description,
+            category,
+            priority: 'MEDIUM',
+        })
+    }
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
@@ -45,8 +85,8 @@ export function UserRaiseComplaintDialog({ preSelectedServiceId, preSelectedServ
 
                 <div className="space-y-4 py-4">
                     <div className="space-y-2">
-                        <Label>Service Category</Label>
-                        <Select value={serviceId} onValueChange={setServiceId} disabled={!!preSelectedServiceId}>
+                        <Label>Service Category *</Label>
+                        <Select value={category} onValueChange={setCategory} disabled={!!preSelectedServiceId}>
                             <SelectTrigger>
                                 <SelectValue placeholder="Select service" />
                             </SelectTrigger>
@@ -56,25 +96,39 @@ export function UserRaiseComplaintDialog({ preSelectedServiceId, preSelectedServ
                                 <SelectItem value="pest">Pest Control</SelectItem>
                                 <SelectItem value="plumbing">Plumbing</SelectItem>
                                 <SelectItem value="electric">Electrical</SelectItem>
+                                <SelectItem value="other">Other</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
 
                     <div className="space-y-2">
-                        <Label>Subject</Label>
-                        <Input placeholder="What is the issue?" />
+                        <Label>Subject *</Label>
+                        <Input 
+                            placeholder="What is the issue?" 
+                            value={subject}
+                            onChange={(e) => setSubject(e.target.value)}
+                        />
                     </div>
 
                     <div className="space-y-2">
-                        <Label>Description</Label>
-                        <Textarea placeholder="Describe the problem in detail..." className="min-h-[100px]" />
+                        <Label>Description *</Label>
+                        <Textarea 
+                            placeholder="Describe the problem in detail..." 
+                            className="min-h-[100px]" 
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                        />
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t mt-4">
                         <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-                        <Button className="bg-red-600 hover:bg-red-700 text-white gap-2" onClick={() => setOpen(false)}>
-                            <Send className="h-4 w-4" />
-                            Submit Complaint
+                        <Button 
+                            className="bg-red-600 hover:bg-red-700 text-white gap-2" 
+                            onClick={handleSubmit}
+                            disabled={mutation.isPending}
+                        >
+                            {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                            {mutation.isPending ? 'Submitting...' : 'Submit Complaint'}
                         </Button>
                     </div>
                 </div>

@@ -68,7 +68,8 @@ export function ViewComplaintDialog({ complaint, open, onOpenChange }: ViewCompl
     if (!complaint) return null
 
     const getStatusColor = (s: string) => {
-        switch (s) {
+        const lower = s.toLowerCase()
+        switch (lower) {
             case 'open': return 'bg-red-100 text-red-700'
             case 'in_progress': return 'bg-blue-100 text-blue-700'
             case 'resolved': return 'bg-green-100 text-green-700'
@@ -131,10 +132,10 @@ export function ViewComplaintDialog({ complaint, open, onOpenChange }: ViewCompl
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="open">Open</SelectItem>
-                                    <SelectItem value="in_progress">In Progress</SelectItem>
-                                    <SelectItem value="resolved">Resolved</SelectItem>
-                                    <SelectItem value="closed">Closed</SelectItem>
+                                    <SelectItem value="OPEN">Open</SelectItem>
+                                    <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+                                    <SelectItem value="RESOLVED">Resolved</SelectItem>
+                                    <SelectItem value="CLOSED">Closed</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -193,6 +194,16 @@ export function ViewComplaintDialog({ complaint, open, onOpenChange }: ViewCompl
 
                 <div className="flex justify-end gap-3 pt-4 border-t">
                     <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+                    {complaint.status.toLowerCase() !== 'resolved' && (
+                        <Button 
+                            className="bg-green-600 hover:bg-green-700 text-white gap-2"
+                            onClick={() => updateStatus('RESOLVED')}
+                            disabled={isPending}
+                        >
+                            <CheckCircle2 className="h-4 w-4" />
+                            Resolve & Notify Society
+                        </Button>
+                    )}
                 </div>
             </DialogContent>
         </Dialog>

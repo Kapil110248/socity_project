@@ -20,11 +20,32 @@ const platformInvoiceRoutes = require('./routes/platform-invoice.routes.js');
 const vendorPayoutRoutes = require('./routes/vendor-payout.routes.js');
 const roleRoutes = require('./routes/role.routes');
 const sessionRoutes = require('./routes/session.routes');
+// New Admin routes
+const meetingRoutes = require('./routes/meeting.routes');
+const assetRoutes = require('./routes/asset.routes');
+const documentRoutes = require('./routes/document.routes');
+const staffRoutes = require('./routes/staff.routes');
+const parcelRoutes = require('./routes/parcel.routes');
+const vehicleRoutes = require('./routes/vehicle.routes');
+const eventRoutes = require('./routes/event.routes');
+const amenityRoutes = require('./routes/amenity.routes');
+const noticeRoutes = require('./routes/notice.routes');
+const unitRoutes = require('./routes/unit.routes');
+
+const http = require('http');
+const { initSocket } = require('./lib/socket');
 
 const app = express();
+const server = http.createServer(app);
+
+// Initialize Socket.io
+initSocket(server);
 
 app.use(cors());
 app.use(express.json());
+
+const purchaseRequestRoutes = require('./routes/purchase-request.routes');
+const chatRoutes = require('./routes/chat.routes');
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -43,9 +64,23 @@ app.use('/api/platform-invoices', platformInvoiceRoutes);
 app.use('/api/vendor-payouts', vendorPayoutRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/sessions', sessionRoutes);
+app.use('/api/purchase-requests', purchaseRequestRoutes);
+app.use('/api/chat', chatRoutes);
+
+// New Admin routes
+app.use('/api/meetings', meetingRoutes);
+app.use('/api/assets', assetRoutes);
+app.use('/api/documents', documentRoutes);
+app.use('/api/staff', staffRoutes);
+app.use('/api/parcels', parcelRoutes);
+app.use('/api/vehicles', vehicleRoutes);
+app.use('/api/events', eventRoutes);
+app.use('/api/amenities', amenityRoutes);
+app.use('/api/notices', noticeRoutes);
+app.use('/api/units', unitRoutes);
 
 const PORT = process.env.PORT || 9000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT} (with Socket.io support)`);
 });

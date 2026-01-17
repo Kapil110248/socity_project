@@ -43,10 +43,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuthStore } from '@/lib/stores/auth-store'
-import { useServiceStore } from '@/lib/stores/service-store'
-import { ServiceInquiry } from '@/types/services'
 import { iconMap } from '@/lib/constants/icons'
 import { UserRaiseComplaintDialog } from '@/components/complaints/user-raise-complaint-dialog'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { ServiceManagementService } from '@/services/service.service'
+import toast from 'react-hot-toast'
+import { Loader2 } from 'lucide-react'
 
 // const serviceCategories = ... (Removed)
 
@@ -61,13 +63,41 @@ const statusColors: Record<string, string> = {
 
 export default function ServicesPage() {
   const { user } = useAuthStore()
-  const { categories: serviceCategories } = useServiceStore()
-  const [selectedCategory, setSelectedCategory] = useState<typeof serviceCategories[0] | null>(null)
+  const queryClient = useQueryClient()
+  
+  const [selectedCategory, setSelectedCategory] = useState<any | null>(null)
   const [isBookingOpen, setIsBookingOpen] = useState(false)
   const [isCallbackOpen, setIsCallbackOpen] = useState(false)
-  const [showSuccess, setShowSuccess] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('browse')
-  const { inquiries, addInquiry } = useServiceStore()
+
+  // Queries
+  const { data: categories = [], isLoading: isCatsLoading } = useQuery({
+    queryKey: ['service-categories'],
+    queryFn: () => ServiceManagementService.listCategories()
+  })
+
+  const { data: inquiries = [], isLoading: isInqsLoading } = useQuery({
+    queryKey: ['service-inquiries'],
+    queryFn: () => ServiceManagementService.listInquiries()
+  })
+
+  // Mutations
+  const createInquiryMutation = useMutation({
+    mutationFn: (data: any) => ServiceManagementService.createInquiry(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['service-inquiries'] })
+      setIsBookingOpen(false)
+      setIsCallbackOpen(false)
+      toast.success('Request submitted successfully!')
+      // Clear form
+      setNotes('')
+      setPreferredDate('')
+      setPreferredTime('')
+    },
+    onError: (error: any) => {
+      toast.error('Failed to submit request: ' + error.message)
+    }
+  })
 
   // Form states
   const [unit, setUnit] = useState(user?.unit || '')
@@ -76,57 +106,34 @@ export default function ServicesPage() {
   const [preferredDate, setPreferredDate] = useState('')
   const [preferredTime, setPreferredTime] = useState('')
 
-  const showNotification = (message: string) => {
-    setShowSuccess(message)
-    setTimeout(() => setShowSuccess(null), 3000)
-  }
-
   const handleBookService = () => {
     if (!selectedCategory || !user) return
 
-    const newInquiry: ServiceInquiry = {
-      id: `INQ-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
-      residentId: user.id,
+    createInquiryMutation.mutate({
       residentName: user.name,
       unit: unit,
       phone: phone,
       serviceId: selectedCategory.id,
       serviceName: selectedCategory.name,
-      providerName: '', // Vendor hidden from resident
       type: 'booking',
-      status: 'pending',
-      createdAt: new Date().toISOString(),
       preferredDate,
       preferredTime,
       notes,
-    }
-
-    addInquiry(newInquiry)
-    setIsBookingOpen(false)
-    showNotification('Service booking confirmed! Super Admin will assign a vendor soon.')
+    })
   }
 
   const handleRequestCallback = () => {
     if (!selectedCategory || !user) return
 
-    const newInquiry: ServiceInquiry = {
-      id: `INQ-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
-      residentId: user.id,
+    createInquiryMutation.mutate({
       residentName: user.name,
       unit: unit,
       phone: phone,
       serviceId: selectedCategory.id,
       serviceName: selectedCategory.name,
-      providerName: '', // Vendor hidden from resident
       type: 'callback',
-      status: 'pending',
-      createdAt: new Date().toISOString(),
       notes,
-    }
-
-    addInquiry(newInquiry)
-    setIsCallbackOpen(false)
-    showNotification('Callback request submitted! Super Admin will assign a vendor soon.')
+    })
   }
 
   const colorClasses: Record<string, { bg: string; text: string; light: string }> = {
@@ -143,21 +150,6 @@ export default function ServicesPage() {
 
   return (
     <div className="space-y-6">
-      {/* Success Notification */}
-      <AnimatePresence>
-        {showSuccess && (
-          <motion.div
-            initial={{ opacity: 0, y: -50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -50 }}
-            className="fixed top-4 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2"
-          >
-            <CheckCircle2 className="h-5 w-5" />
-            {showSuccess}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -183,10 +175,15 @@ export default function ServicesPage() {
 
         {/* Browse Services Tab */}
         <TabsContent value="browse" className="mt-6">
-          {!selectedCategory ? (
+          {isCatsLoading ? (
+            <div className="py-20 flex flex-col items-center justify-center text-gray-400">
+              <Loader2 className="h-10 w-10 animate-spin mb-4" />
+              <p className="font-medium">Loading services...</p>
+            </div>
+          ) : !selectedCategory ? (
             /* Service Categories Grid */
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {serviceCategories.map((category) => {
+              {categories.map((category: any) => {
                 const Icon = iconMap[category.icon] || Building2
                 const colors = colorClasses[category.color] || colorClasses.blue
                 return (
@@ -207,15 +204,11 @@ export default function ServicesPage() {
                           <ArrowRight className="h-5 w-5 text-gray-400" />
                         </div>
                         <h3 className="text-lg font-bold text-gray-900 mt-4">{category.name}</h3>
-                        <p className="text-sm text-gray-600 mt-1">{category.description}</p>
-                        <div className="flex items-center gap-2 mt-3">
-                          <Badge variant="outline" className="text-xs">
-                            {category.providers.length} providers
-                          </Badge>
-                          <div className="flex items-center gap-1 text-xs text-gray-500">
-                            <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
-                            {category.providers[0].rating}
-                          </div>
+                        <p className="text-sm text-gray-600 mt-1 line-clamp-2">{category.description}</p>
+                        <div className="flex items-center gap-2 mt-3 text-xs text-gray-500">
+                           <Badge variant="outline" className="text-[10px] font-bold">
+                            {category.variants?.length || 0} VARIANTS
+                           </Badge>
                         </div>
                       </CardContent>
                     </Card>
@@ -284,7 +277,12 @@ export default function ServicesPage() {
 
         <TabsContent value="my-requests" className="mt-6">
           <div className="space-y-4">
-            {inquiries.filter(inq => inq.residentId === user?.id).length === 0 ? (
+            {isInqsLoading ? (
+              <div className="py-20 flex flex-col items-center justify-center text-gray-400">
+                <Loader2 className="h-10 w-10 animate-spin mb-4" />
+                <p className="font-medium">Loading your requests...</p>
+              </div>
+            ) : inquiries.filter((inq: any) => inq.residentId === user?.id).length === 0 ? (
               <Card className="border-0 shadow-md">
                 <CardContent className="p-12 text-center">
                   <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -300,28 +298,29 @@ export default function ServicesPage() {
               </Card>
             ) : (
               inquiries
-                .filter(inq => inq.residentId === user?.id)
-                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                .map((request: ServiceInquiry) => (
+                .filter((inq: any) => inq.residentId === user?.id)
+                .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                .map((request: any) => (
                   <Card key={request.id} className="border-0 shadow-md">
                     <CardContent className="p-6">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
                           <div className="flex items-center gap-2">
                             <h3 className="font-bold text-lg text-gray-900">{request.serviceName}</h3>
-                            <Badge className={statusColors[request.status]}>
+                            <Badge className={statusColors[request.status] || 'bg-gray-100'}>
                               {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
                             </Badge>
                           </div>
-                          <p className="text-gray-600 mt-1">{request.vendorName || request.providerName || 'Assigning Vendor...'}</p>
+                          <p className="text-gray-600 mt-1">{request.vendorName || 'Assigning Vendor...'}</p>
                           <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                             <span className="flex items-center gap-1">
                               <Calendar className="h-4 w-4" />
                               {request.preferredDate || (request.createdAt ? new Date(request.createdAt).toLocaleDateString() : 'N/A')}
                             </span>
-                            <span className="flex items-center gap-1">
-                              <Clock className="h-4 w-4" />
-                              {request.preferredTime || 'Pending...'}
+                            <span className="flex items-center gap-1 text-[10px] font-bold uppercase">
+                              <Badge variant="secondary" className="text-[10px]">
+                                {request.type === 'callback' ? 'CALLBACK' : 'BOOKING'}
+                              </Badge>
                             </span>
                           </div>
                         </div>
@@ -402,9 +401,14 @@ export default function ServicesPage() {
             <Button
               className="bg-gradient-to-r from-teal-500 to-cyan-500"
               onClick={handleBookService}
+              disabled={createInquiryMutation.isPending}
             >
-              <CheckCircle2 className="h-4 w-4 mr-2" />
-              Confirm Booking
+              {createInquiryMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+              )}
+              {createInquiryMutation.isPending ? 'Submitting...' : 'Confirm Booking'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -455,9 +459,14 @@ export default function ServicesPage() {
             <Button
               className="bg-gradient-to-r from-teal-500 to-cyan-500"
               onClick={handleRequestCallback}
+              disabled={createInquiryMutation.isPending}
             >
-              <Send className="h-4 w-4 mr-2" />
-              Request Callback
+              {createInquiryMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4 mr-2" />
+              )}
+              {createInquiryMutation.isPending ? 'Submitting...' : 'Request Callback'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -3,20 +3,30 @@ const prisma = require('../lib/prisma');
 class ComplaintController {
   static async list(req, res) {
     try {
-      const { status, category, priority, search } = req.query;
+      const { status, category, priority, search, isPrivate, escalatedToTech } = req.query;
       const where = {};
 
       if (req.user.role === 'RESIDENT') {
         where.reportedById = req.user.id;
-      }
-
-      if (req.user.role !== 'SUPER_ADMIN') {
+      } else if (req.user.role === 'ADMIN' || req.user.role === 'COMMITTEE') {
+        // Admins see all public tickets in their society, 
+        // OR private tickets assigned to them, 
+        // OR private tickets they reported
         where.societyId = req.user.societyId;
+        where.OR = [
+          { isPrivate: false },
+          { assignedToId: req.user.id },
+          { reportedById: req.user.id }
+        ];
+      } else if (req.user.role === 'SUPER_ADMIN') {
+        // Super Admins only see public tickets (unless specifically assigned, but usually they don't handle local tickets)
+        where.isPrivate = false;
       }
 
       if (status) where.status = status;
-      if (category) where.category = category;
+      if (category && category !== 'all') where.category = category;
       if (priority) where.priority = priority;
+      if (escalatedToTech !== undefined) where.escalatedToTech = escalatedToTech === 'true';
       if (search) {
         where.OR = [
           { title: { contains: search } },
@@ -27,19 +37,37 @@ class ComplaintController {
       const complaints = await prisma.complaint.findMany({
         where,
         include: {
-          reportedBy: { select: { name: true, email: true, role: true } },
-          assignedTo: { select: { name: true } }
+          reportedBy: { 
+            select: { 
+              name: true, 
+              email: true, 
+              role: true,
+              ownedUnits: { select: { block: true, number: true } },
+              rentedUnits: { select: { block: true, number: true } }
+            } 
+          },
+          assignedTo: { select: { name: true } },
+          society: { select: { name: true } },
+          comments: { select: { id: true } }
         },
         orderBy: { createdAt: 'desc' }
       });
 
-      const transformed = complaints.map(c => ({
-        ...c,
-        source: c.reportedBy.role === 'RESIDENT' ? 'resident' : 'society',
-        serviceName: c.category, // Mapping for frontend
-        reportedByOriginal: c.reportedBy, // Keep full object
-        reportedBy: c.reportedBy.name // Flatten for table compatibility if needed, or update frontend
-      }));
+      const transformed = complaints.map(c => {
+        const units = [...c.reportedBy.ownedUnits, ...c.reportedBy.rentedUnits];
+        const unitStr = units.length > 0 ? `${units[0].block}-${units[0].number}` : 'N/A';
+        
+        return {
+          ...c,
+          unit: unitStr,
+          residentName: c.reportedBy.name,
+          source: c.reportedBy.role === 'RESIDENT' ? 'resident' : 'society',
+          serviceName: c.category,
+          reportedByOriginal: c.reportedBy,
+          reportedBy: c.reportedBy.name,
+          messages: c.comments // Map comments to messages for frontend compatibility
+        };
+      });
 
       res.json(transformed);
     } catch (error) {
@@ -49,13 +77,14 @@ class ComplaintController {
 
   static async create(req, res) {
     try {
-      const { title, description, category, priority, images } = req.body;
+      const { title, description, category, priority, images, isPrivate } = req.body;
       const complaint = await prisma.complaint.create({
         data: {
           title,
           description,
           category,
           priority: priority || 'MEDIUM',
+          isPrivate: isPrivate || false,
           images,
           societyId: req.user.societyId,
           reportedById: req.user.id
@@ -73,8 +102,20 @@ class ComplaintController {
       const { status } = req.body;
       const complaint = await prisma.complaint.update({
         where: { id: parseInt(id) },
-        data: { status }
+        data: { status: status.toUpperCase() },
+        include: { society: { select: { name: true } } }
       });
+
+      // Notify society and platform admins
+      const { getIO } = require('../lib/socket');
+      const io = getIO();
+      io.to(`society_${complaint.societyId}`).emit('complaint_updated', {
+        id: complaint.id,
+        status: complaint.status,
+        title: complaint.title,
+        societyName: complaint.society?.name
+      });
+
       res.json(complaint);
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -87,8 +128,19 @@ class ComplaintController {
       const { assignedToId } = req.body;
       const complaint = await prisma.complaint.update({
         where: { id: parseInt(id) },
-        data: { assignedToId }
+        data: { assignedToId },
+        include: { assignedTo: { select: { name: true } } }
       });
+
+      // Notify society
+      const { getIO } = require('../lib/socket');
+      const io = getIO();
+      io.to(`society_${complaint.societyId}`).emit('complaint_updated', {
+        id: complaint.id,
+        assignedTo: complaint.assignedTo?.name,
+        title: complaint.title
+      });
+
       res.json(complaint);
     } catch (error) {
       res.status(500).json({ error: error.message });

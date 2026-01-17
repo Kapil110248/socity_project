@@ -4,6 +4,7 @@ export interface User {
   email: string
   name: string
   role: 'super_admin' | 'admin' | 'community-manager' | 'resident' | 'guard' | 'committee' | 'vendor' | 'individual'
+  societyId?: string | number
   avatar?: string
   phone?: string
   unit?: string
