@@ -59,6 +59,7 @@ enum SocietyStatus {
   ACTIVE
   PENDING
   INACTIVE
+  SUSPENDED
 }
 
 enum UserStatus {
@@ -115,6 +116,11 @@ model User {
   status      UserStatus @default(ACTIVE)
   profileImg  String?
   
+  roleId      Int?
+  roleModel   RoleModel? @relation(fields: [roleId], references: [id])
+  
+  sessions    UserSession[]
+  
   societyId   Int?
   society     Society? @relation(fields: [societyId], references: [id])
   
@@ -130,6 +136,43 @@ model User {
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model RoleModel {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  permissions RolePermission[]
+  users       User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Permission {
+  id          String   @id // e.g. "manage_residents"
+  label       String
+  description String?
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       Int
+  role         RoleModel @relation(fields: [roleId], references: [id])
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+}
+
+model UserSession {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  device      String?
+  ipAddress   String?
+  lastActive  DateTime @default(now())
+  token       String   @unique @db.VarChar(500)
+  createdAt   DateTime @default(now())
 }
 
 model Unit {

@@ -116,29 +116,34 @@ class SocietyController {
       const code = name.toUpperCase().substring(0, 3) + Math.floor(1000 + Math.random() * 9000);
 
       const bcrypt = require('bcryptjs');
-      const hashedPassword = await bcrypt.hash(adminPassword || 'password123', 10);
+      const hashedPassword = adminPassword ? await bcrypt.hash(adminPassword, 10) : null;
+
+      const data = {
+        name,
+        address,
+        city,
+        state,
+        pincode,
+        code,
+        status: 'PENDING',
+        subscriptionPlan: plan.toUpperCase(),
+        expectedUnits: parseInt(units) || 0,
+      };
+
+      if (adminEmail && adminName) {
+        data.users = {
+          create: {
+            name: adminName,
+            email: adminEmail,
+            password: hashedPassword || await bcrypt.hash('password123', 10),
+            phone: adminPhone,
+            role: 'ADMIN'
+          }
+        };
+      }
 
       const society = await prisma.society.create({
-        data: {
-          name,
-          address,
-          city,
-          state,
-          pincode,
-          code,
-          status: 'PENDING',
-          subscriptionPlan: plan.toUpperCase(),
-          expectedUnits: parseInt(units) || 0,
-          users: {
-            create: {
-              name: adminName,
-              email: adminEmail,
-              password: hashedPassword,
-              phone: adminPhone,
-              role: 'ADMIN'
-            }
-          }
-        },
+        data,
         include: {
           users: true
         }
@@ -174,12 +179,64 @@ class SocietyController {
   static async deleteSociety(req, res) {
     try {
       const { id } = req.params;
-      // Note: This might fail if there are dependent records.
-      // In a real app, we might want to soft delete or cascade.
-      await prisma.society.delete({
-        where: { id: parseInt(id) }
+      const societyId = parseInt(id);
+
+      await prisma.$transaction(async (tx) => {
+        // 1. Delete platform invoices
+        await tx.platformInvoice.deleteMany({ where: { societyId } });
+
+        // 2. Delete related complaints (and comments)
+        const complaintIds = (await tx.complaint.findMany({
+          where: { societyId },
+          select: { id: true }
+        })).map(c => c.id);
+        
+        await tx.complaintComment.deleteMany({ where: { complaintId: { in: complaintIds } } });
+        await tx.complaint.deleteMany({ where: { societyId } });
+
+        // 3. Delete visitors
+        await tx.visitor.deleteMany({ where: { societyId } });
+
+        // 4. Delete transactions
+        await tx.transaction.deleteMany({ where: { societyId } });
+
+        // 5. Delete notices
+        await tx.notice.deleteMany({ where: { societyId } });
+
+        // 6. Delete Amenity bookings and Amenities
+        const amenityIds = (await tx.amenity.findMany({
+          where: { societyId },
+          select: { id: true }
+        })).map(a => a.id);
+        
+        await tx.amenityBooking.deleteMany({ where: { amenityId: { in: amenityIds } } });
+        await tx.amenity.deleteMany({ where: { societyId } });
+
+        // 7. Delete parking slots
+        await tx.parkingSlot.deleteMany({ where: { societyId } });
+
+        // 8. Delete units
+        await tx.unit.deleteMany({ where: { societyId } });
+
+        // 9. Unlink or delete vendors
+        await tx.vendor.deleteMany({ where: { societyId } });
+
+        // 10. Delete User sessions and Users
+        const userIds = (await tx.user.findMany({
+          where: { societyId },
+          select: { id: true }
+        })).map(u => u.id);
+
+        await tx.userSession.deleteMany({ where: { userId: { in: userIds } } });
+        await tx.user.deleteMany({ where: { societyId } });
+
+        // 11. Finally delete the society
+        await tx.society.delete({
+          where: { id: societyId }
+        });
       });
-      res.json({ message: 'Society deleted successfully' });
+
+      res.json({ message: 'Society and all related data deleted successfully' });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

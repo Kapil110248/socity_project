@@ -27,13 +27,21 @@ class ComplaintController {
       const complaints = await prisma.complaint.findMany({
         where,
         include: {
-          reportedBy: { select: { name: true, email: true } },
+          reportedBy: { select: { name: true, email: true, role: true } },
           assignedTo: { select: { name: true } }
         },
         orderBy: { createdAt: 'desc' }
       });
 
-      res.json(complaints);
+      const transformed = complaints.map(c => ({
+        ...c,
+        source: c.reportedBy.role === 'RESIDENT' ? 'resident' : 'society',
+        serviceName: c.category, // Mapping for frontend
+        reportedByOriginal: c.reportedBy, // Keep full object
+        reportedBy: c.reportedBy.name // Flatten for table compatibility if needed, or update frontend
+      }));
+
+      res.json(transformed);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

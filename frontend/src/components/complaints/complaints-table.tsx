@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { ServiceComplaint } from '@/types/services'
 import {
     Table,
@@ -13,6 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Eye, Clock, CheckCircle2, AlertTriangle, Building2, User, Users } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { ViewComplaintDialog } from './view-complaint-dialog'
 
 interface ComplaintsTableProps {
     complaints: ServiceComplaint[]
@@ -20,6 +22,8 @@ interface ComplaintsTableProps {
 }
 
 export function ComplaintsTable({ complaints, showSource = true }: ComplaintsTableProps) {
+    const [selectedComplaint, setSelectedComplaint] = useState<ServiceComplaint | null>(null)
+    const [viewOpen, setViewOpen] = useState(false)
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -115,6 +119,9 @@ export function ComplaintsTable({ complaints, showSource = true }: ComplaintsTab
                                         <div className="flex flex-col">
                                             <span className="text-sm font-medium">{complaint.reportedBy}</span>
                                             {complaint.unit && <span className="text-xs text-muted-foreground">Unit: {complaint.unit}</span>}
+                                            {complaint.reportedByOriginal && (
+                                                <span className="text-[10px] text-slate-400">{complaint.reportedByOriginal.email}</span>
+                                            )}
                                         </div>
                                     </div>
                                 </TableCell>
@@ -134,7 +141,15 @@ export function ComplaintsTable({ complaints, showSource = true }: ComplaintsTab
                                 </TableCell>
 
                                 <TableCell className="text-right">
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-blue-50 text-blue-600">
+                                    <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 hover:bg-blue-50 text-blue-600"
+                                        onClick={() => {
+                                            setSelectedComplaint(complaint)
+                                            setViewOpen(true)
+                                        }}
+                                    >
                                         <Eye className="h-4 w-4" />
                                     </Button>
                                 </TableCell>
@@ -142,6 +157,11 @@ export function ComplaintsTable({ complaints, showSource = true }: ComplaintsTab
                         )))}
                 </TableBody>
             </Table>
+            <ViewComplaintDialog 
+                complaint={selectedComplaint} 
+                open={viewOpen} 
+                onOpenChange={setViewOpen} 
+            />
         </div>
     )
 }

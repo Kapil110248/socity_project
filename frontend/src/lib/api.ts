@@ -1,22 +1,33 @@
 import axios from 'axios';
 import { useAuthStore } from './stores/auth-store';
+import { API_CONFIG } from '../config/api.config';
 
 const api = axios.create({
-  baseURL: 'http://localhost:9000/api',
+  baseURL: API_CONFIG.BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// Add a request interceptor to include the JWT token
 api.interceptors.request.use(
   (config) => {
-    // We cannot use the store directly here if it's outside of a component
-    // but we can access the state from the storage or the store's getState method
-    const token = (useAuthStore.getState() as any).token;
+    const token = useAuthStore.getState().token;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
   (error) => {
+    return Promise.reject(error);
+  }
+);
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      useAuthStore.getState().logout();
+    }
     return Promise.reject(error);
   }
 );

@@ -37,7 +37,7 @@ export default function PendingApprovalsPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
 
   const { data: societies = [], isLoading } = useQuery<any[]>({
-    queryKey: ['super-admin-societies'],
+    queryKey: ['societies'],
     queryFn: async () => {
       const response = await api.get('/society/all')
       return response.data
@@ -45,7 +45,7 @@ export default function PendingApprovalsPage() {
   })
 
   const { data: stats } = useQuery({
-    queryKey: ['society-stats'],
+    queryKey: ['societies-stats'],
     queryFn: async () => {
       const response = await api.get('/society/stats')
       return response.data
@@ -58,8 +58,8 @@ export default function PendingApprovalsPage() {
       return response.data
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['super-admin-societies'] })
-      queryClient.invalidateQueries({ queryKey: ['society-stats'] })
+      queryClient.invalidateQueries({ queryKey: ['societies'] })
+      queryClient.invalidateQueries({ queryKey: ['societies-stats'] })
       toast.success('Society status updated successfully')
       setDialogOpen(false)
     },

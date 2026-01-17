@@ -207,66 +207,6 @@ export default function AddSocietyPage() {
             </CardContent>
           </Card>
 
-          {/* Admin Details */}
-          <Card className="border-0 shadow-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Society Admin Details
-              </CardTitle>
-              <CardDescription>Primary contact person for the society</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="adminName">Admin Name *</Label>
-                  <Input
-                    id="adminName"
-                    placeholder="Enter admin name"
-                    value={formData.adminName}
-                    onChange={(e) => handleChange('adminName', e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="adminEmail">Admin Email *</Label>
-                  <Input
-                    id="adminEmail"
-                    type="email"
-                    placeholder="Enter admin email"
-                    value={formData.adminEmail}
-                    onChange={(e) => handleChange('adminEmail', e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="adminPassword">Admin Password *</Label>
-                  <Input
-                    id="adminPassword"
-                    type="password"
-                    placeholder="Enter admin password"
-                    value={formData.adminPassword}
-                    onChange={(e) => handleChange('adminPassword', e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="adminPhone">Admin Phone *</Label>
-                  <Input
-                    id="adminPhone"
-                    type="tel"
-                    placeholder="Enter admin phone number"
-                    value={formData.adminPhone}
-                    onChange={(e) => handleChange('adminPhone', e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Actions */}
           <div className="flex justify-end gap-4">
             <Link href="/dashboard/super-admin/societies">

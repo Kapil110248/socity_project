@@ -36,6 +36,7 @@ export default function VendorPaymentsPage() {
     const [formData, setFormData] = useState({
         vendorId: '',
         vendorName: '',
+        societyId: '',
         societyName: '',
         commissionPercent: '',
         dealValue: '',
@@ -69,6 +70,14 @@ export default function VendorPaymentsPage() {
         }
     })
 
+    const { data: societies = [] } = useQuery<any[]>({
+        queryKey: ['societies'],
+        queryFn: async () => {
+            const response = await api.get('/society/all')
+            return response.data
+        }
+    })
+
     const recordPayoutMutation = useMutation({
         mutationFn: async (data: any) => {
             const response = await api.post('/vendor-payouts', data)
@@ -82,6 +91,7 @@ export default function VendorPaymentsPage() {
             setFormData({
                 vendorId: '',
                 vendorName: '',
+                societyId: '',
                 societyName: '',
                 commissionPercent: '',
                 dealValue: '',
@@ -167,13 +177,25 @@ export default function VendorPaymentsPage() {
 
                                     <div className="space-y-2">
                                         <Label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Society Name *</Label>
-                                        <Input
-                                            className="h-12 rounded-2xl border-0 ring-1 ring-black/5 bg-white shadow-sm font-bold"
-                                            placeholder="e.g. Royal Residency"
-                                            value={formData.societyName}
-                                            onChange={(e) => setFormData({ ...formData, societyName: e.target.value })}
-                                            required
-                                        />
+                                        <Select
+                                            value={formData.societyId}
+                                            onValueChange={(val) => {
+                                                const society = societies.find(s => s.id.toString() === val)
+                                                setFormData({ ...formData, societyId: val, societyName: society?.name || '' })
+                                            }}
+                                        >
+                                            <SelectTrigger className="h-12 rounded-2xl border-0 ring-1 ring-black/5 bg-white shadow-sm font-bold">
+                                                <SelectValue placeholder="Select a society" />
+                                            </SelectTrigger>
+                                            <SelectContent className="rounded-2xl border-0 shadow-xl ring-1 ring-black/5">
+                                                {societies.map((s: any) => (
+                                                    <SelectItem key={s.id} value={s.id.toString()} className="rounded-xl my-1 font-medium">{s.name}</SelectItem>
+                                                ))}
+                                                {societies.length === 0 && (
+                                                    <div className="p-4 text-center text-xs text-gray-400 font-medium">No societies found</div>
+                                                )}
+                                            </SelectContent>
+                                        </Select>
                                     </div>
 
                                     <div className="space-y-2">

@@ -4,6 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { Toaster } from "react-hot-toast";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { AuthInitializer } from "@/components/auth-initializer";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -30,6 +31,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <QueryProvider>
+            <AuthInitializer />
             {children}
             <Toaster position="top-right" />
           </QueryProvider>

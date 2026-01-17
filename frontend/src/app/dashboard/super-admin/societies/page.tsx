@@ -47,6 +47,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { RoleGuard } from '@/components/auth/role-guard'
+import Link from 'next/link'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
@@ -55,8 +56,13 @@ import toast from 'react-hot-toast'
 export default function SocietiesPage() {
   const queryClient = useQueryClient()
   const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [editingSociety, setEditingSociety] = useState<any>(null)
+  const [viewingSociety, setViewingSociety] = useState<any>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
 
   const { data: societies = [], isLoading } = useQuery<any[]>({
     queryKey: ['societies'],
@@ -117,11 +123,15 @@ export default function SocietiesPage() {
     { title: 'Suspended', value: societies.filter((s: any) => s.status === 'suspended').length, icon: XCircle, color: 'bg-red-500' },
   ]
 
-  const filteredSocieties = societies.filter(
-    (society: any) =>
+  const filteredSocieties = societies.filter((society: any) => {
+    const matchesSearch = 
       society.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (society.city && society.city.toLowerCase().includes(searchQuery.toLowerCase()))
-  )
+    
+    const matchesStatus = statusFilter === 'all' || society.status === statusFilter
+    
+    return matchesSearch && matchesStatus
+  })
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -156,13 +166,17 @@ export default function SocietiesPage() {
         animate={{ opacity: 1, y: 0 }}
         className="space-y-6"
       >
-        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Societies Management</h1>
             <p className="text-gray-600">Manage all registered societies on the platform</p>
           </div>
-
+          <Link href="/dashboard/super-admin/societies/new">
+            <Button className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg hover:shadow-purple-500/25 transition-all">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Society
+            </Button>
+          </Link>
         </div>
 
         {/* Stats */}
@@ -200,10 +214,20 @@ export default function SocietiesPage() {
                   className="pl-10"
                 />
               </div>
-              <Button variant="outline" className="gap-2">
-                <Filter className="h-4 w-4" />
-                Filter
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="gap-2">
+                    <Filter className="h-4 w-4" />
+                    {statusFilter === 'all' ? 'All Status' : statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem onClick={() => setStatusFilter('all')}>All Status</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setStatusFilter('active')}>Active</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setStatusFilter('pending')}>Pending</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setStatusFilter('suspended')}>Suspended</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </CardContent>
         </Card>
@@ -295,27 +319,38 @@ export default function SocietiesPage() {
                             <Edit className="h-4 w-4 mr-2" />
                             Edit Details
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => {
+                            setViewingSociety(society)
+                            setIsViewDialogOpen(true)
+                          }}>
                             <Eye className="h-4 w-4 mr-2" />
                             View Details
                           </DropdownMenuItem>
                           {society.status !== 'active' && (
-                            <DropdownMenuItem onClick={() => updateStatusMutation.mutate({ id: society.id, status: 'ACTIVE' })}>
+                            <DropdownMenuItem 
+                              onClick={() => updateStatusMutation.mutate({ id: society.id, status: 'ACTIVE' })}
+                              className="text-green-600 focus:text-green-600 focus:bg-green-50"
+                            >
                               <CheckCircle2 className="h-4 w-4 mr-2" />
                               Approve
                             </DropdownMenuItem>
                           )}
                           {society.status !== 'suspended' && (
-                            <DropdownMenuItem className="text-red-600" onClick={() => updateStatusMutation.mutate({ id: society.id, status: 'SUSPENDED' })}>
+                            <DropdownMenuItem 
+                              className="text-orange-600 focus:text-orange-600 focus:bg-orange-50" 
+                              onClick={() => updateStatusMutation.mutate({ id: society.id, status: 'SUSPENDED' })}
+                            >
                               <Ban className="h-4 w-4 mr-2" />
                               Suspend
                             </DropdownMenuItem>
                           )}
-                          <DropdownMenuItem onClick={() => {
-                            if (confirm('Are you sure you want to delete this society? This action cannot be undone.')) {
-                              deleteMutation.mutate(society.id)
-                            }
-                          }} className="text-red-100 bg-red-600 hover:bg-red-700 focus:bg-red-700">
+                          <DropdownMenuItem 
+                            onClick={() => {
+                              setDeletingId(society.id)
+                              setIsDeleteDialogOpen(true)
+                            }} 
+                            className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                          >
                             <Trash2 className="h-4 w-4 mr-2" />
                             Delete Society
                           </DropdownMenuItem>
@@ -416,6 +451,100 @@ export default function SocietiesPage() {
                 disabled={updateSocietyMutation.isPending}
               >
                 {updateSocietyMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        {/* View Dialog */}
+        <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Society Detailed Report</DialogTitle>
+            </DialogHeader>
+            {viewingSociety && (
+              <div className="space-y-6 py-4">
+                <div className="flex items-center gap-4 border-b pb-4">
+                  <div className="p-3 bg-purple-100 rounded-xl">
+                    <Building2 className="h-8 w-8 text-purple-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold">{viewingSociety.name}</h2>
+                    <p className="text-gray-500">ID: {viewingSociety.code}</p>
+                  </div>
+                  <div className="ml-auto">
+                    {getStatusBadge(viewingSociety.status)}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Location</p>
+                      <p className="mt-1 flex items-center gap-1">
+                        <MapPin className="h-4 w-4 text-gray-400" />
+                        {viewingSociety.address || 'N/A'}
+                      </p>
+                      <p className="text-sm text-gray-600 ml-5">{viewingSociety.city}, {viewingSociety.state} - {viewingSociety.pincode}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Subscription</p>
+                      <div className="mt-1 flex items-center gap-2">
+                        {getPlanBadge(viewingSociety.subscriptionPlan)}
+                        <span className="text-sm text-gray-600">Joined {new Date(viewingSociety.createdAt).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Admin Contact</p>
+                      <p className="mt-1 font-medium">{viewingSociety.admin.name}</p>
+                      <p className="text-sm text-gray-600">{viewingSociety.admin.email}</p>
+                      <p className="text-sm text-gray-600">{viewingSociety.admin.phone || 'No phone provided'}</p>
+                    </div>
+                    <div className="flex gap-4">
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Units</p>
+                        <p className="text-lg font-bold">{viewingSociety.unitsCount} / {viewingSociety.expectedUnits}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Users</p>
+                        <p className="text-lg font-bold">{viewingSociety.usersCount}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button onClick={() => setIsViewDialogOpen(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle>Delete Society?</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-gray-600">
+                This will permanently delete the society and all related data (users, units, billing). This action cannot be undone.
+              </p>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Cancel</Button>
+              <Button 
+                variant="destructive" 
+                onClick={() => {
+                  if (deletingId) {
+                    deleteMutation.mutate(deletingId)
+                    setIsDeleteDialogOpen(false)
+                  }
+                }}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? 'Deleting...' : 'Delete Permanently'}
               </Button>
             </DialogFooter>
           </DialogContent>

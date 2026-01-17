@@ -1,6 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '@/lib/api'
+import { toast } from 'react-hot-toast'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import {
@@ -64,7 +67,7 @@ const itemVariants = {
 }
 
 export default function SettingsPage() {
-  const { user, logout } = useAuthStore()
+  const { user, logout, updateUser } = useAuthStore()
   const { theme, setTheme } = useTheme()
   const [notifications, setNotifications] = useState({
     email: true,
@@ -75,10 +78,94 @@ export default function SettingsPage() {
   const [showSuccess, setShowSuccess] = useState<string | null>(null)
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
+  const queryClient = useQueryClient()
+  
+  // Profile Form State
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    password: ''
+  })
+
+  // Fetch fresh user data
+  const { data: profileUser } = useQuery({
+    queryKey: ['user-profile'],
+    queryFn: async () => {
+      try {
+        const res = await api.get('/auth/me')
+        return res.data
+      } catch (err) {
+        return null
+      }
+    }
+  })
+
+  useEffect(() => {
+    if (profileUser) {
+      setFormData(prev => ({
+        ...prev,
+        name: profileUser.name || '',
+        email: profileUser.email || '',
+        phone: profileUser.phone || '',
+        password: ''
+      }))
+    } else if (user) {
+      setFormData(prev => ({
+        ...prev,
+        name: user.name || '',
+        email: user.email || '',
+      }))
+    }
+  }, [profileUser, user])
 
   const showNotification = (message: string) => {
     setShowSuccess(message)
     setTimeout(() => setShowSuccess(null), 3000)
+  }
+
+  const updateProfileMutation = useMutation({
+    mutationFn: async (data: any) => {
+      console.log('Sending update data:', data)
+      const response = await api.put('/auth/profile', data)
+      return response.data
+    },
+    onSuccess: (updatedUser) => {
+      console.log('Update success:', updatedUser)
+      showNotification('Profile updated successfully!')
+      setFormData(prev => ({ ...prev, password: '' }))
+      updateUser(updatedUser)
+      queryClient.invalidateQueries({ queryKey: ['user-profile'] })
+      queryClient.invalidateQueries({ queryKey: ['current-user'] })
+    },
+    onError: (error: any) => {
+      console.error('Update failed:', error)
+      toast.error(error.response?.data?.error || 'Failed to update profile')
+    }
+  })
+
+  const handleProfileSave = () => {
+    console.log('Save button clicked')
+    updateProfileMutation.mutate(formData)
+  }
+
+  const handleReset = () => {
+    console.log('Reset button clicked')
+    if (profileUser) {
+        setFormData({
+            name: profileUser.name || '',
+            email: profileUser.email || '',
+            phone: profileUser.phone || '',
+            password: ''
+         })
+    } else {
+        setFormData({
+            name: user?.name || '',
+            email: user?.email || '',
+            phone: user?.phone || '',
+            password: ''
+         })
+    }
   }
 
   const handleSave = () => {
@@ -90,8 +177,37 @@ export default function SettingsPage() {
     showNotification('Password updated successfully!')
   }
 
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isUploading, setIsUploading] = useState(false)
+
   const handlePhotoUpload = () => {
-    showNotification('Photo upload feature coming soon!')
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setIsUploading(true)
+    const formData = new FormData()
+    formData.append('photo', file)
+
+    try {
+      const response = await api.post('/auth/profile/photo', formData)
+      
+      showNotification('Photo uploaded successfully!')
+      queryClient.invalidateQueries({ queryKey: ['user-profile'] })
+      
+      // Update store user if needed
+      if (user) {
+        updateUser({ ...user, avatar: response.data.profileImg })
+      }
+    } catch (error: any) {
+      console.error('Upload failed:', error)
+      toast.error(error.response?.data?.error || 'Failed to upload photo')
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   const handleLogout = () => {
@@ -192,8 +308,15 @@ export default function SettingsPage() {
                 {/* Avatar Section */}
                 <div className="flex items-center gap-6">
                   <div className="relative">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                    />
                     <Avatar className="h-24 w-24 ring-4 ring-teal-100">
-                      <AvatarImage src={user?.avatar} />
+                      <AvatarImage src={profileUser?.profileImg || user?.avatar} />
                       <AvatarFallback className="bg-gradient-to-br from-teal-500 to-cyan-500 text-white text-2xl">
                         {user?.name?.charAt(0)}
                       </AvatarFallback>
@@ -202,8 +325,13 @@ export default function SettingsPage() {
                       size="icon"
                       className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-teal-600 hover:bg-teal-700 shadow-lg"
                       onClick={handlePhotoUpload}
+                      disabled={isUploading}
                     >
-                      <Camera className="h-4 w-4" />
+                      {isUploading ? (
+                        <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Camera className="h-4 w-4" />
+                      )}
                     </Button>
                   </div>
                   <div>
@@ -221,29 +349,59 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label>Full Name</Label>
-                    <Input defaultValue={user?.name} placeholder="Enter your name" />
+                    <Input 
+                        value={formData.name} 
+                        onChange={(e) => setFormData({...formData, name: e.target.value})} 
+                        placeholder="Enter your name" 
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Email Address</Label>
-                    <Input defaultValue={user?.email} type="email" placeholder="Enter email" />
+                    <Input 
+                        value={formData.email} 
+                        onChange={(e) => setFormData({...formData, email: e.target.value})} 
+                        type="email" 
+                        placeholder="Enter email"
+                        disabled 
+                    />
+                    <p className="text-xs text-muted-foreground">Email cannot be changed directly.</p>
                   </div>
                   <div className="space-y-2">
                     <Label>Phone Number</Label>
-                    <Input defaultValue="+91 98765 43210" placeholder="Enter phone" />
+                    <Input 
+                        value={formData.phone} 
+                        onChange={(e) => setFormData({...formData, phone: e.target.value})} 
+                        placeholder="Enter phone" 
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Unit Number</Label>
                     <Input defaultValue="A-101" placeholder="Your unit" disabled={!isAdmin} />
                   </div>
+                  <div className="space-y-2 col-span-1 md:col-span-2 border-t pt-4 mt-2">
+                    <Label className="text-base font-semibold text-gray-900 mb-2 block">Change Password</Label>
+                    <div className="relative">
+                        <Key className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                        <Input 
+                            type="password"
+                            value={formData.password}
+                            onChange={(e) => setFormData({...formData, password: e.target.value})}
+                            placeholder="Type new password to update (optional)"
+                            className="pl-10"
+                        />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">Leave empty if you don't want to change password.</p>
+                  </div>
                 </div>
 
                 <div className="flex justify-end gap-3">
-                  <Button variant="outline">Cancel</Button>
+                  <Button variant="outline" onClick={handleReset}>Reset</Button>
                   <Button
                     className="bg-gradient-to-r from-teal-500 to-cyan-500"
-                    onClick={handleSave}
+                    onClick={handleProfileSave}
+                    disabled={updateProfileMutation.isPending}
                   >
-                    Save Changes
+                    {updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
                   </Button>
                 </div>
               </CardContent>

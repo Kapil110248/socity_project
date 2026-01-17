@@ -33,8 +33,17 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
+      partialize: (state) => ({
+        user: state.user,
+        token: state.token,
+        isAuthenticated: state.isAuthenticated,
+      }),
       onRehydrateStorage: (state) => {
-        return () => state.setHasHydrated(true)
+        return (hydratedState, error) => {
+          if (!error && hydratedState) {
+            hydratedState.setHasHydrated(true)
+          }
+        }
       },
     }
   )

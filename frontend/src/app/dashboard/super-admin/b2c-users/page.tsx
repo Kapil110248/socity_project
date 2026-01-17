@@ -18,7 +18,8 @@ import {
     Plus,
     Copy,
     Eye,
-    EyeOff
+    EyeOff,
+    Trash2
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -66,6 +67,14 @@ export default function SuperAdminB2CUsers() {
         }
     })
 
+    const { data: stats = { totalUsers: 0, activeScans: 0, totalBookings: 0 } } = useQuery({
+        queryKey: ['b2c-stats'],
+        queryFn: async () => {
+            const response = await api.get('/auth/b2c-stats')
+            return response.data
+        }
+    })
+
     const addUserMutation = useMutation({
         mutationFn: async (userData: any) => {
             const response = await api.post('/auth/register', { 
@@ -78,7 +87,7 @@ export default function SuperAdminB2CUsers() {
             queryClient.invalidateQueries({ queryKey: ['b2c-users'] })
             setCreatedCredentials({ 
                 email: data.user.email, 
-                password: newUser.password || 'As provided' 
+                password: data.user.password 
             })
             setIsAddDialogOpen(false)
             setNewUser({ name: '', email: '', phone: '', password: '' })
@@ -86,6 +95,50 @@ export default function SuperAdminB2CUsers() {
         },
         onError: (error: any) => {
             toast.error(error.response?.data?.error || 'Failed to create user')
+        }
+    })
+
+    const updateStatusMutation = useMutation({
+        mutationFn: async ({ id, status }: { id: number, status: string }) => {
+            const response = await api.patch(`/auth/${id}/status`, { status })
+            return response.data
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['b2c-users'] })
+            toast.success('User status updated')
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.error || 'Failed to update status')
+        }
+    })
+
+    const deleteUserMutation = useMutation({
+        mutationFn: async (id: number) => {
+            if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) return
+            const response = await api.delete(`/auth/${id}`)
+            return response.data
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['b2c-users'] })
+            toast.success('User deleted successfully')
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.error || 'Failed to delete user')
+        }
+    })
+
+    const resetBarcodesMutation = useMutation({
+        mutationFn: async (phone: string) => {
+            if (!confirm(`Are you sure you want to reset all barcodes for ${phone}?`)) return
+            const response = await api.post('/emergency/barcodes/reset', { phone })
+            return response.data
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['b2c-users'] })
+            toast.success('Barcodes reset successfully')
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.error || 'Failed to reset barcodes')
         }
     })
 
@@ -138,15 +191,15 @@ export default function SuperAdminB2CUsers() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="p-6 border-0 shadow-sm bg-white rounded-3xl ring-1 ring-black/5">
                     <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Total B2C Users</p>
-                    <p className="text-3xl font-black text-gray-900">{users.length}</p>
+                    <p className="text-3xl font-black text-gray-900">{stats.totalUsers}</p>
                 </Card>
                 <Card className="p-6 border-0 shadow-sm bg-white rounded-3xl ring-1 ring-black/5">
                     <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Active Scans (Daily)</p>
-                    <p className="text-3xl font-black text-teal-600">42</p>
+                    <p className="text-3xl font-black text-teal-600">{stats.activeScans}</p>
                 </Card>
                 <Card className="p-6 border-0 shadow-sm bg-white rounded-3xl ring-1 ring-black/5">
                     <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Total Bookings</p>
-                    <p className="text-3xl font-black text-blue-600">128</p>
+                    <p className="text-3xl font-black text-blue-600">{stats.totalBookings}</p>
                 </Card>
             </div>
 
@@ -263,14 +316,29 @@ export default function SuperAdminB2CUsers() {
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-2xl border-0 ring-1 ring-black/5">
-                                                <DropdownMenuItem className="rounded-xl font-bold text-xs uppercase p-3">
+                                                <DropdownMenuItem 
+                                                    className="rounded-xl font-bold text-xs uppercase p-3"
+                                                    onClick={() => window.location.href = `/dashboard/super-admin/b2c-users/activity?id=${user.id}`}
+                                                >
                                                     <ExternalLink className="h-4 w-4 mr-2 text-blue-600" /> View Activity
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem className="rounded-xl font-bold text-xs uppercase p-3">
+                                                <DropdownMenuItem 
+                                                    className="rounded-xl font-bold text-xs uppercase p-3"
+                                                    onClick={() => resetBarcodesMutation.mutate(user.phone)}
+                                                >
                                                     <Shield className="h-4 w-4 mr-2 text-[#1e3a5f]" /> Reset Barcodes
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem className="rounded-xl font-bold text-xs uppercase p-3 text-red-600 focus:text-red-600">
-                                                    <Ban className="h-4 w-4 mr-2" /> Suspend Account
+                                                <DropdownMenuItem 
+                                                    className={`rounded-xl font-bold text-xs uppercase p-3 ${user.status === 'ACTIVE' ? 'text-orange-600 focus:text-orange-600' : 'text-green-600 focus:text-green-600'}`}
+                                                    onClick={() => updateStatusMutation.mutate({ id: user.id, status: user.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE' })}
+                                                >
+                                                    <Ban className="h-4 w-4 mr-2" /> {user.status === 'ACTIVE' ? 'Suspend Account' : 'Activate Account'}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem 
+                                                    className="rounded-xl font-bold text-xs uppercase p-3 text-red-600 focus:text-red-600"
+                                                    onClick={() => deleteUserMutation.mutate(user.id)}
+                                                >
+                                                    <Trash2 className="h-4 w-4 mr-2" /> Delete Account
                                                 </DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>

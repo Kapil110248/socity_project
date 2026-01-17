@@ -34,9 +34,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { RoleGuard } from '@/components/auth/role-guard'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 
 import { toast } from 'react-hot-toast'
@@ -44,11 +51,22 @@ import { toast } from 'react-hot-toast'
 export default function InvoicesPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null)
+  const queryClient = useQueryClient()
 
-  const { data: invoices = [], isLoading, refetch } = useQuery<any[]>({
+  const { data: invoices = [], isLoading } = useQuery<any[]>({
     queryKey: ['platform-invoices'],
     queryFn: async () => {
       const response = await api.get('/platform-invoices')
+      return response.data
+    }
+  })
+
+  // Fetch Stats from API
+  const { data: apiStats } = useQuery({
+    queryKey: ['platform-invoices-stats'],
+    queryFn: async () => {
+      const response = await api.get('/platform-invoices/stats')
       return response.data
     }
   })
@@ -57,35 +75,145 @@ export default function InvoicesPage() {
     try {
       await api.patch(`/platform-invoices/${id}/status`, { status })
       toast.success(`Invoice marked as ${status}`)
-      refetch()
+      queryClient.invalidateQueries({ queryKey: ['platform-invoices'] })
+      queryClient.invalidateQueries({ queryKey: ['platform-invoices-stats'] })
     } catch (error) {
       toast.error('Failed to update status')
     }
   }
 
   const generateInvoices = async () => {
-    toast.loading('Generating invoices...')
+    const t = toast.loading('Generating invoices for all active societies...')
     try {
-      // Logic for generating invoices for all active societies
-      // This is a placeholder for a real batch generation API
-      await api.post('/platform-invoices', {
-        societyId: invoices[0]?.societyId || 1, // Fallback for demo
-        amount: 25000,
-        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        invoiceNo: `INV-${Date.now()}`
-      })
-      toast.dismiss()
-      toast.success('Invoices generated successfully')
-      refetch()
-    } catch (error) {
-      toast.dismiss()
-      toast.error('Failed to generate invoices')
+      const response = await api.post('/platform-invoices/generate')
+      toast.dismiss(t)
+      toast.success(response.data.message || 'Invoices generated successfully')
+      queryClient.invalidateQueries({ queryKey: ['platform-invoices'] })
+      queryClient.invalidateQueries({ queryKey: ['platform-invoices-stats'] })
+    } catch (error: any) {
+      toast.dismiss(t)
+      toast.error(error.response?.data?.error || 'Failed to generate invoices')
     }
   }
 
   const exportInvoices = () => {
-    toast.success('Exporting invoices to CSV...')
-    // Mock export logic
+    if (invoices.length === 0) return toast.error('No invoices to export')
+    
+    // Create CSV content with proper escaping
+    const headers = ['Invoice No', 'Society', 'Amount', 'Status', 'Issue Date', 'Due Date']
+    const rows = invoices.map(inv => [
+      inv.invoiceNo,
+      `"${(inv.societyName || '').replace(/"/g, '""')}"`,
+      inv.amountRaw || 0,
+      inv.status,
+      new Date(inv.issueDate).toLocaleDateString(),
+      new Date(inv.dueDate).toLocaleDateString()
+    ])
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(r => r.join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `platform_invoices_${new Date().toISOString().split('T')[0]}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    
+    toast.success('CSV Exported Successfully')
+  }
+
+  const downloadInvoice = (invoice: any) => {
+    const html = `
+      <html>
+        <head>
+          <title>Invoice - ${invoice.invoiceNo}</title>
+          <style>
+            body { font-family: sans-serif; padding: 40px; color: #333; }
+            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #eee; padding-bottom: 20px; }
+            .invoice-title { font-size: 24px; font-weight: bold; color: #7c3aed; }
+            .details { margin-top: 30px; display: grid; grid-template-cols: 1fr 1fr; gap: 40px; }
+            .section-title { font-size: 14px; color: #666; text-transform: uppercase; margin-bottom: 5px; }
+            .table { width: 100%; border-collapse: collapse; margin-top: 40px; }
+            .table th { text-align: left; background: #f9fafb; padding: 12px; border-bottom: 1px solid #eee; }
+            .table td { padding: 12px; border-bottom: 1px solid #eee; }
+            .total-row { font-weight: bold; background: #f9fafb; }
+            .footer { margin-top: 50px; text-align: center; color: #999; font-size: 12px; }
+            @media print { .no-print { display: none; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div class="invoice-title">IGATESECURITY</div>
+              <p>Platform Management System</p>
+            </div>
+            <div style="text-align: right">
+              <h2 style="margin: 0">INVOICE</h2>
+              <p style="font-family: monospace; font-weight: bold;">#${invoice.invoiceNo}</p>
+            </div>
+          </div>
+
+          <div class="details">
+            <div style="display: inline-block; width: 45%;">
+              <div class="section-title">Bill To:</div>
+              <div style="font-weight: bold; font-size: 18px;">${invoice.societyName}</div>
+              <div>${invoice.society?.address || ''}</div>
+              <div>${invoice.society?.city || ''}, ${invoice.society?.state || ''} ${invoice.society?.pincode || ''}</div>
+            </div>
+            <div style="display: inline-block; width: 45%; text-align: right; vertical-align: top;">
+              <div class="section-title">Invoice Date:</div>
+              <div style="font-weight: bold;">${new Date(invoice.issueDate).toLocaleDateString()}</div>
+              <div class="section-title" style="margin-top: 15px;">Due Date:</div>
+              <div style="font-weight: bold; color: ${invoice.status === 'OVERDUE' ? 'red' : 'inherit'}">${new Date(invoice.dueDate).toLocaleDateString()}</div>
+              <div class="section-title" style="margin-top: 15px;">Status:</div>
+              <div style="font-weight: bold;">${invoice.status}</div>
+            </div>
+          </div>
+
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th style="text-align: right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Platform Subscription Fee - ${invoice.society?.subscriptionPlan || 'STANDARD'}</td>
+                <td style="text-align: right">${invoice.amount}</td>
+              </tr>
+              <tr class="total-row">
+                <td>Total Amount Due</td>
+                <td style="text-align: right; color: #7c3aed;">${invoice.amount}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="footer">
+            <p>This is a computer generated invoice and does not require a physical signature.</p>
+            <p>Thank you for choosing IGATESECURITY!</p>
+          </div>
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+      </html>
+    `;
+
+    const blob = new Blob([html], { type: 'text/html' })
+    const url = URL.createObjectURL(blob)
+    const win = window.open(url, '_blank')
+    if (win) {
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } else {
+      toast.error('Please allow popups to download/print the invoice')
+    }
   }
 
   const filteredInvoices = invoices.filter((inv) => {
@@ -125,10 +253,10 @@ export default function InvoicesPage() {
   }
 
   const stats = {
-    total: invoices.length,
-    paid: invoices.filter((i) => i.status === 'PAID').length,
-    pending: invoices.filter((i) => i.status === 'PENDING').length,
-    overdue: invoices.filter((i) => i.status === 'OVERDUE').length,
+    total: apiStats?.total ?? 0,
+    paid: apiStats?.paid ?? 0,
+    pending: apiStats?.pending ?? 0,
+    overdue: apiStats?.overdue ?? 0,
   }
 
   return (
@@ -276,45 +404,132 @@ export default function InvoicesPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredInvoices.map((inv) => (
-                    <TableRow key={inv.id}>
-                      <TableCell className="font-mono font-medium">{inv.invoiceNo}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4 text-gray-400" />
-                          {inv.societyName}
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-medium">{inv.amount}</TableCell>
-                      <TableCell>{getStatusBadge(inv.status)}</TableCell>
-                      <TableCell className="text-sm text-gray-500">
-                        {new Date(inv.issueDate).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-sm text-gray-500">
-                        {new Date(inv.dueDate).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => toast.success('Viewing invoice details...')}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => toast.success('Downloading invoice...')}>
-                            <Download className="h-4 w-4" />
-                          </Button>
-                          {inv.status !== 'PAID' && (
-                            <Button variant="ghost" size="icon" onClick={() => updateStatusMutation(inv.id, 'PAID')}>
-                              <Send className="h-4 w-4" />
+                    filteredInvoices.map((inv) => (
+                      <TableRow key={inv.id}>
+                        <TableCell className="font-mono font-medium">{inv.invoiceNo}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4 text-gray-400" />
+                            {inv.societyName}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-medium">{inv.amount}</TableCell>
+                        <TableCell>{getStatusBadge(inv.status)}</TableCell>
+                        <TableCell className="text-sm text-gray-500">
+                          {new Date(inv.issueDate).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-500">
+                          {new Date(inv.dueDate).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => setSelectedInvoice(inv)}
+                              title="View Invoice"
+                            >
+                              <Eye className="h-4 w-4" />
                             </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => downloadInvoice(inv)}
+                              title="Download/Print PDF"
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                            {inv.status !== 'PAID' && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                onClick={() => {
+                                  if (confirm('Mark this invoice as PAID?')) {
+                                    updateStatusMutation(inv.id, 'PAID')
+                                  }
+                                }}
+                                title="Mark as Paid"
+                              >
+                                <CheckCircle className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* View Invoice Modal */}
+          <Dialog open={!!selectedInvoice} onOpenChange={(open) => !open && setSelectedInvoice(null)}>
+            <DialogContent className="sm:max-w-[600px]">
+              <DialogHeader>
+                <DialogTitle>Invoice Details</DialogTitle>
+                <DialogDescription>
+                  Detailed view of invoice {selectedInvoice?.invoiceNo}
+                </DialogDescription>
+              </DialogHeader>
+              {selectedInvoice && (
+                <div className="space-y-6 py-4">
+                  <div className="flex justify-between border-b pb-4">
+                    <div>
+                      <p className="text-sm text-gray-500">Invoice To</p>
+                      <p className="text-lg font-bold">{selectedInvoice.societyName}</p>
+                      <p className="text-sm text-gray-500">{selectedInvoice.society?.address || 'N/A'}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-gray-500">Invoice No</p>
+                      <p className="text-lg font-mono font-bold">{selectedInvoice.invoiceNo}</p>
+                      <div className="mt-1">{getStatusBadge(selectedInvoice.status)}</div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500">Issue Date</p>
+                      <p className="font-medium">{new Date(selectedInvoice.issueDate).toLocaleDateString()}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-gray-500">Due Date</p>
+                      <p className="font-medium text-red-600">{new Date(selectedInvoice.dueDate).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gray-50">
+                          <TableHead>Description</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow>
+                          <TableCell>Platform Subscription Fee ({selectedInvoice.society?.subscriptionPlan || 'Default'})</TableCell>
+                          <TableCell className="text-right font-medium">{selectedInvoice.amount}</TableCell>
+                        </TableRow>
+                        <TableRow className="bg-gray-50 font-bold">
+                          <TableCell>Total Amount</TableCell>
+                          <TableCell className="text-right text-purple-600">{selectedInvoice.amount}</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {selectedInvoice.status === 'PAID' && (
+                    <div className="p-3 bg-green-50 text-green-700 rounded-lg text-sm flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4" />
+                      Paid on {new Date(selectedInvoice.paidDate).toLocaleString()}
+                    </div>
+                  )}
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
       </motion.div>
     </RoleGuard>
   )

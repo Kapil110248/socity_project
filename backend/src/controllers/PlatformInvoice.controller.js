@@ -10,6 +10,7 @@ class PlatformInvoiceController {
       const formattedInvoices = invoices.map(inv => ({
         ...inv,
         societyName: inv.society.name,
+        amountRaw: inv.amount,
         amount: `₹${inv.amount.toLocaleString()}`
       }));
       res.json(formattedInvoices);
@@ -36,71 +37,54 @@ class PlatformInvoiceController {
     }
   }
 
-  static async getStats(req, res) {
+  static async bulkCreateInvoices(req, res) {
     try {
-      const totalRevenue = await prisma.platformInvoice.aggregate({
-        where: { status: 'PAID' },
-        _sum: { amount: true }
+      const activeSocieties = await prisma.society.findMany({
+        where: { status: 'ACTIVE' }
       });
 
-      const invoicesByStatus = await prisma.platformInvoice.groupBy({
-        by: ['status'],
-        _count: { id: true },
-        _sum: { amount: true }
-      });
+      const planPrices = {
+        BASIC: 10000,
+        PROFESSIONAL: 20000,
+        ENTERPRISE: 75000
+      };
 
-      // Monthly revenue trend (last 12 months)
-      const twelveMonthsAgo = new Date();
-      twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
-      twelveMonthsAgo.setDate(1);
-
-      const monthlyTrend = await prisma.platformInvoice.findMany({
-        where: {
-          status: 'PAID',
-          paidDate: { gte: twelveMonthsAgo }
-        },
-        select: {
-          amount: true,
-          paidDate: true
-        }
-      });
-
-      // Simple grouping for trend (could be more robust)
-      const trend = {};
-      monthlyTrend.forEach(inv => {
-        const month = inv.paidDate.toLocaleString('default', { month: 'short' });
-        trend[month] = (trend[month] || 0) + inv.amount;
-      });
-
-      // Top societies by revenue
-      const topSocietiesData = await prisma.platformInvoice.groupBy({
-        by: ['societyId'],
-        where: { status: 'PAID' },
-        _sum: { amount: true },
-        orderBy: {
-          _sum: {
-            amount: 'desc'
-          }
-        },
-        take: 5
-      });
-
-      const topSocieties = await Promise.all(
-        topSocietiesData.map(async (item) => {
-          const society = await prisma.society.findUnique({ where: { id: item.societyId } });
-          return {
-            name: society?.name || 'Unknown',
-            revenue: `₹${(item._sum.amount || 0).toLocaleString()}`,
-            growth: '+0%'
-          };
+      const createdInvoices = await Promise.all(
+        activeSocieties.map(async (society) => {
+          const amount = planPrices[society.subscriptionPlan] || 10000;
+          return prisma.platformInvoice.create({
+            data: {
+              societyId: society.id,
+              amount: amount,
+              dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+              invoiceNo: `INV-${society.id}-${Date.now().toString().slice(-6)}`,
+              status: 'PENDING'
+            }
+          });
         })
       );
 
+      res.status(201).json({ 
+        message: `${createdInvoices.length} invoices generated successfully`,
+        count: createdInvoices.length 
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async getStats(req, res) {
+    try {
+      const totalInvoices = await prisma.platformInvoice.count();
+      const paidInvoices = await prisma.platformInvoice.count({ where: { status: 'PAID' } });
+      const pendingInvoices = await prisma.platformInvoice.count({ where: { status: 'PENDING' } });
+      const overdueInvoices = await prisma.platformInvoice.count({ where: { status: 'OVERDUE' } });
+
       res.json({
-        totalRevenue: totalRevenue._sum.amount || 0,
-        invoicesByStatus,
-        trend,
-        topSocieties
+        total: totalInvoices,
+        paid: paidInvoices,
+        pending: pendingInvoices,
+        overdue: overdueInvoices
       });
     } catch (error) {
       res.status(500).json({ error: error.message });

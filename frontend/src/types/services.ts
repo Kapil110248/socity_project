@@ -69,6 +69,11 @@ export interface ServiceComplaint {
     serviceName: string
     source: 'society' | 'resident' | 'individual'
     reportedBy: string
+    reportedByOriginal?: {
+        name: string
+        email: string
+        role: string
+    }
     reportedById?: string
     unit?: string // Optional, for residents
     contactPhone?: string

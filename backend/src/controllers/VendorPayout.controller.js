@@ -28,6 +28,10 @@ class VendorPayoutController {
         date
       } = req.body;
 
+      if (!vendorId || !dealValue) {
+        return res.status(400).json({ error: 'Vendor and Deal Value are required' });
+      }
+
       const payout = await prisma.vendorPayout.create({
         data: {
           vendorId: parseInt(vendorId),
@@ -37,13 +41,14 @@ class VendorPayoutController {
           dealValue: parseFloat(dealValue),
           commissionPercent: parseFloat(commissionPercent),
           payableAmount: parseFloat(payableAmount),
-          status: status || 'PENDING',
+          status: status?.toUpperCase() || 'PENDING',
           remarks,
           date: date ? new Date(date) : new Date()
         }
       });
       res.status(201).json(payout);
     } catch (error) {
+      console.error('Create Payout Error:', error);
       res.status(500).json({ error: error.message });
     }
   }
@@ -52,11 +57,11 @@ class VendorPayoutController {
     try {
       const payouts = await prisma.vendorPayout.findMany();
       
-      const totalSocietyRevenue = payouts.reduce((sum, p) => sum + (p.dealValue || 0), 0);
-      const commissionPayable = payouts.reduce((sum, p) => sum + (p.payableAmount || 0), 0);
+      const totalSocietyRevenue = payouts.reduce((sum, p) => sum + (Number(p.dealValue) || 0), 0);
+      const commissionPayable = payouts.reduce((sum, p) => sum + (Number(p.payableAmount) || 0), 0);
       const pendingPayouts = payouts
         .filter(p => p.status === 'PENDING')
-        .reduce((sum, p) => sum + (p.payableAmount || 0), 0);
+        .reduce((sum, p) => sum + (Number(p.payableAmount) || 0), 0);
 
       res.json({
         totalSocietyRevenue,
@@ -64,6 +69,7 @@ class VendorPayoutController {
         pendingPayouts
       });
     } catch (error) {
+      console.error('Get Payout Stats Error:', error);
       res.status(500).json({ error: error.message });
     }
   }
