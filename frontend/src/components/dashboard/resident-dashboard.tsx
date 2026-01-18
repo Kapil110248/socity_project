@@ -30,6 +30,9 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import { useQuery } from '@tanstack/react-query'
+import { residentService } from '@/services/resident.service'
+import { Skeleton } from '@/components/ui/skeleton'
 
 // My Unit data - IGATESECURITY style (page 5)
 const myUnitData = {
@@ -136,6 +139,26 @@ export function ResidentDashboard() {
   const router = useRouter()
   const { user } = useAuthStore()
 
+  const { data: dashboardData, isLoading } = useQuery({
+    queryKey: ['residentDashboard'],
+    queryFn: residentService.getDashboardData,
+  })
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-[200px] w-full rounded-2xl" />
+        <Skeleton className="h-[100px] w-full rounded-2xl" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Skeleton className="h-[300px] w-full rounded-2xl" />
+          <Skeleton className="h-[300px] w-full rounded-2xl" />
+        </div>
+      </div>
+    )
+  }
+
+  const { unit, gateUpdates: apiGateUpdates, dues, announcements: apiAnnouncements, buzz: apiBuzz, events: apiEvents } = dashboardData || {}
+
   return (
     <motion.div
       variants={containerVariants}
@@ -176,7 +199,7 @@ export function ResidentDashboard() {
               </div>
               <div>
                 <p className="text-xs text-gray-500">My Dues</p>
-                <p className="text-xl sm:text-2xl font-bold">Rs. {myDues.amount.toLocaleString()}</p>
+                <p className="text-xl sm:text-2xl font-bold">Rs. {dues?.amount?.toLocaleString() || '0'}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -220,7 +243,7 @@ export function ResidentDashboard() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg font-bold text-gray-800">My Unit</CardTitle>
               <Badge variant="outline" className="bg-gray-100 text-gray-700">
-                Unit No : {myUnitData.unitNo}
+                Unit No : {unit?.unitNo || 'N/A'}
               </Badge>
             </div>
           </CardHeader>
@@ -230,21 +253,21 @@ export function ResidentDashboard() {
                 <div className="flex justify-center mb-2">
                   <Users className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500" />
                 </div>
-                <p className="text-xl sm:text-2xl font-bold text-gray-900">{myUnitData.members.toString().padStart(2, '0')}</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">{unit?.members?.toString().padStart(2, '0') || '00'}</p>
                 <p className="text-xs text-gray-500">Members</p>
               </div>
               <div className="bg-pink-50 rounded-xl p-3 sm:p-4 text-center">
                 <div className="flex justify-center mb-2">
                   <Dog className="h-6 w-6 sm:h-8 sm:w-8 text-pink-500" />
                 </div>
-                <p className="text-xl sm:text-2xl font-bold text-gray-900">{myUnitData.pets.toString().padStart(2, '0')}</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">{unit?.pets?.toString().padStart(2, '0') || '00'}</p>
                 <p className="text-xs text-gray-500">Pets</p>
               </div>
               <div className="bg-green-50 rounded-xl p-3 sm:p-4 text-center">
                 <div className="flex justify-center mb-2">
                   <Car className="h-6 w-6 sm:h-8 sm:w-8 text-green-500" />
                 </div>
-                <p className="text-xl sm:text-2xl font-bold text-gray-900">{myUnitData.vehicles.toString().padStart(2, '0')}</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">{unit?.vehicles?.toString().padStart(2, '0') || '00'}</p>
                 <p className="text-xs text-gray-500">Vehicles</p>
               </div>
             </div>
@@ -253,8 +276,8 @@ export function ResidentDashboard() {
             <div className="mt-4 pt-4 border-t">
               <h4 className="font-semibold text-gray-800 mb-3">Gate Updates</h4>
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                {gateUpdates.map((item, index) => {
-                  const Icon = item.icon
+                {apiGateUpdates?.map((item: any, index: number) => {
+                  const Icon = item.type === 'Visitor' ? Users : item.type === 'Helper' ? User : Package
                   return (
                     <div key={index} className={`rounded-xl p-3 ${item.color.split(' ')[0]} text-center`}>
                       <Icon className={`h-5 w-5 mx-auto mb-1 ${item.color.split(' ')[1]}`} />
@@ -270,16 +293,16 @@ export function ResidentDashboard() {
             {/* My Dues Detail */}
             <div className="mt-4 pt-4 border-t">
               <h4 className="font-semibold text-gray-800 mb-3">My Dues</h4>
-              {myDues.penalty > 0 && (
+              {dues?.penalty > 0 && (
                 <div className="bg-red-50 text-red-600 text-xs font-medium px-3 py-1 rounded-full inline-block mb-2">
-                  {myDues.penaltyLabel} Rs. {myDues.penalty}
+                  {dues.penaltyLabel} Rs. {dues.penalty}
                 </div>
               )}
               <div className="bg-red-50 rounded-xl p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">{myDues.title}</p>
-                    <p className="text-2xl font-bold text-gray-900">Rs. {myDues.amount.toLocaleString()}</p>
+                    <p className="text-sm text-gray-600">Maintenance Fee</p>
+                    <p className="text-2xl font-bold text-gray-900">Rs. {dues?.amount?.toLocaleString() || '0'}</p>
                   </div>
                   <Button className="bg-[#1e3a5f] hover:bg-[#2d4a6f] text-white">PAY</Button>
                 </div>
@@ -310,7 +333,7 @@ export function ResidentDashboard() {
           </CardHeader>
           <CardContent>
             <div className="flex gap-4 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-hide">
-              {announcements.map((announcement) => (
+              {apiAnnouncements?.map((announcement: any) => (
                 <div
                   key={announcement.id}
                   className="flex-shrink-0 w-[280px] sm:w-[320px] p-4 rounded-xl border border-gray-100 hover:border-blue-200 transition-colors bg-white"
@@ -324,7 +347,7 @@ export function ResidentDashboard() {
                       </AvatarFallback>
                     </Avatar>
                     <span className="text-xs text-gray-500">{announcement.author}</span>
-                    <span className="text-xs text-gray-400">• {announcement.time}</span>
+                    <span className="text-xs text-gray-400">• {new Date(announcement.time).toLocaleDateString()}</span>
                   </div>
                 </div>
               ))}
@@ -346,7 +369,7 @@ export function ResidentDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {communityBuzz.map((item) => (
+              {apiBuzz?.map((item: any) => (
                 <div
                   key={item.id}
                   className="p-4 rounded-xl border border-gray-100 hover:border-blue-200 transition-colors"
@@ -388,7 +411,7 @@ export function ResidentDashboard() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {upcomingEvents.map((event) => (
+              {apiEvents?.map((event: any) => (
                 <div
                   key={event.id}
                   className="p-4 rounded-xl border border-gray-200 hover:border-teal-300 hover:shadow-md transition-all cursor-pointer"

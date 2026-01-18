@@ -20,6 +20,7 @@ const platformInvoiceRoutes = require('./routes/platform-invoice.routes.js');
 const vendorPayoutRoutes = require('./routes/vendor-payout.routes.js');
 const roleRoutes = require('./routes/role.routes');
 const sessionRoutes = require('./routes/session.routes');
+const residentRoutes = require('./routes/resident.routes');
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use('/api/platform-invoices', platformInvoiceRoutes);
 app.use('/api/vendor-payouts', vendorPayoutRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/sessions', sessionRoutes);
+app.use('/api/resident', residentRoutes);
 
 const PORT = process.env.PORT || 9000;
 

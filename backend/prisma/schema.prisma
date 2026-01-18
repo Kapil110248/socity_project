@@ -104,6 +104,12 @@ model Society {
   amenities   Amenity[]
   parkingSlots ParkingSlot[]
   platformInvoices PlatformInvoice[]
+  parcels     Parcel[]
+  buzzs       CommunityBuzz[]
+  marketplaceItems MarketplaceItem[]
+  guidelines   CommunityGuideline[]
+  sosAlerts   SOSAlert[]
+  serviceInquiries ServiceInquiry[]
 }
 
 model User {
@@ -133,6 +139,13 @@ model User {
   
   bookings    AmenityBooking[]
   comments    ComplaintComment[]
+  buzzs       CommunityBuzz[]
+  communityComments CommunityComment[]
+  
+  sosAlerts   SOSAlert[]
+  emergencyContacts EmergencyContact[]
+  marketplaceItems MarketplaceItem[]
+  serviceInquiries ServiceInquiry[]
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -182,6 +195,9 @@ model Unit {
   floor       Int
   type        String   // 2BHK, 3BHK, Villa
   areaSqFt    Float
+  status      String   @default("OCCUPIED") // OCCUPIED, VACANT, UNDER_MAINTENANCE
+  pets        Int      @default(0)
+  membersCount Int     @default(0)
   
   societyId   Int
   society     Society  @relation(fields: [societyId], references: [id])
@@ -194,6 +210,10 @@ model Unit {
   
   visitors    Visitor[]
   parkingSlots ParkingSlot[]
+  parcels     Parcel[]
+  members     UnitMember[]
+  vehicles    UnitVehicle[]
+  petsList    UnitPet[]
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -335,39 +355,6 @@ model VendorPayout {
   updatedAt         DateTime @updatedAt
 }
 
-model ServiceCategory {
-  id          String   @id // slug e.g. "plumbing"
-  name        String
-  description String   @db.Text
-  icon        String
-  color       String
-  variants    ServiceVariant[]
-}
-
-model ServiceVariant {
-  id          String   @id @default(uuid())
-  name        String
-  price       String
-  description String?  @db.Text
-  categoryId  String
-  category    ServiceCategory @relation(fields: [categoryId], references: [id])
-}
-
-model ServiceInquiry {
-  id           String   @id @default(uuid())
-  residentName String
-  unit         String
-  serviceName  String
-  serviceId    String
-  status       String   @default("pending")
-  vendorName   String?
-  vendorId     String?
-  source       String?  @default("society") // society, resident, individual
-  type         String?  @default("service") // service, individual
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  societyId    Int?
-}
 
 model EmergencyLog {
   id           String   @id @default(uuid())
@@ -409,8 +396,13 @@ model Notice {
 model Amenity {
   id          Int      @id @default(autoincrement())
   name        String
-  description String?
+  type        String   @default("other")
+  description String?  @db.Text
+  capacity    Int      @default(0)
   chargesPerHour Float @default(0)
+  availableDays Json?
+  timings     Json?
+  status      String   @default("available")
   
   societyId   Int
   society     Society  @relation(fields: [societyId], references: [id])
@@ -418,6 +410,7 @@ model Amenity {
   bookings    AmenityBooking[]
   
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model AmenityBooking {
@@ -428,12 +421,15 @@ model AmenityBooking {
   userId      Int
   user        User     @relation(fields: [userId], references: [id])
   
-  startTime   DateTime
-  endTime     DateTime
-  status      String   // CONFIRMED, CANCELLED
+  date        DateTime
+  startTime   String
+  endTime     String
+  purpose     String?
+  status      String   @default("CONFIRMED")
   amountPaid  Float    @default(0)
   
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model SystemSetting {
@@ -464,6 +460,190 @@ model PlatformInvoice {
   dueDate     DateTime
   paidDate    DateTime?
   
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Parcel {
+  id          Int      @id @default(autoincrement())
+  type        String   // Courier, Food, etc.
+  count       Int      @default(1)
+  status      String   @default("YET_TO_COLLECT") // YET_TO_COLLECT, COLLECTED
+  
+  societyId   Int
+  society     Society  @relation(fields: [societyId], references: [id])
+  
+  unitId      Int
+  unit        Unit     @relation(fields: [unitId], references: [id])
+  
+  receivedAt  DateTime @default(now())
+  collectedAt DateTime?
+}
+
+model CommunityBuzz {
+  id          Int      @id @default(autoincrement())
+  type        String   // POLL, ALBUM, POST
+  title       String
+  content     String?  @db.Text
+  
+  authorId    Int
+  author      User     @relation(fields: [authorId], references: [id])
+  
+  societyId   Int
+  society     Society  @relation(fields: [societyId], references: [id])
+  
+  hasResult   Boolean  @default(false)
+  imageUrls   Json?    // For albums
+  
+  likes       Int      @default(0)
+  comments    CommunityComment[]
+  
+  createdAt   DateTime @default(now())
+}
+
+model CommunityComment {
+  id          Int      @id @default(autoincrement())
+  buzzId      Int
+  buzz        CommunityBuzz @relation(fields: [buzzId], references: [id])
+  authorId    Int
+  author      User          @relation(fields: [authorId], references: [id])
+  content     String        @db.Text
+  createdAt   DateTime      @default(now())
+}
+
+model UnitMember {
+  id        Int      @id @default(autoincrement())
+  unitId    Int
+  unit      Unit     @relation(fields: [unitId], references: [id])
+  name      String
+  relation  String   // FAMILY, TENANT, OWNER
+  age       Int?
+  gender    String?
+  phone     String?
+  createdAt DateTime @default(now())
+}
+
+model UnitVehicle {
+  id        Int      @id @default(autoincrement())
+  unitId    Int
+  unit      Unit     @relation(fields: [unitId], references: [id])
+  name      String   // e.g. "BMW X5"
+  number    String
+  type      String   // 4-WHEELER, 2-WHEELER
+  createdAt DateTime @default(now())
+}
+
+model UnitPet {
+  id        Int      @id @default(autoincrement())
+  unitId    Int
+  unit      Unit     @relation(fields: [unitId], references: [id])
+  name      String
+  type      String   // DOG, CAT, etc.
+  breed     String?
+  vaccinationStatus String @default("UP_TO_DATE")
+  lastVaccinationDate DateTime?
+  createdAt DateTime @default(now())
+}
+
+model SOSAlert {
+  id          Int      @id @default(autoincrement())
+  residentId  Int
+  resident    User     @relation(fields: [residentId], references: [id])
+  societyId   Int
+  society     Society  @relation(fields: [societyId], references: [id])
+  type        String   // MEDICAL, FIRE, SECURITY, etc.
+  status      String   @default("ACTIVE") // ACTIVE, RESOLVED
+  location    String?
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+}
+
+model EmergencyContact {
+  id          Int      @id @default(autoincrement())
+  residentId  Int
+  resident    User     @relation(fields: [residentId], references: [id])
+  name        String
+  phone       String
+  category    String   @default("custom")
+  createdAt   DateTime @default(now())
+}
+
+model MarketplaceItem {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String   @db.Text
+  price       Float?
+  originalPrice Float?
+  condition   String?  // New, Like New, Good, Fair
+  type        String   @default("SELL") // SELL, BUY
+  category    String?
+  status      String   @default("AVAILABLE") // AVAILABLE, SOLD, CANCELLED
+  images      Json?
+  views       Int      @default(0)
+  likes       Int      @default(0)
+  
+  ownerId     Int
+  owner       User     @relation(fields: [ownerId], references: [id])
+  societyId   Int
+  society     Society  @relation(fields: [societyId], references: [id])
+  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model CommunityGuideline {
+  id          Int      @id @default(autoincrement())
+  societyId   Int
+  society     Society  @relation(fields: [societyId], references: [id])
+  title       String
+  content     String   @db.Text
+  category    String   // SOCIETY, SECURITY, AMENITIES
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ServiceCategory {
+  id          String   @id
+  name        String
+  description String?
+  icon        String   // Lucide icon name
+  color       String   @default("blue")
+  
+  variants    ServiceVariant[]
+  inquiries   ServiceInquiry[]
+  
+  createdAt   DateTime @default(now())
+}
+
+model ServiceVariant {
+  id          Int      @id @default(autoincrement())
+  categoryId  String
+  category    ServiceCategory @relation(fields: [categoryId], references: [id])
+  name        String
+  price       Float?
+  
+  createdAt   DateTime @default(now())
+}
+
+model ServiceInquiry {
+  id            Int      @id @default(autoincrement())
+  residentId    Int?
+  resident      User?     @relation(fields: [residentId], references: [id])
+  societyId     Int?
+  society       Society?  @relation(fields: [societyId], references: [id])
+  serviceId     String?
+  service       ServiceCategory? @relation(fields: [serviceId], references: [id])
+  
+  serviceName   String?
+  type          String   // BOOKING, CALLBACK
+  status        String   @default("PENDING") // PENDING, CONFIRMED, COMPLETED, CANCELLED
+  
+  preferredDate String?
+  preferredTime String?
+  notes         String?  @db.Text
+  
+  vendorName    String?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

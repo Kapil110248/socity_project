@@ -1,21 +1,20 @@
 'use client'
 
-import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
-import { Post } from '@/types/community'
-import { Heart, MessageCircle, Share2, MoreHorizontal } from 'lucide-react'
-import { cn } from '@/lib/utils/cn'
 import { useState } from 'react'
+import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Heart, MessageCircle, Share2, MoreHorizontal } from 'lucide-react'
+import { Post } from '@/types/community'
 
 interface PostCardProps {
-    post: Post
+    post: any // Using any to match backend response structure
 }
 
 export function PostCard({ post }: PostCardProps) {
     const [liked, setLiked] = useState(false)
-    const [likesCount, setLikesCount] = useState(post.likes)
+    const [likesCount, setLikesCount] = useState(post.likes || 0)
 
     const handleLike = () => {
         setLiked(!liked)
@@ -29,10 +28,15 @@ export function PostCard({ post }: PostCardProps) {
         service: 'bg-purple-100 text-purple-700',
     }
 
+    const unit = post.author.ownedUnits?.[0]
+        ? `${post.author.ownedUnits[0].block}-${post.author.ownedUnits[0].number}`
+        : 'Resident'
+
     return (
         <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center gap-4 p-4 pb-2">
                 <Avatar>
+                    <AvatarImage src={post.author.profileImg} />
                     <AvatarFallback>{post.author.name[0]}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
@@ -43,9 +47,11 @@ export function PostCard({ post }: PostCardProps) {
                         </Button>
                     </div>
                     <p className="text-xs text-muted-foreground flex items-center gap-2">
-                        {post.author.unit} • {new Date(post.createdAt).toLocaleDateString()}
-                        {post.author.role === 'admin' && (
-                            <Badge variant="secondary" className="h-5 text-[10px] bg-blue-50 text-blue-600">Admin</Badge>
+                        {unit} • {new Date(post.createdAt).toLocaleDateString()}
+                        {post.author.role !== 'resident' && (
+                            <Badge variant="secondary" className="h-5 text-[10px] bg-blue-50 text-blue-600 capitalize">
+                                {post.author.role.replace('_', ' ')}
+                            </Badge>
                         )}
                     </p>
                 </div>
@@ -53,29 +59,32 @@ export function PostCard({ post }: PostCardProps) {
 
             <CardContent className="p-4 pt-2">
                 {post.title && <h3 className="font-bold mb-2">{post.title}</h3>}
-                <Badge className={cn("mb-2 hover:bg-opacity-80", categoryColors[post.type] || categoryColors.general)}>
-                    {post.type.replace('_', ' ')}
-                </Badge>
-                <p className="text-sm text-gray-800 whitespace-pre-wrap">{post.content}</p>
+                <p className="text-sm text-gray-600 whitespace-pre-wrap">{post.content}</p>
+                {post.type && (
+                    <Badge variant="secondary" className={`mt-3 text-[10px] font-medium ${categoryColors[post.type] || categoryColors.general}`}>
+                        {post.type.replace('_', ' ')}
+                    </Badge>
+                )}
             </CardContent>
 
-            <CardFooter className="p-2 border-t flex justify-between">
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleLike}
-                    className={cn("gap-2 hover:text-red-600", liked ? "text-red-500" : "text-gray-500")}
-                >
-                    <Heart className={cn("h-4 w-4", liked && "fill-current")} />
-                    <span className="text-xs">{likesCount} Likes</span>
-                </Button>
-                <Button variant="ghost" size="sm" className="gap-2 text-gray-500 hover:text-blue-600">
-                    <MessageCircle className="h-4 w-4" />
-                    <span className="text-xs">{post.comments.length} Comments</span>
-                </Button>
-                <Button variant="ghost" size="sm" className="gap-2 text-gray-500">
+            <CardFooter className="p-2 pt-0 flex items-center justify-between border-t mt-2">
+                <div className="flex items-center gap-1">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className={`gap-2 h-9 ${liked ? 'text-red-500' : 'text-gray-500'}`}
+                        onClick={handleLike}
+                    >
+                        <Heart className={`h-4 w-4 ${liked ? 'fill-current' : ''}`} />
+                        <span className="text-xs font-medium">{likesCount}</span>
+                    </Button>
+                    <Button variant="ghost" size="sm" className="gap-2 h-9 text-gray-500">
+                        <MessageCircle className="h-4 w-4" />
+                        <span className="text-xs font-medium">{post.comments?.length || 0}</span>
+                    </Button>
+                </div>
+                <Button variant="ghost" size="sm" className="h-9 text-gray-500">
                     <Share2 className="h-4 w-4" />
-                    <span className="text-xs">Share</span>
                 </Button>
             </CardFooter>
         </Card>

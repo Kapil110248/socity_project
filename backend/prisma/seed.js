@@ -49,16 +49,23 @@ async function main() {
   }
 
   // Create some units
+  const resident1User = await prisma.user.findUnique({ where: { email: 'resident1@society.com' } });
+
   await prisma.unit.upsert({
     where: { societyId_block_number: { societyId: society.id, block: 'A', number: '101' } },
-    update: {},
+    update: {
+      ownerId: resident1User ? resident1User.id : undefined,
+      status: 'OCCUPIED'
+    },
     create: {
       block: 'A',
       number: '101',
       floor: 1,
       type: '3BHK',
       areaSqFt: 1500,
-      societyId: society.id
+      societyId: society.id,
+      ownerId: resident1User ? resident1User.id : undefined,
+      status: 'OCCUPIED'
     }
   })
 
@@ -85,9 +92,9 @@ async function main() {
 
   await prisma.serviceVariant.createMany({
     data: [
-      { name: 'General Pest', price: '₹999', categoryId: 'pest_control' },
-      { name: 'Termite Treatment', price: '₹4999', categoryId: 'pest_control' },
-      { name: 'Full Home Clean', price: '₹2999', categoryId: 'cleaning' }
+      { name: 'General Pest', price: 999, categoryId: 'pest_control' },
+      { name: 'Termite Treatment', price: 4999, categoryId: 'pest_control' },
+      { name: 'Full Home Clean', price: 2999, categoryId: 'cleaning' }
     ],
     skipDuplicates: true
   });
@@ -95,39 +102,57 @@ async function main() {
   await prisma.serviceInquiry.createMany({
     data: [
       {
-        residentName: 'John Doe',
-        unit: 'A-101',
         serviceName: 'General Pest',
         serviceId: 'pest_control',
-        status: 'pending',
-        source: 'resident',
-        type: 'service',
+        status: 'PENDING',
+        type: 'BOOKING',
         societyId: society.id
       },
       {
-        residentName: 'Jane Smith',
-        unit: 'B-202',
         serviceName: 'Full Home Clean',
         serviceId: 'cleaning',
-        status: 'booked',
+        status: 'CONFIRMED',
         vendorName: 'Premium Cleaners',
-        source: 'society',
-        type: 'service',
+        type: 'BOOKING',
         societyId: society.id
-      },
-      {
-        residentName: 'Robert Brown',
-        unit: 'C-303',
-        serviceName: 'AC Repair',
-        serviceId: 'repair',
-        status: 'pending',
-        source: 'individual',
-        type: 'individual',
-        societyId: null
       }
     ],
     skipDuplicates: true
   });
+
+  // Create some marketplace items
+  const admin = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
+  if (admin) {
+    await prisma.marketplaceItem.createMany({
+      data: [
+        {
+          title: 'Wooden Dining Table',
+          description: 'Solid teak wood 6-seater dining table in excellent condition.',
+          price: 15000,
+          originalPrice: 25000,
+          condition: 'like_new',
+          type: 'SELL',
+          category: 'furniture',
+          status: 'AVAILABLE',
+          ownerId: admin.id,
+          societyId: society.id,
+        },
+        {
+          title: 'Mountain Bike',
+          description: 'Hero Sprint mountain bike, 21 gears, sparingly used.',
+          price: 8000,
+          originalPrice: 12000,
+          condition: 'good',
+          type: 'SELL',
+          category: 'vehicles',
+          status: 'AVAILABLE',
+          ownerId: admin.id,
+          societyId: society.id,
+        }
+      ],
+      skipDuplicates: true
+    });
+  }
 
   await prisma.emergencyLog.createMany({
     data: [
@@ -145,30 +170,82 @@ async function main() {
     skipDuplicates: true
   });
 
-  // Create pending societies
-  await prisma.society.createMany({
-    data: [
-      {
-        name: 'Palm Gardens',
-        city: 'Chennai',
-        state: 'Tamil Nadu',
-        code: 'PALM1234',
-        status: 'PENDING',
-        subscriptionPlan: 'PROFESSIONAL',
-        address: 'Old Mahabalipuram Rd, Chennai'
-      },
-      {
-        name: 'Metro Heights',
-        city: 'Kolkata',
-        state: 'West Bengal',
-        code: 'METR5678',
-        status: 'PENDING',
-        subscriptionPlan: 'BASIC',
-        address: 'Salt Lake Sector V, Kolkata'
-      }
-    ],
-    skipDuplicates: true
+  // Create Societies
+  await prisma.society.upsert({
+    where: { code: 'PALM1234' },
+    update: {},
+    create: {
+      name: 'Palm Gardens',
+      city: 'Chennai',
+      state: 'Tamil Nadu',
+      code: 'PALM1234',
+      status: 'PENDING',
+      subscriptionPlan: 'PROFESSIONAL',
+      address: 'Old Mahabalipuram Rd, Chennai'
+    }
   });
+
+  // Create Amenities
+  const clubHouse = await prisma.amenity.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      id: 1,
+      name: 'Clubhouse',
+      type: 'hall',
+      description: 'Perfect for parties and social gatherings.',
+      capacity: 100,
+      chargesPerHour: 500,
+      availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      timings: { start: '09:00', end: '22:00' },
+      status: 'available',
+      societyId: society.id
+    }
+  });
+
+  const pool = await prisma.amenity.upsert({
+    where: { id: 2 },
+    update: {},
+    create: {
+      id: 2,
+      name: 'Swimming Pool',
+      type: 'pool',
+      description: 'Olympic size pool.',
+      capacity: 50,
+      chargesPerHour: 0,
+      availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      timings: { start: '06:00', end: '20:00' },
+      status: 'available',
+      societyId: society.id
+    }
+  });
+
+  // Create Amenity Booking for Resident 1
+  const resident1 = await prisma.user.findFirst({ where: { email: 'resident1@society.com' } });
+  if (resident1) {
+    await prisma.amenityBooking.create({
+      data: {
+        userId: resident1.id,
+        amenityId: clubHouse.id,
+        date: new Date(),
+        startTime: '18:00',
+        endTime: '21:00',
+        purpose: 'Birthday Party',
+        amountPaid: 1500,
+        status: 'CONFIRMED'
+      }
+    });
+
+    // Create Emergency Contact
+    await prisma.emergencyContact.create({
+      data: {
+        residentId: resident1.id,
+        name: 'Jane Doe',
+        phone: '9876543211',
+        category: 'Family'
+      }
+    });
+  }
 
   console.log('Seeding completed');
 }

@@ -11,7 +11,11 @@ interface MarketplaceItemCardProps {
     item: MarketplaceItem
 }
 
-export function MarketplaceItemCard({ item }: MarketplaceItemCardProps) {
+export function MarketplaceItemCard({ item }: any) {
+    const owner = item.owner || {}
+    const unit = owner.ownedUnits?.[0] ? `${owner.ownedUnits[0].block}-${owner.ownedUnits[0].number}` : 'No Unit'
+    const isSell = item.type?.toLowerCase() === 'sell'
+
     return (
         <Card className="overflow-hidden hover:shadow-lg transition-shadow border-0 shadow-md flex flex-col h-full">
             <div className="relative h-48 bg-gray-100 flex items-center justify-center">
@@ -20,8 +24,8 @@ export function MarketplaceItemCard({ item }: MarketplaceItemCardProps) {
                 ) : (
                     <ShoppingBag className="h-12 w-12 text-gray-300" />
                 )}
-                <Badge className={`absolute top-3 right-3 ${item.type === 'sell' ? 'bg-green-500' : 'bg-blue-500'}`}>
-                    {item.type === 'sell' ? 'FOR SALE' : 'WANTED'}
+                <Badge className={`absolute top-3 right-3 ${isSell ? 'bg-green-500 hover:bg-green-600' : 'bg-blue-500 hover:bg-blue-600'}`}>
+                    {isSell ? 'FOR SALE' : 'WANTED'}
                 </Badge>
             </div>
 
@@ -33,19 +37,19 @@ export function MarketplaceItemCard({ item }: MarketplaceItemCardProps) {
 
                 <h3 className="font-bold text-lg text-gray-900 line-clamp-1">{item.title}</h3>
                 <p className="text-xl font-bold text-indigo-600 mt-1">
-                    ₹{item.price.toLocaleString()}
-                    <span className="text-xs font-normal text-gray-500 ml-1 capitalize">({item.priceType})</span>
+                    ₹{item.price?.toLocaleString()}
+                    {item.priceType && <span className="text-xs font-normal text-gray-500 ml-1 capitalize">({item.priceType})</span>}
                 </p>
 
                 <p className="text-sm text-gray-600 mt-2 line-clamp-2 min-h-[40px]">{item.description}</p>
 
                 <div className="flex items-center gap-2 mt-4 pt-4 border-t">
                     <Avatar className="h-6 w-6">
-                        <AvatarFallback>{item.seller.name[0]}</AvatarFallback>
+                        <AvatarFallback>{owner.name ? owner.name[0] : 'U'}</AvatarFallback>
                     </Avatar>
                     <div className="text-xs">
-                        <p className="font-medium">{item.seller.name}</p>
-                        <p className="text-gray-500">{item.seller.unit}</p>
+                        <p className="font-medium">{owner.name || 'Unknown Seller'}</p>
+                        <p className="text-gray-500">{unit}</p>
                     </div>
                 </div>
             </CardContent>
@@ -53,7 +57,7 @@ export function MarketplaceItemCard({ item }: MarketplaceItemCardProps) {
             <CardFooter className="p-4 bg-gray-50">
                 <Button className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700">
                     <MessageCircle className="h-4 w-4" />
-                    Chat with Seller
+                    Chat with {isSell ? 'Seller' : 'Buyer'}
                 </Button>
             </CardFooter>
         </Card>
