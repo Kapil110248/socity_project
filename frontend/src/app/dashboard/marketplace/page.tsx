@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
   ShoppingBag,
@@ -17,6 +17,9 @@ import {
   Tag,
   Phone,
   IndianRupee,
+  X,
+  ImageIcon,
+  Trash2,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -187,6 +190,9 @@ export default function MarketplacePage() {
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [isSellOpen, setIsSellOpen] = useState(false)
+  const [selectedImage, setSelectedImage] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [sellForm, setSellForm] = useState({
     title: '',
     description: '',
@@ -214,16 +220,64 @@ export default function MarketplacePage() {
         category: 'Electronics',
         condition: 'Good',
       })
+      setSelectedImage(null)
+      setImagePreview(null)
       toast.success('Item listed successfully!')
     },
     onError: (err: any) => toast.error(err.message || 'Failed to list item')
+  })
+
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) => 
+      residentService.updateMarketItemStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['market-items'] })
+      toast.success('Status updated successfully!')
+    },
+    onError: () => toast.error('Failed to update status')
+  })
+
+  const deleteItemMutation = useMutation({
+    mutationFn: residentService.deleteMarketItem,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['market-items'] })
+      toast.success('Item deleted successfully!')
+    },
+    onError: () => toast.error('Failed to delete item')
   })
 
   const items = marketItems || []
 
   const handleSellSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    createItemMutation.mutate(sellForm)
+    createItemMutation.mutate({
+      ...sellForm,
+      image: selectedImage
+    })
+  }
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Image size should be less than 5MB')
+        return
+      }
+      setSelectedImage(file)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const removeImage = () => {
+    setSelectedImage(null)
+    setImagePreview(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
   }
 
   const formatPrice = (price: number) => {
@@ -352,6 +406,43 @@ export default function MarketplacePage() {
                       onChange={e => setSellForm({ ...sellForm, description: e.target.value })}
                       required
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Image (Optional)</Label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageSelect}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full gap-2"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <ImageIcon className="h-4 w-4" />
+                      {selectedImage ? 'Change Image' : 'Add Image'}
+                    </Button>
+                    {imagePreview && (
+                      <div className="relative inline-block w-full">
+                        <img
+                          src={imagePreview}
+                          alt="Preview"
+                          className="h-32 w-full object-cover rounded-lg border"
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-2 right-2 h-6 w-6 rounded-full"
+                          onClick={removeImage}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                   <DialogFooter>
                     <Button type="button" variant="outline" onClick={() => setIsSellOpen(false)}>Cancel</Button>

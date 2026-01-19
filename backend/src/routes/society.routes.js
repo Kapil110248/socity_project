@@ -18,4 +18,10 @@ router.put('/:id', authenticate, authorize(['SUPER_ADMIN']), SocietyController.u
 router.patch('/:id/status', authenticate, authorize(['SUPER_ADMIN']), SocietyController.updateSocietyStatus);
 router.delete('/:id', authenticate, authorize(['SUPER_ADMIN']), SocietyController.deleteSociety);
 
+// Guidelines Management (Super Admin)
+router.get('/guidelines', authenticate, authorize(['SUPER_ADMIN']), SocietyController.getGuidelines);
+router.post('/guidelines', authenticate, authorize(['SUPER_ADMIN']), SocietyController.createGuideline);
+router.put('/guidelines/:id', authenticate, authorize(['SUPER_ADMIN']), SocietyController.updateGuideline);
+router.delete('/guidelines/:id', authenticate, authorize(['SUPER_ADMIN']), SocietyController.deleteGuideline);
+
 module.exports = router;

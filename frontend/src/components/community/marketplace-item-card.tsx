@@ -6,18 +6,58 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { MarketplaceItem } from '@/types/community'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import { useAuthStore } from '@/lib/stores/auth-store'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { residentService } from '@/services/resident.service'
+import { Trash2 } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 interface MarketplaceItemCardProps {
     item: MarketplaceItem
 }
 
 export function MarketplaceItemCard({ item }: any) {
+    const router = useRouter()
+    const { user } = useAuthStore()
+    const queryClient = useQueryClient()
     const owner = item.owner || {}
     const unit = owner.ownedUnits?.[0] ? `${owner.ownedUnits[0].block}-${owner.ownedUnits[0].number}` : 'No Unit'
-    const isSell = item.type?.toLowerCase() === 'sell'
+    const isSell = item.type?.toUpperCase() === 'SELL'
+    const isOwner = user?.id === owner.id
+
+    const deleteMutation = useMutation({
+        mutationFn: () => residentService.deleteMarketItem(item.id),
+        onSuccess: () => {
+            toast.success('Item deleted successfully')
+            queryClient.invalidateQueries({ queryKey: ['market-items'] })
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.error || 'Failed to delete item')
+        }
+    })
+
+    const handleChatClick = () => {
+        if (owner.id) {
+            router.push(`/dashboard/helpdesk/chat?userId=${owner.id}&itemId=${item.id}&itemTitle=${encodeURIComponent(item.title)}`)
+        } else {
+            toast.error('Unable to start chat. Seller information not available.')
+        }
+    }
 
     return (
-        <Card className="overflow-hidden hover:shadow-lg transition-shadow border-0 shadow-md flex flex-col h-full">
+        <Card className="group overflow-hidden hover:shadow-lg transition-shadow border-0 shadow-md flex flex-col h-full">
             <div className="relative h-48 bg-gray-100 flex items-center justify-center">
                 {item.images && item.images.length > 0 ? (
                     <img src={item.images[0]} alt={item.title} className="w-full h-full object-cover" />
@@ -27,6 +67,37 @@ export function MarketplaceItemCard({ item }: any) {
                 <Badge className={`absolute top-3 right-3 ${isSell ? 'bg-green-500 hover:bg-green-600' : 'bg-blue-500 hover:bg-blue-600'}`}>
                     {isSell ? 'FOR SALE' : 'WANTED'}
                 </Badge>
+                
+                {isOwner && (
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button 
+                                variant="destructive" 
+                                size="icon" 
+                                className="absolute top-3 left-3 h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Delete this item?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    This action cannot be undone. This will permanently delete your marketplace listing.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction 
+                                    onClick={() => deleteMutation.mutate()}
+                                    className="bg-red-600 hover:bg-red-700"
+                                >
+                                    Delete
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                )}
             </div>
 
             <CardContent className="p-4 flex-1">
@@ -55,7 +126,10 @@ export function MarketplaceItemCard({ item }: any) {
             </CardContent>
 
             <CardFooter className="p-4 bg-gray-50">
-                <Button className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700">
+                <Button 
+                    className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700"
+                    onClick={handleChatClick}
+                >
                     <MessageCircle className="h-4 w-4" />
                     Chat with {isSell ? 'Seller' : 'Buyer'}
                 </Button>

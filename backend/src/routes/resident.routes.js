@@ -28,7 +28,9 @@ router.post('/tickets', authenticate, ResidentController.createTicket);
 
 // Marketplace
 router.get('/market/items', authenticate, ResidentController.getMarketItems);
-router.post('/market/items', authenticate, ResidentController.createMarketItem);
+router.post('/market/items', authenticate, upload.single('image'), ResidentController.createMarketItem);
+router.put('/market/items/:id/status', authenticate, ResidentController.updateMarketItemStatus);
+router.delete('/market/items/:id', authenticate, ResidentController.deleteMarketItem);
 
 // Services
 router.get('/services', authenticate, ResidentController.getServices);

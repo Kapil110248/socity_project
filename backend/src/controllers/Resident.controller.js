@@ -398,6 +398,7 @@ class ResidentController {
                 include: {
                     owner: {
                         select: {
+                            id: true,
                             name: true,
                             ownedUnits: {
                                 select: { block: true, number: true },
@@ -405,7 +406,8 @@ class ResidentController {
                             }
                         }
                     }
-                }
+                },
+                orderBy: { createdAt: 'desc' }
             });
             res.json(items);
         } catch (error) {
@@ -415,22 +417,91 @@ class ResidentController {
 
     static async createMarketItem(req, res) {
         try {
-            const { title, description, price, originalPrice, condition, category, images } = req.body;
+            const { title, description, price, originalPrice, condition, category, type, priceType } = req.body;
+            let images = [];
+
+            // Handle image upload if file exists
+            if (req.file) {
+                try {
+                    const result = await new Promise((resolve, reject) => {
+                        const uploadStream = cloudinary.uploader.upload_stream(
+                            {
+                                folder: 'marketplace_items',
+                                resource_type: 'image'
+                            },
+                            (error, result) => {
+                                if (error) reject(error);
+                                else resolve(result);
+                            }
+                        );
+                        uploadStream.end(req.file.buffer);
+                    });
+                    images.push(result.secure_url);
+                } catch (uploadError) {
+                    console.error('Cloudinary upload error:', uploadError);
+                    return res.status(500).json({ error: 'Failed to upload image' });
+                }
+            }
+
             const item = await prisma.marketplaceItem.create({
                 data: {
+                    ownerId: req.user.id,
+                    societyId: req.user.societyId,
                     title,
                     description,
                     price: parseFloat(price),
                     originalPrice: originalPrice ? parseFloat(originalPrice) : null,
-                    condition,
-                    category,
-                    images,
-                    ownerId: req.user.id,
-                    societyId: req.user.societyId,
-                    status: 'AVAILABLE'
+                    condition: condition || 'Good',
+                    category: category || 'Others',
+                    type: type || 'SELL',
+                    priceType: priceType || 'fixed',
+                    status: 'AVAILABLE',
+                    images: images.length > 0 ? images : null
                 }
             });
             res.json(item);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async updateMarketItemStatus(req, res) {
+        try {
+            const { id } = req.params;
+            const { status } = req.body;
+
+            const item = await prisma.marketplaceItem.findUnique({ where: { id: parseInt(id) } });
+            if (!item) {
+                return res.status(404).json({ error: 'Item not found' });
+            }
+            if (item.ownerId !== req.user.id) {
+                return res.status(403).json({ error: 'Unauthorized' });
+            }
+
+            const updated = await prisma.marketplaceItem.update({
+                where: { id: parseInt(id) },
+                data: { status }
+            });
+            res.json(updated);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async deleteMarketItem(req, res) {
+        try {
+            const { id } = req.params;
+            const item = await prisma.marketplaceItem.findUnique({ where: { id: parseInt(id) } });
+            
+            if (!item) {
+                return res.status(404).json({ error: 'Item not found' });
+            }
+            if (item.ownerId !== req.user.id && req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
+                return res.status(403).json({ error: 'Unauthorized' });
+            }
+
+            await prisma.marketplaceItem.delete({ where: { id: parseInt(id) } });
+            res.json({ success: true });
         } catch (error) {
             res.status(500).json({ error: error.message });
         }

@@ -108,23 +108,48 @@ class ChatController {
       const { type } = req.body; // e.g. SUPPORT_ADMIN, SUPPORT_MAINTENANCE
       const { id: participantId, societyId } = req.user;
 
-      let conversation = await prisma.conversation.findFirst({
-        where: {
-          societyId,
-          type,
-          participantId
-        }
-      });
-
-      if (!conversation) {
-        conversation = await prisma.conversation.create({
-          data: {
-            societyId,
-            type,
-            participantId
+        let conversation;
+        // Direct chat handling
+        if (type.startsWith('DIRECT_')) {
+          const targetUserId = parseInt(type.split('_')[1]);
+          // Check if conversation already exists between the two users
+          conversation = await prisma.conversation.findFirst({
+            where: {
+              societyId,
+              OR: [
+                { participantId: participantId, directParticipantId: targetUserId },
+                { participantId: targetUserId, directParticipantId: participantId }
+              ]
+            }
+          });
+          if (!conversation) {
+            conversation = await prisma.conversation.create({
+              data: {
+                societyId,
+                type: 'DIRECT',
+                participantId,
+                directParticipantId: targetUserId
+              }
+            });
           }
-        });
-      }
+        } else {
+          conversation = await prisma.conversation.findFirst({
+            where: {
+              societyId,
+              type,
+              participantId
+            }
+          });
+          if (!conversation) {
+            conversation = await prisma.conversation.create({
+              data: {
+                societyId,
+                type,
+                participantId
+              }
+            });
+          }
+        }
 
       res.json(conversation);
     } catch (error) {

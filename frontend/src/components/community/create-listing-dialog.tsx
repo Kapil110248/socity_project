@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, ShoppingBag, Upload, CheckCircle2 } from 'lucide-react'
+import { Plus, ShoppingBag, Upload, CheckCircle2, X } from 'lucide-react'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { residentService } from '@/services/resident.service'
@@ -25,6 +25,9 @@ export function CreateListingDialog() {
     const [price, setPrice] = useState('')
     const [priceType, setPriceType] = useState('fixed')
     const [description, setDescription] = useState('')
+    const [selectedImage, setSelectedImage] = useState<File | null>(null)
+    const [imagePreview, setImagePreview] = useState<string | null>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     const createListingMutation = useMutation({
         mutationFn: (data: any) => residentService.createMarketItem(data),
@@ -47,6 +50,32 @@ export function CreateListingDialog() {
         setPrice('')
         setPriceType('fixed')
         setDescription('')
+        setSelectedImage(null)
+        setImagePreview(null)
+    }
+
+    const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (file) {
+            if (file.size > 5 * 1024 * 1024) {
+                toast.error('Image size should be less than 5MB')
+                return
+            }
+            setSelectedImage(file)
+            const reader = new FileReader()
+            reader.onloadend = () => {
+                setImagePreview(reader.result as string)
+            }
+            reader.readAsDataURL(file)
+        }
+    }
+
+    const removeImage = () => {
+        setSelectedImage(null)
+        setImagePreview(null)
+        if (fileInputRef.current) {
+            fileInputRef.current.value = ''
+        }
     }
 
     const handleSubmit = () => {
@@ -63,7 +92,7 @@ export function CreateListingDialog() {
             category,
             type,
             priceType,
-            images: [], // For now no images
+            image: selectedImage,
         })
     }
 
@@ -178,10 +207,39 @@ export function CreateListingDialog() {
                     {type === 'SELL' && (
                         <div className="space-y-2">
                             <Label>Upload Photos</Label>
-                            <div className="border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center text-gray-500 hover:bg-gray-50 cursor-pointer">
-                                <Upload className="h-8 w-8 mb-2 text-gray-400" />
-                                <span className="text-sm">Click to upload images</span>
-                            </div>
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={handleImageSelect}
+                            />
+                            {imagePreview ? (
+                                <div className="relative">
+                                    <img
+                                        src={imagePreview}
+                                        alt="Preview"
+                                        className="w-full h-40 object-cover rounded-lg border"
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="destructive"
+                                        size="icon"
+                                        className="absolute top-2 right-2 h-6 w-6 rounded-full"
+                                        onClick={removeImage}
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div 
+                                    className="border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center text-gray-500 hover:bg-gray-50 cursor-pointer"
+                                    onClick={() => fileInputRef.current?.click()}
+                                >
+                                    <Upload className="h-8 w-8 mb-2 text-gray-400" />
+                                    <span className="text-sm">Click to upload images</span>
+                                </div>
+                            )}
                         </div>
                     )}
 

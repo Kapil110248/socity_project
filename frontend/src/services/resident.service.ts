@@ -74,7 +74,28 @@ export const residentService = {
         return response.data;
     },
     createMarketItem: async (data: any) => {
-        const response = await api.post('/resident/market/items', data);
+        const formData = new FormData();
+        formData.append('title', data.title);
+        formData.append('description', data.description);
+        formData.append('price', data.price);
+        if (data.originalPrice) formData.append('originalPrice', data.originalPrice);
+        formData.append('category', data.category);
+        formData.append('condition', data.condition);
+        if (data.type) formData.append('type', data.type);
+        if (data.priceType) formData.append('priceType', data.priceType);
+        if (data.image) formData.append('image', data.image);
+        
+        const response = await api.post('/resident/market/items', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        return response.data;
+    },
+    updateMarketItemStatus: async (id: number, status: string) => {
+        const response = await api.put(`/resident/market/items/${id}/status`, { status });
+        return response.data;
+    },
+    deleteMarketItem: async (id: number) => {
+        const response = await api.delete(`/resident/market/items/${id}`);
         return response.data;
     },
 

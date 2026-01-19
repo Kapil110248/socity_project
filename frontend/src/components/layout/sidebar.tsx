@@ -65,6 +65,7 @@ const allMenuItems = [
       { title: 'All Societies', icon: Building2, href: '/dashboard/super-admin/societies' },
       { title: 'Pending Approvals', icon: ClipboardList, href: '/dashboard/super-admin/societies/pending' },
       { title: 'Add Society', icon: Building2, href: '/dashboard/super-admin/societies/new' },
+      { title: 'Guidelines', icon: BookOpen, href: '/dashboard/super-admin/societies/guidelines' },
     ],
   },
   {

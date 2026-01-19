@@ -555,6 +555,96 @@ class SocietyController {
     }
   }
 
+  // ========== GUIDELINES MANAGEMENT (Super Admin) ==========
+  
+  static async getGuidelines(req, res) {
+    try {
+      const { societyId } = req.query;
+      const where = societyId ? { societyId: parseInt(societyId) } : {};
+      
+      const guidelines = await prisma.communityGuideline.findMany({
+        where,
+        include: { 
+          society: { 
+            select: { id: true, name: true } 
+          } 
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+      
+      res.json(guidelines);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async createGuideline(req, res) {
+    try {
+      const { societyId, title, content, category } = req.body;
+      
+      if (!societyId || !title || !content || !category) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+      
+      const guideline = await prisma.communityGuideline.create({
+        data: {
+          societyId: parseInt(societyId),
+          title,
+          content,
+          category: category.toUpperCase()
+        },
+        include: {
+          society: {
+            select: { id: true, name: true }
+          }
+        }
+      });
+      
+      res.status(201).json(guideline);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async updateGuideline(req, res) {
+    try {
+      const { id } = req.params;
+      const { title, content, category } = req.body;
+      
+      const guideline = await prisma.communityGuideline.update({
+        where: { id: parseInt(id) },
+        data: {
+          title,
+          content,
+          category: category.toUpperCase()
+        },
+        include: {
+          society: {
+            select: { id: true, name: true }
+          }
+        }
+      });
+      
+      res.json(guideline);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async deleteGuideline(req, res) {
+    try {
+      const { id } = req.params;
+      
+      await prisma.communityGuideline.delete({
+        where: { id: parseInt(id) }
+      });
+      
+      res.json({ success: true, message: 'Guideline deleted successfully' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
 }
 
 module.exports = SocietyController;

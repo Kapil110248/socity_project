@@ -31,6 +31,8 @@ import { chatService } from '@/services/chat.service'
 import { toast } from 'sonner'
 import { getSocket } from '@/lib/socket'
 import { format } from 'date-fns'
+import { useSearchParams } from 'next/navigation'
+import { ShoppingBag } from 'lucide-react'
 
 const SUPPORT_CHANNELS = [
   { type: 'SUPPORT_ADMIN', name: 'Admin Support', avatar: 'AS', icon: Building },
@@ -43,9 +45,15 @@ const SUPPORT_CHANNELS = [
 export default function HelpdeskChatPage() {
   const { user } = useAuthStore()
   const queryClient = useQueryClient()
+  const searchParams = useSearchParams()
   const [selectedChatId, setSelectedChatId] = useState<number | null>(null)
   const [newMessage, setNewMessage] = useState('')
   const [showMobileChat, setShowMobileChat] = useState(false)
+  const [marketplaceContext, setMarketplaceContext] = useState<{
+    sellerId: number | null;
+    itemId: number | null;
+    itemTitle: string | null;
+  }>({ sellerId: null, itemId: null, itemTitle: null })
   const scrollEndRef = useRef<HTMLDivElement>(null)
 
   // Fetch Conversations
@@ -101,6 +109,32 @@ export default function HelpdeskChatPage() {
       setShowMobileChat(true)
     }
   }
+
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newMessage.trim() || !selectedChatId) return
+    sendMutation.mutate({ conversationId: selectedChatId, content: newMessage })
+  }
+
+  // Handle marketplace context from URL
+  useEffect(() => {
+    const userId = searchParams.get('userId')
+    const itemId = searchParams.get('itemId')
+    const itemTitle = searchParams.get('itemTitle')
+    
+    if (userId && itemId && itemTitle) {
+      setMarketplaceContext({
+        sellerId: parseInt(userId),
+        itemId: parseInt(itemId),
+        itemTitle: decodeURIComponent(itemTitle)
+      })
+      // Pre-fill message with item context
+      setNewMessage(`Hi! I'm interested in your listing: "${decodeURIComponent(itemTitle)}"`)
+      // Start a direct message conversation
+      startMutation.mutate(`DIRECT_${userId}`)
+      setShowMobileChat(true)
+    }
+  }, [searchParams])
 
   // Combined List for UI
   const displayConversations = useMemo(() => {
