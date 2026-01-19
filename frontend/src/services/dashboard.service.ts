@@ -2,6 +2,7 @@ import api from '@/lib/api';
 import { API_CONFIG } from '@/config/api.config';
 
 export interface AdminStats {
+  societyName: string;
   users: {
     total: number;
     active: number;
@@ -28,6 +29,10 @@ export interface AdminStats {
       start: string;
       end: string;
     };
+    parkingIncome: number;
+    amenityIncome: number;
+    pendingVendorPayments: number;
+    lateFees: number;
   };
   activity: {
     openComplaints: number;
@@ -37,6 +42,7 @@ export interface AdminStats {
     todayVisitors: number;
     openPurchaseRequests: number;
     unfinalizedPurchaseRequests: number;
+    escalatedComplaints: number;
   };
   defaulters: {
     receivedFrom: string | null;
