@@ -31,6 +31,7 @@ const eventRoutes = require('./routes/event.routes');
 const amenityRoutes = require('./routes/amenity.routes');
 const noticeRoutes = require('./routes/notice.routes');
 const unitRoutes = require('./routes/unit.routes');
+const invoiceRoutes = require('./routes/invoice.routes');
 
 const http = require('http');
 const { initSocket } = require('./lib/socket');
@@ -80,6 +81,7 @@ app.use('/api/amenities', amenityRoutes);
 app.use('/api/notices', noticeRoutes);
 app.use('/api/units', unitRoutes);
 app.use('/api/resident', residentRoutes);
+app.use('/api/invoices', invoiceRoutes);
 
 const PORT = process.env.PORT || 9000;
 
