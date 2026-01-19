@@ -162,11 +162,12 @@ export function AdminDashboard() {
     maintenanceCollected: stats?.finance.collectedThisMonth || 0,
     maintenancePending: stats?.finance.pendingDues || 0,
     totalOutstanding: stats?.finance.pendingDues || 0,
-    parkingIncome: 0, // TODO: Add to backend API if needed
-    amenityIncome: 0, // TODO: Add to backend API if needed
     totalAssetValue: stats?.finance.totalRevenue || 0,
     monthlyAssetExpense: stats?.finance.totalExpenses || 0,
-    pendingVendorPayments: 0, // TODO: Add to backend API if needed
+    parkingIncome: stats?.finance.parkingIncome || 0,
+    amenityIncome: stats?.finance.amenityIncome || 0,
+    pendingVendorPayments: stats?.finance.pendingVendorPayments || 0,
+    lateFees: stats?.finance.lateFees || 0,
   }
 
   // Income data for pie chart
@@ -293,7 +294,7 @@ export function AdminDashboard() {
             <div>
               <p className="text-teal-300 text-sm">Welcome!</p>
               <h1 className="text-2xl sm:text-3xl font-bold">{user?.name || 'Admin'}</h1>
-              <p className="text-white/70 text-sm">Sharlow Bay Community</p>
+              <p className="text-white/70 text-sm">{stats?.societyName || 'Sharlow Bay Community'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -548,11 +549,11 @@ export function AdminDashboard() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">Defaulters</span>
-                    <span className="font-semibold text-red-600">5 units</span>
+                    <span className="font-semibold text-red-600">{financialOverview.defaultersCount} units</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">Late Fees</span>
-                    <span className="font-semibold text-orange-600">Rs. 15.75K</span>
+                    <span className="font-semibold text-orange-600">Rs. {(financialOverview.lateFees / 1000).toFixed(2)}K</span>
                   </div>
                   <Button
                     size="sm"
@@ -721,7 +722,7 @@ export function AdminDashboard() {
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="text-red-500 font-semibold">Escalated Tickets</span>
-                    <span className="text-red-500 font-bold">0</span>
+                    <span className="text-red-500 font-bold">{stats?.activity.escalatedComplaints || 0}</span>
                   </div>
                 </div>
               </div>
@@ -813,14 +814,14 @@ export function AdminDashboard() {
                       className="flex-1 border-blue-200 text-blue-600 hover:bg-blue-50"
                       onClick={() => router.push('/dashboard/financial/billing')}
                     >
-                      7 Paid Intimations
+                      {(stats?.finance?.collectedThisMonth ?? 0) > 0 ? 'Monthly Collections' : 'No Payments Yet'}
                     </Button>
                     <Button
                       size="sm"
                       className="flex-1 bg-red-500 hover:bg-red-600 text-white"
                       onClick={() => router.push('/dashboard/financial/billing')}
                     >
-                      8 Defaulters
+                      {financialOverview.defaultersCount} Defaulters
                     </Button>
                   </div>
                 </div>
@@ -854,7 +855,7 @@ export function AdminDashboard() {
                 className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white"
                 onClick={() => router.push('/dashboard/financial/invoices')}
               >
-                24 Open Purchase Request
+                {stats?.activity.openPurchaseRequests || 0} Open Purchase Request
               </Button>
             </CardContent>
           </Card>

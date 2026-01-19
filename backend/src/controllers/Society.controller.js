@@ -236,7 +236,7 @@ class SocietyController {
           where: { societyId },
           select: { id: true }
         })).map(c => c.id);
-        
+
         await tx.complaintComment.deleteMany({ where: { complaintId: { in: complaintIds } } });
         await tx.complaint.deleteMany({ where: { societyId } });
 
@@ -254,7 +254,7 @@ class SocietyController {
           where: { societyId },
           select: { id: true }
         })).map(a => a.id);
-        
+
         await tx.amenityBooking.deleteMany({ where: { amenityId: { in: amenityIds } } });
         await tx.amenity.deleteMany({ where: { societyId } });
 
@@ -318,6 +318,7 @@ class SocietyController {
   static async getAdminDashboardStats(req, res) {
     try {
       const societyId = req.user.societyId;
+      const society = await prisma.society.findUnique({ where: { id: societyId } });
 
       // ========== USER COUNTS ==========
       const [totalUsers, activeUsers, inactiveUsers, pendingUsers, owners, tenants, staff, neverLoggedIn] = await Promise.all([
@@ -345,32 +346,52 @@ class SocietyController {
         where: { societyId },
         select: { amount: true, type: true, status: true, createdAt: true, category: true, receivedFrom: true }
       });
-      
+
       const currentMonth = new Date().getMonth();
       const currentYear = new Date().getFullYear();
-      
+
       // Total revenue (all income)
       const totalRevenue = transactions
         .filter(t => t.type === 'INCOME')
         .reduce((sum, t) => sum + t.amount, 0);
-      
+
       // Pending dues
       const pendingDues = transactions
         .filter(t => t.status === 'PENDING')
         .reduce((sum, t) => sum + t.amount, 0);
-      
+
       // Collected this month
       const collectedThisMonth = transactions
         .filter(t => {
           const d = new Date(t.createdAt);
-          return t.type === 'INCOME' && t.status === 'PAID' && 
-                 d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+          return t.type === 'INCOME' && t.status === 'PAID' &&
+            d.getMonth() === currentMonth && d.getFullYear() === currentYear;
         })
         .reduce((sum, t) => sum + t.amount, 0);
 
       // Total expenses
       const totalExpenses = transactions
         .filter(t => t.type === 'EXPENSE')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      // Parking income
+      const parkingIncome = transactions
+        .filter(t => t.type === 'INCOME' && t.category.toUpperCase() === 'PARKING' && t.status === 'PAID')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      // Amenity income
+      const amenityIncome = transactions
+        .filter(t => t.type === 'INCOME' && t.category.toUpperCase() === 'AMENITY' && t.status === 'PAID')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      // Pending vendor payments (Expences Pending)
+      const pendingVendorPayments = transactions
+        .filter(t => t.type === 'EXPENSE' && t.status === 'PENDING')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      // Late fees (calculated as a subset of pending income or specific category)
+      const lateFees = transactions
+        .filter(t => t.type === 'INCOME' && t.category.toUpperCase() === 'LATE_FEE')
         .reduce((sum, t) => sum + t.amount, 0);
 
       // Monthly income data (last 3 months)
@@ -381,37 +402,47 @@ class SocietyController {
         const month = targetDate.toLocaleString('default', { month: 'short' });
         const monthNum = targetDate.getMonth();
         const year = targetDate.getFullYear();
-        
+
         const amount = transactions
           .filter(t => {
             const d = new Date(t.createdAt);
             return t.type === 'INCOME' && d.getMonth() === monthNum && d.getFullYear() === year;
           })
           .reduce((sum, t) => sum + t.amount, 0);
-        
+
         monthlyIncome.push({ month, amount });
       }
-      
+
       // ========== ACTIVITY COUNTS ==========
-      const [openComplaints, pendingVisitors, upcomingMeetings, activeVendors, todayVisitors, openPurchaseRequests, unfinalizedPurchaseRequests] = await Promise.all([
+      const [
+        openComplaints,
+        pendingVisitors,
+        upcomingMeetings,
+        activeVendors,
+        todayVisitors,
+        openPurchaseRequests,
+        unfinalizedPurchaseRequests,
+        escalatedComplaints
+      ] = await Promise.all([
         prisma.complaint.count({ where: { societyId, status: { in: ['OPEN', 'IN_PROGRESS'] } } }),
         prisma.visitor.count({ where: { societyId, status: 'PENDING' } }),
         prisma.meeting.count({ where: { societyId, status: 'SCHEDULED', date: { gte: new Date() } } }),
         prisma.vendor.count({ where: { societyId, status: 'ACTIVE' } }),
-        prisma.visitor.count({ 
-          where: { 
-            societyId, 
-            createdAt: { gte: new Date(new Date().setHours(0,0,0,0)) } 
-          } 
+        prisma.visitor.count({
+          where: {
+            societyId,
+            createdAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }
+          }
         }),
         prisma.purchaseRequest.count({ where: { societyId, status: 'PENDING' } }),
         prisma.purchaseRequest.count({ where: { societyId, status: 'REJECTED' } }), // Mapping Rejected as "Unfinalized" for now
+        prisma.complaint.count({ where: { societyId, status: 'OPEN', escalatedToTech: true } }),
       ]);
 
       // ========== DEFAULTERS ==========
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
+
       const defaultersList = await prisma.transaction.findMany({
         where: {
           societyId,
@@ -430,7 +461,7 @@ class SocietyController {
 
       // ========== RECENT ACTIVITIES ==========
       const recentActivities = [];
-      
+
       // Recent payments
       const recentPayments = await prisma.transaction.findMany({
         where: { societyId, type: 'INCOME', status: 'PAID' },
@@ -472,6 +503,7 @@ class SocietyController {
       const firstDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
       res.json({
+        societyName: society?.name || 'Your Community',
         users: {
           total: totalUsers,
           active: activeUsers,
@@ -497,7 +529,11 @@ class SocietyController {
           incomePeriod: {
             start: firstDayOfCurrentMonth,
             end: now
-          }
+          },
+          parkingIncome,
+          amenityIncome,
+          pendingVendorPayments,
+          lateFees,
         },
         activity: {
           openComplaints,
@@ -507,6 +543,7 @@ class SocietyController {
           todayVisitors,
           openPurchaseRequests,
           unfinalizedPurchaseRequests,
+          escalatedComplaints,
         },
         defaulters: defaultersList,
         recentActivities: recentActivities.slice(0, 5),
