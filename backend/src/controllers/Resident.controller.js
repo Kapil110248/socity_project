@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma');
+const cloudinary = require('../config/cloudinary');
 
 class ResidentController {
     static async getDashboardData(req, res) {
@@ -376,7 +377,8 @@ class ResidentController {
             const { title, description, category, priority, isPrivate } = req.body;
             const ticket = await prisma.complaint.create({
                 data: {
-                    title, description, category, priority,
+                    title, description, category, 
+                    priority: priority?.toUpperCase() || 'MEDIUM',
                     reportedById: req.user.id,
                     societyId: req.user.societyId,
                     status: 'OPEN'
@@ -539,11 +541,21 @@ class ResidentController {
                             }
                         },
                         orderBy: { createdAt: 'desc' }
+                    },
+                    likedBy: {
+                        where: { userId: parseInt(req.user.id) },
+                        select: { userId: true }
                     }
                 },
                 orderBy: { createdAt: 'desc' }
             });
-            res.json(posts);
+
+            const formattedPosts = posts.map(post => ({
+                ...post,
+                isLiked: post.likedBy.length > 0
+            }));
+
+            res.json(formattedPosts);
         } catch (error) {
             res.status(500).json({ error: error.message });
         }
@@ -552,6 +564,37 @@ class ResidentController {
     static async createPost(req, res) {
         try {
             const { title, content, type } = req.body;
+            let imageUrls = [];
+
+            console.log('Create Post Request:', { title, content, type, hasFile: !!req.file });
+
+            // Handle image upload if file exists
+            if (req.file) {
+                console.log('File received:', { filename: req.file.originalname, size: req.file.size });
+                try {
+                    const result = await new Promise((resolve, reject) => {
+                        const uploadStream = cloudinary.uploader.upload_stream(
+                            {
+                                folder: 'community_posts',
+                                resource_type: 'image'
+                            },
+                            (error, result) => {
+                                if (error) reject(error);
+                                else resolve(result);
+                            }
+                        );
+                        uploadStream.end(req.file.buffer);
+                    });
+                    imageUrls.push(result.secure_url);
+                    console.log('Cloudinary upload success:', result.secure_url);
+                } catch (uploadError) {
+                    console.error('Cloudinary upload error:', uploadError);
+                    return res.status(500).json({ error: 'Failed to upload image' });
+                }
+            } else {
+                console.log('No file in request');
+            }
+
             const post = await prisma.communityBuzz.create({
                 data: {
                     societyId: parseInt(req.user.societyId),
@@ -559,6 +602,7 @@ class ResidentController {
                     title: title || content?.substring(0, 50) || type || 'Post',
                     content,
                     type: type || 'POST',
+                    imageUrls: imageUrls.length > 0 ? imageUrls : null
                 },
                 include: {
                     author: {
@@ -604,6 +648,137 @@ class ResidentController {
             });
             res.json(comment);
         } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async updatePost(req, res) {
+        try {
+            const { id } = req.params;
+            const { title, content, type } = req.body;
+
+            // Check if post exists and user is the author
+            const existingPost = await prisma.communityBuzz.findUnique({
+                where: { id: parseInt(id) }
+            });
+
+            if (!existingPost) {
+                return res.status(404).json({ error: 'Post not found' });
+            }
+
+            if (existingPost.authorId !== req.user.id) {
+                return res.status(403).json({ error: 'Unauthorized to edit this post' });
+            }
+
+            const updatedPost = await prisma.communityBuzz.update({
+                where: { id: parseInt(id) },
+                data: {
+                    title: title || content?.substring(0, 50) || type || 'Post',
+                    content,
+                    type: type || 'POST'
+                },
+                include: {
+                    author: {
+                        select: {
+                            name: true,
+                            role: true,
+                            profileImg: true,
+                            ownedUnits: {
+                                select: {
+                                    block: true,
+                                    number: true
+                                },
+                                take: 1
+                            }
+                        }
+                    }
+                }
+            });
+            res.json(updatedPost);
+        } catch (error) {
+            console.error('Update post error:', error);
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async deletePost(req, res) {
+        try {
+            const { id } = req.params;
+
+            // Check if post exists and user is the author
+            const existingPost = await prisma.communityBuzz.findUnique({
+                where: { id: parseInt(id) }
+            });
+
+            if (!existingPost) {
+                return res.status(404).json({ error: 'Post not found' });
+            }
+
+            if (existingPost.authorId !== req.user.id && req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
+                return res.status(403).json({ error: 'Unauthorized to delete this post' });
+            }
+
+            // Delete related likes and comments first
+            await prisma.buzzLike.deleteMany({ where: { buzzId: parseInt(id) } });
+            await prisma.communityComment.deleteMany({ where: { buzzId: parseInt(id) } });
+            
+            // Delete the post
+            await prisma.communityBuzz.delete({
+                where: { id: parseInt(id) }
+            });
+
+            res.json({ success: true, message: 'Post deleted successfully' });
+        } catch (error) {
+            console.error('Delete post error:', error);
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async toggleLike(req, res) {
+        try {
+            const { buzzId } = req.body;
+            const userId = req.user.id;
+            
+            const existingLike = await prisma.buzzLike.findUnique({
+                where: {
+                    buzzId_userId: {
+                        buzzId: parseInt(buzzId),
+                        userId: parseInt(userId)
+                    }
+                }
+            });
+
+            if (existingLike) {
+                // Unlike
+                await prisma.buzzLike.delete({
+                    where: {
+                        buzzId_userId: {
+                            buzzId: parseInt(buzzId),
+                            userId: parseInt(userId)
+                        }
+                    }
+                });
+                await prisma.communityBuzz.update({
+                    where: { id: parseInt(buzzId) },
+                    data: { likes: { decrement: 1 } }
+                });
+                res.json({ liked: false });
+            } else {
+                // Like
+                await prisma.buzzLike.create({
+                    data: {
+                        buzzId: parseInt(buzzId),
+                        userId: parseInt(userId)
+                    }
+                });
+                await prisma.communityBuzz.update({
+                    where: { id: parseInt(buzzId) },
+                    data: { likes: { increment: 1 } }
+                });
+                res.json({ liked: true });
+            }
+        } catch (error) {
+            console.error('Like toggle error:', error);
             res.status(500).json({ error: error.message });
         }
     }

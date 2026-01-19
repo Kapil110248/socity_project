@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, MessageSquare, Image as ImageIcon, Loader2 } from 'lucide-react'
+import { Plus, MessageSquare, Image as ImageIcon, Loader2, X } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { residentService } from '@/services/resident.service'
@@ -13,7 +13,34 @@ export function CreatePostDialog() {
     const [open, setOpen] = useState(false)
     const [category, setCategory] = useState('general')
     const [message, setMessage] = useState('')
+    const [selectedImage, setSelectedImage] = useState<File | null>(null)
+    const [imagePreview, setImagePreview] = useState<string | null>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
     const queryClient = useQueryClient()
+
+    const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (file) {
+            if (file.size > 5 * 1024 * 1024) {
+                toast.error('Image size should be less than 5MB')
+                return
+            }
+            setSelectedImage(file)
+            const reader = new FileReader()
+            reader.onloadend = () => {
+                setImagePreview(reader.result as string)
+            }
+            reader.readAsDataURL(file)
+        }
+    }
+
+    const removeImage = () => {
+        setSelectedImage(null)
+        setImagePreview(null)
+        if (fileInputRef.current) {
+            fileInputRef.current.value = ''
+        }
+    }
 
     const createPostMutation = useMutation({
         mutationFn: residentService.createPost,
@@ -23,6 +50,7 @@ export function CreatePostDialog() {
             setOpen(false)
             setCategory('general')
             setMessage('')
+            removeImage()
         },
         onError: (error: any) => {
             toast.error(error.message || 'Failed to share post')
@@ -37,7 +65,8 @@ export function CreatePostDialog() {
         createPostMutation.mutate({
             type: category,
             content: message,
-            title: '' // Could add title field if needed
+            title: '',
+            image: selectedImage
         })
     }
 
@@ -84,11 +113,42 @@ export function CreatePostDialog() {
                         />
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" className="gap-2 text-gray-600">
+                    <div className="space-y-2">
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleImageSelect}
+                        />
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-2 text-gray-600"
+                            onClick={() => fileInputRef.current?.click()}
+                        >
                             <ImageIcon className="h-4 w-4" />
                             Add Photo
                         </Button>
+                        {imagePreview && (
+                            <div className="relative inline-block">
+                                <img
+                                    src={imagePreview}
+                                    alt="Preview"
+                                    className="h-32 w-32 object-cover rounded-lg border"
+                                />
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="icon"
+                                    className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                                    onClick={removeImage}
+                                >
+                                    <X className="h-3 w-3" />
+                                </Button>
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t mt-2">

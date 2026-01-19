@@ -163,6 +163,8 @@ model User {
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  
+  buzzLikes   BuzzLike[]
 }
 
 model RoleModel {
@@ -538,6 +540,8 @@ model CommunityBuzz {
   comments    CommunityComment[]
   
   createdAt   DateTime @default(now())
+  
+  likedBy     BuzzLike[]
 }
 
 model CommunityComment {
@@ -548,6 +552,17 @@ model CommunityComment {
   author      User          @relation(fields: [authorId], references: [id])
   content     String        @db.Text
   createdAt   DateTime      @default(now())
+}
+
+model BuzzLike {
+  id        Int      @id @default(autoincrement())
+  buzzId    Int
+  buzz      CommunityBuzz @relation(fields: [buzzId], references: [id])
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([buzzId, userId])
 }
 
 model UnitMember {
