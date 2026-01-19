@@ -69,9 +69,9 @@ class ServiceInquiryController {
       console.log('Assign Vendor Request:', { id, vendorId, vendorName, userRole: req.user.role });
       
       const inquiry = await prisma.serviceInquiry.update({
-        where: { id },
+        where: { id: parseInt(id) },
         data: {
-          vendorId: vendorId.toString(),
+          vendorId: parseInt(vendorId),
           vendorName,
           status: 'booked'
         }

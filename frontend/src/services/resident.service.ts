@@ -35,6 +35,10 @@ export const residentService = {
         const response = await api.put(`/resident/unit/pet/${id}`, data);
         return response.data;
     },
+    getMyPayments: async () => {
+        const response = await api.get('/resident/payments');
+        return response.data;
+    },
 
     // SOS
     getSOSData: async () => {
@@ -57,6 +61,10 @@ export const residentService = {
     },
     createTicket: async (data: any) => {
         const response = await api.post('/resident/tickets', data);
+        return response.data;
+    },
+    getTicketById: async (id: string) => {
+        const response = await api.get(`/resident/tickets/${id}`);
         return response.data;
     },
 

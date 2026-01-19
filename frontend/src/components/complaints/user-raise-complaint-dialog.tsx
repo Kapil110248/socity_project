@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertCircle, Send, Loader2 } from 'lucide-react'
-import { ComplaintService } from '@/services/complaint.service'
+import { residentService } from '@/services/resident.service'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 
@@ -37,12 +37,11 @@ export function UserRaiseComplaintDialog({ preSelectedServiceId, preSelectedServ
     }, [preSelectedServiceId])
 
     const mutation = useMutation({
-        mutationFn: (data: any) => ComplaintService.create(data),
+        mutationFn: (data: any) => residentService.createTicket(data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['complaints'] })
+            queryClient.invalidateQueries({ queryKey: ['tickets'] })
             toast.success('Complaint submitted successfully!')
             setOpen(false)
-            // Clear form
             setSubject('')
             setDescription('')
         },
@@ -62,6 +61,7 @@ export function UserRaiseComplaintDialog({ preSelectedServiceId, preSelectedServ
             description,
             category,
             priority: 'MEDIUM',
+            isPrivate: false 
         })
     }
 

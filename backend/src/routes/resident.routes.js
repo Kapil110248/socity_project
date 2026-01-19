@@ -13,6 +13,7 @@ router.post('/unit/vehicle', authenticate, ResidentController.addVehicle);
 router.put('/unit/vehicle/:id', authenticate, ResidentController.updateVehicle);
 router.post('/unit/pet', authenticate, ResidentController.addPet);
 router.put('/unit/pet/:id', authenticate, ResidentController.updatePet);
+router.get('/payments', authenticate, ResidentController.getPaymentHistory);
 
 // SOS
 router.get('/sos/data', authenticate, ResidentController.getSOSData);
@@ -21,6 +22,7 @@ router.post('/sos/contact', authenticate, ResidentController.addEmergencyContact
 
 // Helpdesk
 router.get('/tickets', authenticate, ResidentController.getTickets);
+router.get('/tickets/:id', authenticate, ResidentController.getTicket);
 router.post('/tickets', authenticate, ResidentController.createTicket);
 
 // Marketplace

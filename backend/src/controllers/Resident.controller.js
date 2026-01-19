@@ -139,9 +139,9 @@ class ResidentController {
 
     static async addFamilyMember(req, res) {
         try {
-            const { unitId, name, relation, age, gender, phone } = req.body;
+            const { unitId, name, relation, age, gender, phone, email } = req.body;
             const member = await prisma.unitMember.create({
-                data: { unitId, name, relation, age: parseInt(age), gender, phone }
+                data: { unitId, name, relation, age: parseInt(age), gender, phone, email }
             });
             res.json(member);
         } catch (error) {
@@ -152,10 +152,10 @@ class ResidentController {
     static async updateFamilyMember(req, res) {
         try {
             const { id } = req.params;
-            const { name, relation, age, gender, phone } = req.body;
+            const { name, relation, age, gender, phone, email } = req.body;
             const member = await prisma.unitMember.update({
                 where: { id: parseInt(id) },
-                data: { name, relation, age: parseInt(age), gender, phone }
+                data: { name, relation, age: parseInt(age), gender, phone, email }
             });
             res.json(member);
         } catch (error) {
@@ -165,9 +165,9 @@ class ResidentController {
 
     static async addVehicle(req, res) {
         try {
-            const { unitId, name, number, type } = req.body;
+            const { unitId, name, number, type, color, parkingSlot } = req.body;
             const vehicle = await prisma.unitVehicle.create({
-                data: { unitId, name, number, type }
+                data: { unitId, name, number, type, color, parkingSlot }
             });
             res.json(vehicle);
         } catch (error) {
@@ -178,10 +178,10 @@ class ResidentController {
     static async updateVehicle(req, res) {
         try {
             const { id } = req.params;
-            const { name, number, type } = req.body;
+            const { name, number, type, color, parkingSlot } = req.body;
             const vehicle = await prisma.unitVehicle.update({
                 where: { id: parseInt(id) },
-                data: { name, number, type }
+                data: { name, number, type, color, parkingSlot }
             });
             res.json(vehicle);
         } catch (error) {
@@ -215,19 +215,84 @@ class ResidentController {
         }
     }
 
+    static async getPaymentHistory(req, res) {
+        try {
+            const userId = req.user.id;
+            const user = await prisma.user.findUnique({ where: { id: userId } });
+            
+            if (!user) return res.status(404).json({ error: 'User not found' });
+
+            const transactions = await prisma.transaction.findMany({
+                where: {
+                    societyId: req.user.societyId,
+                    type: 'INCOME',
+                    receivedFrom: user.name // Matching by name for now
+                },
+                orderBy: { date: 'desc' }
+            });
+            res.json(transactions);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
     // --- SOS Methods ---
     static async triggerSOS(req, res) {
         try {
             const { type, location } = req.body;
+            const userId = req.user.id;
+            const societyId = req.user.societyId;
+
+            // 1. Create the alert in the database
             const alert = await prisma.sOSAlert.create({
                 data: {
-                    residentId: req.user.id,
-                    societyId: req.user.societyId,
+                    residentId: userId,
+                    societyId: societyId,
                     type,
                     location
+                },
+                include: {
+                    resident: {
+                        select: {
+                            name: true,
+                            phone: true,
+                            ownedUnits: { select: { block: true, number: true }, take: 1 },
+                            rentedUnits: { select: { block: true, number: true }, take: 1 }
+                        }
+                    }
                 }
             });
-            // Logic to notify security/contacts would go here
+
+            // 2. Emit Real-time Notification
+            try {
+                const { getIO } = require('../lib/socket');
+                const io = getIO();
+                
+                // Construct a standardized payload for the frontend overlay
+                const notificationPayload = {
+                    id: alert.id,
+                    type: alert.type,
+                    title: `SOS: ${alert.type.toUpperCase()}`,
+                    description: `Emergency reported by ${alert.resident.name} at ${alert.location}`,
+                    unit: alert.location, // or construct from resident units
+                    residentName: alert.resident.name,
+                    residentPhone: alert.resident.phone,
+                    societyId: alert.societyId,
+                    createdAt: alert.createdAt,
+                    source: 'SOS_BUTTON'
+                };
+
+                // Notify local society (Admins/Security)
+                io.to(`society_${societyId}`).emit('new_emergency_alert', notificationPayload);
+                
+                // Notify Super Admins globally
+                io.to('platform_admin').emit('new_emergency_alert', notificationPayload);
+                
+                console.log(`SOS Alert emitted for society_${societyId}`);
+            } catch (socketError) {
+                console.error('Socket emit failed:', socketError.message);
+            }
+
             res.json(alert);
         } catch (error) {
             res.status(500).json({ error: error.message });
@@ -271,9 +336,36 @@ class ResidentController {
         try {
             const tickets = await prisma.complaint.findMany({
                 where: { reportedById: req.user.id },
-                orderBy: { createdAt: 'desc' }
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    reportedBy: { select: { name: true } }
+                }
             });
             res.json(tickets);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async getTicket(req, res) {
+        try {
+            const { id } = req.params;
+            const ticket = await prisma.complaint.findUnique({
+                where: { id: parseInt(id) },
+                include: {
+                    reportedBy: { select: { name: true } },
+                    // messages: { include: { sender: { select: { name: true, role: true } } } } // If messages are related
+                }
+            });
+
+            if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+
+            // Authorization check
+            if (ticket.reportedById !== req.user.id && req.user.role !== 'SUPER_ADMIN' && req.user.role !== 'ADMIN') {
+                return res.status(403).json({ error: 'Unauthorized' });
+            }
+
+            res.json(ticket);
         } catch (error) {
             res.status(500).json({ error: error.message });
         }
@@ -346,7 +438,13 @@ class ResidentController {
     static async getServices(req, res) {
         try {
             const categories = await prisma.serviceCategory.findMany({ include: { variants: true } });
-            const myRequests = await prisma.serviceInquiry.findMany({ where: { societyId: req.user.societyId } });
+            const myRequests = await prisma.serviceInquiry.findMany({ 
+                where: { 
+                    societyId: req.user.societyId,
+                    residentId: req.user.id
+                },
+                orderBy: { createdAt: 'desc' }
+            });
             res.json({ categories, myRequests });
         } catch (error) {
             res.status(500).json({ error: error.message });

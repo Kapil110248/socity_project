@@ -323,7 +323,7 @@ const allMenuItems = [
   {
     title: 'My Complaints',
     icon: ClipboardList,
-    href: '/dashboard/services',
+    href: '/dashboard/helpdesk/tickets',
     roles: ['resident'],
   },
 

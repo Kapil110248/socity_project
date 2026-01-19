@@ -138,6 +138,41 @@ export default function MyUnitPage() {
     queryFn: residentService.getUnitData
   })
 
+  const { data: payments } = useQuery({
+    queryKey: ['payment-history'],
+    queryFn: residentService.getMyPayments
+  })
+
+  const handleDownloadHistory = () => {
+    if (!payments || payments.length === 0) {
+      toast.error('No payment history to download')
+      return;
+    }
+
+    const headers = ['ID', 'Date', 'Category', 'Amount', 'Method', 'Status', 'Description'];
+    const csvContent = [
+      headers.join(','),
+      ...payments.map((p: any) => [
+        p.id,
+        new Date(p.date).toLocaleDateString(),
+        p.category,
+        p.amount,
+        p.paymentMethod,
+        p.status,
+        `"${p.description || ''}"`
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `payment_history_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   // Initialize selectedUnit when data is loaded
   useEffect(() => {
     if (unit && !selectedUnit) {
@@ -209,7 +244,7 @@ export default function MyUnitPage() {
   const residents = unit.members || []
   const vehicles = unit.vehicles || []
   const pets = unit.petsList || []
-  const paymentHistory: any[] = []
+  const paymentHistory = payments || []
   const pendingPayments: any[] = []
   const allUnits: any[] = [unit] // Show current unit
 
@@ -1298,7 +1333,7 @@ export default function MyUnitPage() {
                   variant="outline"
                   size="sm"
                   className="text-teal-600 border-teal-200 hover:bg-teal-50"
-                  onClick={() => alert('Downloading payment history as PDF...')}
+                  onClick={handleDownloadHistory}
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download
@@ -1328,19 +1363,19 @@ export default function MyUnitPage() {
                       <TableCell className="font-medium text-[#1e3a5f]">
                         {payment.id}
                       </TableCell>
-                      <TableCell>{payment.month}</TableCell>
+                      <TableCell>{new Date(payment.date).toLocaleDateString()}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">{payment.type}</Badge>
+                        <Badge variant="outline">{payment.category}</Badge>
                       </TableCell>
                       <TableCell className="font-semibold">
                         Rs. {payment.amount.toLocaleString()}
                       </TableCell>
-                      <TableCell className="text-gray-500">{payment.dueDate}</TableCell>
-                      <TableCell className="text-gray-500">{payment.paidDate}</TableCell>
+                      <TableCell className="text-gray-500">-</TableCell>
+                      <TableCell className="text-gray-500">{new Date(payment.date).toLocaleDateString()}</TableCell>
                       <TableCell>
                         <Badge className="bg-green-100 text-green-700">
                           <CheckCircle className="h-3 w-3 mr-1" />
-                          Paid
+                          {payment.status}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -1348,7 +1383,7 @@ export default function MyUnitPage() {
                           variant="ghost"
                           size="sm"
                           className="text-teal-600 hover:text-teal-700 hover:bg-teal-50"
-                          onClick={() => alert(`Invoice Details:\n\nID: ${payment.id}\nPeriod: ${payment.month}\nType: ${payment.type}\nAmount: Rs. ${payment.amount.toLocaleString()}\nDue Date: ${payment.dueDate}\nPaid Date: ${payment.paidDate}\nStatus: ${payment.status}`)}
+                          onClick={() => alert(`Invoice Details:\n\nID: ${payment.id}\nDate: ${new Date(payment.date).toLocaleDateString()}\nCategory: ${payment.category}\nAmount: Rs. ${payment.amount.toLocaleString()}\nStatus: ${payment.status}`)}
                         >
                           <Eye className="h-4 w-4 mr-1" />
                           View
