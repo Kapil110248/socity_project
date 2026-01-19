@@ -34,6 +34,7 @@ const unitRoutes = require('./routes/unit.routes');
 
 const http = require('http');
 const { initSocket } = require('./lib/socket');
+const residentRoutes = require('./routes/resident.routes');
 
 const app = express();
 const server = http.createServer(app);
@@ -78,6 +79,7 @@ app.use('/api/events', eventRoutes);
 app.use('/api/amenities', amenityRoutes);
 app.use('/api/notices', noticeRoutes);
 app.use('/api/units', unitRoutes);
+app.use('/api/resident', residentRoutes);
 
 const PORT = process.env.PORT || 9000;
 

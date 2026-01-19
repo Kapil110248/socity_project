@@ -11,20 +11,20 @@ export interface MarketplaceItem {
     id: string
     title: string
     description: string
-    category: 'furniture' | 'electronics' | 'vehicles' | 'clothing' | 'other'
-    condition: 'new' | 'like_new' | 'good' | 'fair'
+    category: string
+    condition: string
     price: number
-    priceType: 'fixed' | 'negotiable' | 'free'
-    seller: {
+    priceType?: string
+    owner: {
         id: string
         name: string
-        unit: string
-        avatar?: string
+        ownedUnits?: { block: string; number: string }[]
+        profileImg?: string
     }
     images: string[]
-    status: 'active' | 'sold'
+    status: string
     createdAt: string
-    type: 'sell' | 'buy'
+    type: 'SELL' | 'BUY' | 'sell' | 'buy'
 }
 
 export interface Comment {

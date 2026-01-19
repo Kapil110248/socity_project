@@ -219,3 +219,5 @@ export const API_CONFIG = {
     SOCIETY_STATS: '/reports/society-stats',
   },
 };
+
+export const API_URL = API_CONFIG.BASE_URL;

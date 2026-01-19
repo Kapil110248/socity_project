@@ -28,6 +28,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { chatService } from '@/services/chat.service'
+import { toast } from 'sonner'
 import { getSocket } from '@/lib/socket'
 import { format } from 'date-fns'
 

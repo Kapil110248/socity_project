@@ -58,190 +58,50 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useState } from 'react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { useState, useEffect } from 'react'
 
-// Mock data - replace with actual API calls
-const allUnits = [
-  {
-    id: '1',
-    unitNumber: 'A-205',
-    block: 'Tower A',
-    floor: '2nd Floor',
-    type: '3 BHK',
-    area: '1,450 sq.ft',
-    status: 'Owner Occupied',
-    moveInDate: 'Jan 15, 2023',
-    ownershipType: 'Owner',
-    isRented: false,
-  },
-  {
-    id: '2',
-    unitNumber: 'B-301',
-    block: 'Tower B',
-    floor: '3rd Floor',
-    type: '2 BHK',
-    area: '1,100 sq.ft',
-    status: 'Rented Out',
-    moveInDate: 'Mar 10, 2022',
-    ownershipType: 'Owner',
-    isRented: true,
-  },
-]
-
-const residents = [
-  {
-    name: 'Rajesh Kumar',
-    relation: 'Owner',
-    phone: '+91 98765 43210',
-    email: 'rajesh@example.com',
-    age: 45,
-    isOwner: true,
-    avatar: null,
-  },
-  {
-    name: 'Priya Kumar',
-    relation: 'Spouse',
-    phone: '+91 98765 43211',
-    email: 'priya@example.com',
-    age: 42,
-    isOwner: false,
-    avatar: null,
-  },
-  {
-    name: 'Aarav Kumar',
-    relation: 'Son',
-    phone: '+91 98765 43212',
-    email: 'aarav@example.com',
-    age: 18,
-    isOwner: false,
-    avatar: null,
-  },
-]
-
-const pets = [
-  {
-    id: '1',
-    name: 'Bruno',
-    type: 'Dog',
-    breed: 'Golden Retriever',
-    vaccinations: [
-      {
-        id: '1',
-        name: 'Rabies',
-        date: '2024-06-15',
-        nextDue: '2025-06-15',
-        certificate: 'rabies-cert-2024.pdf',
-      },
-      {
-        id: '2',
-        name: 'DHPP',
-        date: '2024-05-20',
-        nextDue: '2025-05-20',
-        certificate: 'dhpp-cert-2024.pdf',
-      },
-    ],
-  },
-  {
-    id: '2',
-    name: 'Whiskers',
-    type: 'Cat',
-    breed: 'Persian',
-    vaccinations: [
-      {
-        id: '3',
-        name: 'Rabies',
-        date: '2024-07-10',
-        nextDue: '2025-07-10',
-        certificate: 'rabies-cat-2024.pdf',
-      },
-      {
-        id: '4',
-        name: 'FVRCP',
-        date: '2024-06-25',
-        nextDue: '2025-06-25',
-        certificate: 'fvrcp-cert-2024.pdf',
-      },
-    ],
-  },
-]
-
-const tenantInfo = {
-  name: 'Amit Sharma',
-  phone: '+91 99887 76655',
-  email: 'amit.sharma@example.com',
-  moveInDate: 'Apr 1, 2024',
-  agreementEndDate: 'Mar 31, 2026',
-  avatar: null,
-  vehicles: [
-    {
-      id: 't1',
-      number: 'MH 02 XY 9876',
-      type: 'Car',
-      brand: 'Maruti Swift',
-      color: 'Silver',
-      parkingSlot: 'B-301-1',
-    },
-  ],
+interface UnitMember {
+  id: number | string
+  name: string
+  relation: string
+  phone?: string
+  email?: string
+  age?: number
+  gender?: string
+  avatar?: string
+  isOwner?: boolean
 }
 
-const vehicles = [
-  {
-    id: '1',
-    number: 'MH 02 AB 1234',
-    type: 'Car',
-    brand: 'Honda City',
-    color: 'White',
-    parkingSlot: 'A-205-1',
-  },
-  {
-    id: '2',
-    number: 'MH 02 CD 5678',
-    type: 'Bike',
-    brand: 'Royal Enfield',
-    color: 'Black',
-    parkingSlot: 'A-205-2',
-  },
-]
+interface UnitVehicle {
+  id: number | string
+  number: string
+  type: string
+  name?: string
+  color?: string
+  parkingSlot?: string
+}
 
-const paymentHistory = [
-  {
-    id: 'INV-2024-001',
-    month: 'December 2024',
-    amount: 8500,
-    dueDate: '2024-12-05',
-    paidDate: '2024-12-03',
-    status: 'paid',
-    type: 'Maintenance',
-  },
-  {
-    id: 'INV-2024-002',
-    month: 'November 2024',
-    amount: 8500,
-    dueDate: '2024-11-05',
-    paidDate: '2024-11-02',
-    status: 'paid',
-    type: 'Maintenance',
-  },
-  {
-    id: 'INV-2024-003',
-    month: 'October 2024',
-    amount: 8500,
-    dueDate: '2024-10-05',
-    paidDate: '2024-10-04',
-    status: 'paid',
-    type: 'Maintenance',
-  },
-]
+interface UnitPet {
+  id: number | string
+  name: string
+  type: string
+  breed?: string
+  vaccinationStatus?: string
+  vaccinations?: any[]
+}
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { residentService } from '@/services/resident.service'
+import { toast } from 'sonner'
+import { Skeleton } from '@/components/ui/skeleton'
 
-const pendingPayments = [
-  {
-    id: 'INV-2025-001',
-    description: 'Monthly Maintenance - January 2025',
-    amount: 8500,
-    dueDate: '2025-01-05',
-    status: 'pending',
-  },
-]
+
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -257,12 +117,111 @@ const itemVariants = {
 }
 
 export default function MyUnitPage() {
+  const queryClient = useQueryClient()
   const { user } = useAuthStore()
-  const [selectedUnit, setSelectedUnit] = useState(allUnits[0])
+  const [activeTab, setActiveTab] = useState('members')
+  const [selectedUnit, setSelectedUnit] = useState<any>(null)
   const [isAddFlatOpen, setIsAddFlatOpen] = useState(false)
   const [isTenantDialogOpen, setIsTenantDialogOpen] = useState(false)
   const [isVaccinationDialogOpen, setIsVaccinationDialogOpen] = useState(false)
   const [selectedPet, setSelectedPet] = useState<any>(null)
+  const [isAddMemberOpen, setIsAddMemberOpen] = useState(false)
+  const [memberForm, setMemberForm] = useState({ name: '', relation: '', phone: '', email: '', age: '', gender: '' })
+  const [isAddVehicleOpen, setIsAddVehicleOpen] = useState(false)
+  const [vehicleForm, setVehicleForm] = useState({ number: '', type: 'Car', name: '', color: '', parkingSlot: '' })
+  const [isAddPetOpen, setIsAddPetOpen] = useState(false)
+  const [petForm, setPetForm] = useState({ name: '', type: 'Dog', breed: '', age: '' })
+  const [editingItem, setEditingItem] = useState<{ type: 'member' | 'vehicle' | 'pet', id: number | string } | null>(null)
+
+  const { data: unit, isLoading, error } = useQuery({
+    queryKey: ['unit-data'],
+    queryFn: residentService.getUnitData
+  })
+
+  // Initialize selectedUnit when data is loaded
+  useEffect(() => {
+    if (unit && !selectedUnit) {
+      setSelectedUnit(unit)
+    }
+  }, [unit, selectedUnit])
+
+  // Mutations
+  const addMemberMutation = useMutation({
+    mutationFn: residentService.addFamilyMember,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['unit-data'] })
+      toast.success('Member added successfully')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to add member')
+  })
+
+  const addVehicleMutation = useMutation({
+    mutationFn: residentService.addVehicle,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['unit-data'] })
+      toast.success('Vehicle added successfully')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to add vehicle')
+  })
+
+  const addPetMutation = useMutation({
+    mutationFn: residentService.addPet,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['unit-data'] })
+      toast.success('Pet added successfully')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to add pet')
+  })
+
+  // Update Mutations
+  const updateMemberMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number | string, data: any }) => residentService.updateFamilyMember(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['unit-data'] })
+      toast.success('Member updated successfully')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to update member')
+  })
+
+  const updateVehicleMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number | string, data: any }) => residentService.updateVehicle(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['unit-data'] })
+      toast.success('Vehicle updated successfully')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to update vehicle')
+  })
+
+  const updatePetMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number | string, data: any }) => residentService.updatePet(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['unit-data'] })
+      toast.success('Pet updated successfully')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to update pet')
+  })
+
+  if (isLoading) return <div className="p-8"><Skeleton className="w-full h-[600px]" /></div>
+  if (error) return <div className="p-8 text-red-500">Error loading unit data</div>
+  if (!unit) return <div className="p-8">No unit data found</div>
+  if (!selectedUnit) return <div className="p-8"><Skeleton className="w-full h-[600px]" /></div>
+
+  const residents = unit.members || []
+  const vehicles = unit.vehicles || []
+  const pets = unit.petsList || []
+  const paymentHistory: any[] = []
+  const pendingPayments: any[] = []
+  const allUnits: any[] = [unit] // Show current unit
+
+  const tenantInfo = selectedUnit.tenant ? {
+    name: selectedUnit.tenant.name,
+    phone: selectedUnit.tenant.phone || 'N/A',
+    email: selectedUnit.tenant.email || 'N/A',
+    moveInDate: 'N/A',
+    agreementEndDate: 'N/A',
+    avatar: selectedUnit.tenant.profileImg,
+    vehicles: selectedUnit.vehicles || []
+  } : null
 
   return (
     <RoleGuard allowedRoles={['resident']}>
@@ -398,11 +357,11 @@ export default function MyUnitPage() {
                     {/* Quick Stats */}
                     <div className="flex flex-wrap gap-4">
                       <div className="text-center p-3 bg-white/10 rounded-xl backdrop-blur min-w-[80px]">
-                        <Users className="h-5 w-5 mx-auto text-teal-300" />
-                        <p className="text-2xl font-bold mt-1">{unit.isRented ? 1 : residents.length}</p>
-                        <p className="text-xs text-white/70">{unit.isRented ? 'Tenant' : 'Members'}</p>
+                        <PawPrint className="h-5 w-5 mx-auto text-pink-300" />
+                        <p className="text-2xl font-bold mt-1">{!selectedUnit.tenantId ? residents.length : 1}</p>
+                        <p className="text-xs text-white/70">{selectedUnit.tenantId ? 'Tenant' : 'Members'}</p>
                       </div>
-                      {!unit.isRented && (
+                      {!selectedUnit.tenantId && (
                         <>
                           <div className="text-center p-3 bg-white/10 rounded-xl backdrop-blur min-w-[80px]">
                             <PawPrint className="h-5 w-5 mx-auto text-pink-300" />
@@ -416,10 +375,10 @@ export default function MyUnitPage() {
                           </div>
                         </>
                       )}
-                      {unit.isRented && (
+                      {selectedUnit.tenantId && (
                         <div className="text-center p-3 bg-white/10 rounded-xl backdrop-blur min-w-[80px]">
                           <Car className="h-5 w-5 mx-auto text-cyan-300" />
-                          <p className="text-2xl font-bold mt-1">{tenantInfo.vehicles.length}</p>
+                          <p className="text-2xl font-bold mt-1">{tenantInfo?.vehicles?.length || 0}</p>
                           <p className="text-xs text-white/70">Vehicles</p>
                         </div>
                       )}
@@ -545,7 +504,7 @@ export default function MyUnitPage() {
                 </div>
               </div>
               <div className="space-y-3">
-                {residents.map((resident, index) => (
+                {residents.map((resident: UnitMember, index: number) => (
                   <div
                     key={index}
                     className="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-50 transition-colors border border-gray-100"
@@ -580,20 +539,131 @@ export default function MyUnitPage() {
                         </a>
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="text-gray-400 hover:text-teal-600">
-                      <ChevronRight className="h-5 w-5" />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-gray-400 hover:text-teal-600"
+                      onClick={() => {
+                        setEditingItem({ type: 'member', id: resident.id })
+                        setMemberForm({
+                          name: resident.name,
+                          relation: resident.relation,
+                          phone: resident.phone || '',
+                          email: '', // Not in resident object yet
+                          age: resident.age?.toString() || '',
+                          gender: resident.gender || ''
+                        })
+                        setIsAddMemberOpen(true)
+                      }}
+                    >
+                      <Edit className="h-4 w-4" />
                     </Button>
                   </div>
                 ))}
               </div>
-              <Button
-                variant="outline"
-                className="w-full mt-4 border-dashed border-teal-300 text-teal-600 hover:bg-teal-50"
-                onClick={() => alert('Add Family Member\n\nOpening form to add a new family member to your unit...')}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Family Member
-              </Button>
+              <Dialog open={isAddMemberOpen} onOpenChange={setIsAddMemberOpen}>
+                <DialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full mt-4 border-dashed border-teal-300 text-teal-600 hover:bg-teal-50"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Family Member
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>{editingItem ? 'Edit Family Member' : 'Add Family Member'}</DialogTitle>
+                    <DialogDescription>
+                      {editingItem ? 'Update details for your family member' : 'Add a new member to your unit records'}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="memberName">Full Name</Label>
+                      <Input
+                        id="memberName"
+                        placeholder="John Doe"
+                        value={memberForm.name}
+                        onChange={(e) => setMemberForm({ ...memberForm, name: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="memberRelation">Relation</Label>
+                        <Input
+                          id="memberRelation"
+                          placeholder="Spouse, Child, etc."
+                          value={memberForm.relation}
+                          onChange={(e) => setMemberForm({ ...memberForm, relation: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="memberAge">Age</Label>
+                        <Input
+                          id="memberAge"
+                          type="number"
+                          placeholder="25"
+                          value={memberForm.age}
+                          onChange={(e) => setMemberForm({ ...memberForm, age: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="memberPhone">Phone (Optional)</Label>
+                        <Input
+                          id="memberPhone"
+                          placeholder="+91 98765 43210"
+                          value={memberForm.phone}
+                          onChange={(e) => setMemberForm({ ...memberForm, phone: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="memberEmail">Email (Optional)</Label>
+                        <Input
+                          id="memberEmail"
+                          type="email"
+                          placeholder="john@example.com"
+                          value={memberForm.email}
+                          onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsAddMemberOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        if (editingItem) {
+                          updateMemberMutation.mutate({
+                            id: editingItem.id,
+                            data: {
+                              ...memberForm,
+                              age: parseInt(memberForm.age)
+                            }
+                          })
+                        } else {
+                          addMemberMutation.mutate({
+                            unitId: selectedUnit.id,
+                            ...memberForm,
+                            age: parseInt(memberForm.age)
+                          })
+                        }
+                        setIsAddMemberOpen(false)
+                        setEditingItem(null)
+                        setMemberForm({ name: '', relation: '', phone: '', email: '', age: '', gender: '' })
+                      }}
+                      className="bg-gradient-to-r from-teal-500 to-cyan-500"
+                      disabled={addMemberMutation.isPending || updateMemberMutation.isPending}
+                    >
+                      {editingItem ? (updateMemberMutation.isPending ? 'Updating...' : 'Update Member') : (addMemberMutation.isPending ? 'Adding...' : 'Add Member')}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </Card>
           </motion.div>
 
@@ -614,7 +684,7 @@ export default function MyUnitPage() {
                 </div>
               </div>
               <div className="space-y-3">
-                {vehicles.map((vehicle) => (
+                {vehicles.map((vehicle: UnitVehicle) => (
                   <div
                     key={vehicle.id}
                     className="p-4 rounded-xl border border-gray-100 hover:border-teal-300 transition-all hover:shadow-md"
@@ -630,34 +700,145 @@ export default function MyUnitPage() {
                           </Badge>
                         </div>
                         <p className="text-sm text-gray-600 mt-1">
-                          {vehicle.brand} | {vehicle.color}
+                          {vehicle.name}
                         </p>
                         <div className="flex items-center mt-2 text-sm text-gray-500">
                           <MapPin className="h-3 w-3 mr-1" />
                           Parking: {vehicle.parkingSlot}
                         </div>
                       </div>
-                      <Button variant="ghost" size="icon" className="text-gray-400 hover:text-teal-600">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-gray-400 hover:text-teal-600"
+                        onClick={() => {
+                          setEditingItem({ type: 'vehicle', id: vehicle.id })
+                          setVehicleForm({
+                            number: vehicle.number,
+                            type: vehicle.type,
+                            name: vehicle.name || '',
+                            color: vehicle.color || '',
+                            parkingSlot: vehicle.parkingSlot || ''
+                          })
+                          setIsAddVehicleOpen(true)
+                        }}
+                      >
                         <Edit className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
                 ))}
               </div>
-              <Button
-                variant="outline"
-                className="w-full mt-4 border-dashed border-cyan-300 text-cyan-600 hover:bg-cyan-50"
-                onClick={() => alert('Register New Vehicle\n\nOpening form to register a new vehicle...')}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Register New Vehicle
-              </Button>
+              <Dialog open={isAddVehicleOpen} onOpenChange={setIsAddVehicleOpen}>
+                <DialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full mt-4 border-dashed border-cyan-300 text-cyan-600 hover:bg-cyan-50"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Register New Vehicle
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>{editingItem ? 'Edit Vehicle Details' : 'Register New Vehicle'}</DialogTitle>
+                    <DialogDescription>
+                      {editingItem ? 'Update details for your registered vehicle' : 'Add a new vehicle to your unit records'}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="vehicleNumber">Vehicle Number</Label>
+                      <Input
+                        id="vehicleNumber"
+                        placeholder="MH 12 AB 1234"
+                        value={vehicleForm.number}
+                        onChange={(e) => setVehicleForm({ ...vehicleForm, number: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="vehicleType">Type</Label>
+                        <Select
+                          value={vehicleForm.type}
+                          onValueChange={(value) => setVehicleForm({ ...vehicleForm, type: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Car">Car</SelectItem>
+                            <SelectItem value="Bike">Bike/Scooter</SelectItem>
+                            <SelectItem value="Other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="vehicleBrand">Brand/Model</Label>
+                        <Input
+                          id="vehicleBrand"
+                          placeholder="Honda City"
+                          value={vehicleForm.name}
+                          onChange={(e) => setVehicleForm({ ...vehicleForm, name: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="vehicleColor">Color</Label>
+                        <Input
+                          id="vehicleColor"
+                          placeholder="White"
+                          value={vehicleForm.color}
+                          onChange={(e) => setVehicleForm({ ...vehicleForm, color: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="parkingSlot">Parking Slot (Optional)</Label>
+                        <Input
+                          id="parkingSlot"
+                          placeholder="P1-205"
+                          value={vehicleForm.parkingSlot}
+                          onChange={(e) => setVehicleForm({ ...vehicleForm, parkingSlot: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsAddVehicleOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        if (editingItem) {
+                          updateVehicleMutation.mutate({
+                            id: editingItem.id,
+                            data: vehicleForm
+                          })
+                        } else {
+                          addVehicleMutation.mutate({
+                            unitId: selectedUnit.id,
+                            ...vehicleForm
+                          })
+                        }
+                        setIsAddVehicleOpen(false)
+                        setEditingItem(null)
+                        setVehicleForm({ number: '', type: 'Car', name: '', color: '', parkingSlot: '' })
+                      }}
+                      className="bg-gradient-to-r from-cyan-500 to-blue-500"
+                      disabled={addVehicleMutation.isPending || updateVehicleMutation.isPending}
+                    >
+                      {editingItem ? (updateVehicleMutation.isPending ? 'Updating...' : 'Update Vehicle') : (addVehicleMutation.isPending ? 'Registering...' : 'Register Vehicle')}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </Card>
           </motion.div>
         </div>
 
         {/* Tenant Management Section */}
-        {selectedUnit.isRented && (
+        {selectedUnit.tenantId && tenantInfo && (
           <motion.div variants={itemVariants}>
             <Card className="p-6 border-0 shadow-lg">
               <div className="flex items-center justify-between mb-4">
@@ -691,16 +872,16 @@ export default function MyUnitPage() {
                       <div className="space-y-4">
                         <div className="space-y-2">
                           <Label htmlFor="tenantName">Tenant Name</Label>
-                          <Input id="tenantName" defaultValue={tenantInfo.name} />
+                          <Input id="tenantName" defaultValue={tenantInfo?.name} />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label htmlFor="tenantPhone">Phone</Label>
-                            <Input id="tenantPhone" defaultValue={tenantInfo.phone} />
+                            <Input id="tenantPhone" defaultValue={tenantInfo?.phone} />
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="tenantEmail">Email</Label>
-                            <Input id="tenantEmail" defaultValue={tenantInfo.email} />
+                            <Input id="tenantEmail" defaultValue={tenantInfo?.email} />
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -740,27 +921,27 @@ export default function MyUnitPage() {
                 <div className="space-y-4">
                   <div className="flex items-center space-x-3 p-4 rounded-xl border border-gray-100 hover:bg-gray-50">
                     <Avatar className="h-14 w-14 ring-2 ring-white shadow">
-                      <AvatarImage src={tenantInfo.avatar || undefined} />
+                      <AvatarImage src={tenantInfo?.avatar || undefined} />
                       <AvatarFallback className="bg-gradient-to-br from-blue-500 to-cyan-500 text-white font-semibold text-lg">
-                        {tenantInfo.name.charAt(0)}
+                        {tenantInfo?.name?.charAt(0) || 'T'}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
-                      <p className="font-semibold text-gray-900 text-lg">{tenantInfo.name}</p>
+                      <p className="font-semibold text-gray-900 text-lg">{tenantInfo?.name || 'N/A'}</p>
                       <div className="flex flex-col gap-1 mt-1">
                         <a
-                          href={`tel:${tenantInfo.phone}`}
+                          href={`tel:${tenantInfo?.phone}`}
                           className="text-sm text-teal-600 hover:text-teal-700 flex items-center"
                         >
                           <Phone className="h-3 w-3 mr-1" />
-                          {tenantInfo.phone}
+                          {tenantInfo?.phone || 'N/A'}
                         </a>
                         <a
-                          href={`mailto:${tenantInfo.email}`}
+                          href={`mailto:${tenantInfo?.email}`}
                           className="text-sm text-teal-600 hover:text-teal-700 flex items-center"
                         >
                           <Mail className="h-3 w-3 mr-1" />
-                          {tenantInfo.email}
+                          {tenantInfo?.email || 'N/A'}
                         </a>
                       </div>
                     </div>
@@ -772,14 +953,14 @@ export default function MyUnitPage() {
                         <Calendar className="h-4 w-4" />
                         <p className="text-xs font-medium">Move-in Date</p>
                       </div>
-                      <p className="font-semibold text-gray-900">{tenantInfo.moveInDate}</p>
+                      <p className="font-semibold text-gray-900">{tenantInfo?.moveInDate || 'N/A'}</p>
                     </div>
                     <div className="p-4 rounded-xl bg-orange-50 border border-orange-100">
                       <div className="flex items-center gap-2 text-orange-600 mb-1">
                         <CalendarClock className="h-4 w-4" />
                         <p className="text-xs font-medium">Agreement Ends</p>
                       </div>
-                      <p className="font-semibold text-gray-900">{tenantInfo.agreementEndDate}</p>
+                      <p className="font-semibold text-gray-900">{tenantInfo?.agreementEndDate || 'N/A'}</p>
                     </div>
                   </div>
                 </div>
@@ -790,7 +971,7 @@ export default function MyUnitPage() {
                     Tenant Vehicles
                   </h4>
                   <div className="space-y-2">
-                    {tenantInfo.vehicles.map((vehicle) => (
+                    {tenantInfo?.vehicles?.map((vehicle: UnitVehicle) => (
                       <div
                         key={vehicle.id}
                         className="p-4 rounded-xl border border-gray-100 hover:border-teal-300 transition-all"
@@ -804,7 +985,7 @@ export default function MyUnitPage() {
                               </Badge>
                             </div>
                             <p className="text-sm text-gray-600 mt-1">
-                              {vehicle.brand} | {vehicle.color}
+                              {vehicle.name} | {vehicle.color}
                             </p>
                             <div className="flex items-center mt-2 text-sm text-gray-500">
                               <MapPin className="h-3 w-3 mr-1" />
@@ -822,7 +1003,7 @@ export default function MyUnitPage() {
         )}
 
         {/* Enhanced Pets Section with Vaccination Records */}
-        {!selectedUnit.isRented && pets.length > 0 && (
+        {!selectedUnit.tenantId && pets.length > 0 && (
           <motion.div variants={itemVariants}>
             <Card className="p-6 border-0 shadow-lg">
               <div className="flex items-center justify-between mb-4">
@@ -835,14 +1016,99 @@ export default function MyUnitPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    className="border-dashed border-pink-300 text-pink-600 hover:bg-pink-50"
-                    onClick={() => alert('Register New Pet\n\nOpening form to register a new pet...')}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Pet
-                  </Button>
+                  <Dialog open={isAddPetOpen} onOpenChange={setIsAddPetOpen}>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="border-dashed border-pink-300 text-pink-600 hover:bg-pink-50"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Pet
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>{editingItem ? 'Edit Pet Details' : 'Add New Pet'}</DialogTitle>
+                        <DialogDescription>
+                          {editingItem ? 'Update details for your registered pet' : 'Register a new pet for your unit'}
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="petName">Pet Name</Label>
+                          <Input
+                            id="petName"
+                            placeholder="Bruno"
+                            value={petForm.name}
+                            onChange={(e) => setPetForm({ ...petForm, name: e.target.value })}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="petType">Type</Label>
+                            <Select
+                              value={petForm.type}
+                              onValueChange={(value) => setPetForm({ ...petForm, type: value })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select type" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Dog">Dog</SelectItem>
+                                <SelectItem value="Cat">Cat</SelectItem>
+                                <SelectItem value="Other">Other</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="petBreed">Breed</Label>
+                            <Input
+                              id="petBreed"
+                              placeholder="Golden Retriever"
+                              value={petForm.breed}
+                              onChange={(e) => setPetForm({ ...petForm, breed: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="petAge">Age</Label>
+                          <Input
+                            id="petAge"
+                            placeholder="3 Years"
+                            value={petForm.age}
+                            onChange={(e) => setPetForm({ ...petForm, age: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsAddPetOpen(false)}>
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            if (editingItem) {
+                              updatePetMutation.mutate({
+                                id: editingItem.id,
+                                data: petForm
+                              })
+                            } else {
+                              addPetMutation.mutate({
+                                unitId: selectedUnit.id,
+                                ...petForm
+                              })
+                            }
+                            setIsAddPetOpen(false)
+                            setEditingItem(null)
+                            setPetForm({ name: '', type: 'Dog', breed: '', age: '' })
+                          }}
+                          className="bg-gradient-to-r from-pink-500 to-purple-500"
+                          disabled={addPetMutation.isPending || updatePetMutation.isPending}
+                        >
+                          {editingItem ? (updatePetMutation.isPending ? 'Updating...' : 'Update Pet') : (addPetMutation.isPending ? 'Adding...' : 'Add Pet')}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                   <div className="p-2 bg-pink-100 rounded-xl">
                     <PawPrint className="h-5 w-5 text-pink-600" />
                   </div>
@@ -850,7 +1116,7 @@ export default function MyUnitPage() {
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
-                {pets.map((pet) => (
+                {pets.map((pet: UnitPet) => (
                   <Card key={pet.id} className="p-4 bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-100">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
@@ -862,68 +1128,87 @@ export default function MyUnitPage() {
                           <p className="text-sm text-gray-500">{pet.type} | {pet.breed}</p>
                         </div>
                       </div>
-                      <Dialog
-                        open={isVaccinationDialogOpen && selectedPet?.id === pet.id}
-                        onOpenChange={(open) => {
-                          setIsVaccinationDialogOpen(open)
-                          if (open) setSelectedPet(pet)
-                        }}
-                      >
-                        <DialogTrigger asChild>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-pink-300 text-pink-600 hover:bg-pink-100"
-                            onClick={() => setSelectedPet(pet)}
-                          >
-                            <Upload className="h-3 w-3 mr-1" />
-                            Upload
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>Upload Vaccination Certificate</DialogTitle>
-                            <DialogDescription>
-                              Upload vaccination certificate for {pet.name}
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="vaccineName">Vaccination Name</Label>
-                              <Input id="vaccineName" placeholder="e.g., Rabies, DHPP" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <Label htmlFor="vaccineDate">Vaccination Date</Label>
-                                <Input id="vaccineDate" type="date" />
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="nextDue">Next Due Date</Label>
-                                <Input id="nextDue" type="date" />
-                              </div>
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="certificate">Certificate File</Label>
-                              <Input id="certificate" type="file" accept=".pdf,.jpg,.jpeg,.png" />
-                              <p className="text-xs text-gray-500">PDF, JPG, or PNG (Max 5MB)</p>
-                            </div>
-                          </div>
-                          <DialogFooter>
-                            <Button variant="outline" onClick={() => setIsVaccinationDialogOpen(false)}>
-                              Cancel
-                            </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-gray-400 hover:text-pink-600"
+                          onClick={() => {
+                            setEditingItem({ type: 'pet', id: pet.id })
+                            setPetForm({
+                              name: pet.name,
+                              type: pet.type,
+                              breed: pet.breed || '',
+                              age: '' // Not in pet model yet
+                            })
+                            setIsAddPetOpen(true)
+                          }}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Dialog
+                          open={isVaccinationDialogOpen && selectedPet?.id === pet.id}
+                          onOpenChange={(open) => {
+                            setIsVaccinationDialogOpen(open)
+                            if (open) setSelectedPet(pet)
+                          }}
+                        >
+                          <DialogTrigger asChild>
                             <Button
-                              onClick={() => {
-                                alert('Vaccination certificate uploaded successfully')
-                                setIsVaccinationDialogOpen(false)
-                              }}
-                              className="bg-gradient-to-r from-pink-500 to-purple-500"
+                              size="sm"
+                              variant="outline"
+                              className="border-pink-300 text-pink-600 hover:bg-pink-100"
+                              onClick={() => setSelectedPet(pet)}
                             >
-                              Upload Certificate
+                              <Upload className="h-3 w-3 mr-1" />
+                              Upload
                             </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Upload Vaccination Certificate</DialogTitle>
+                              <DialogDescription>
+                                Upload vaccination certificate for {pet.name}
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="vaccineName">Vaccination Name</Label>
+                                <Input id="vaccineName" placeholder="e.g., Rabies, DHPP" />
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <Label htmlFor="vaccineDate">Vaccination Date</Label>
+                                  <Input id="vaccineDate" type="date" />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label htmlFor="nextDue">Next Due Date</Label>
+                                  <Input id="nextDue" type="date" />
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="certificate">Certificate File</Label>
+                                <Input id="certificate" type="file" accept=".pdf,.jpg,.jpeg,.png" />
+                                <p className="text-xs text-gray-500">PDF, JPG, or PNG (Max 5MB)</p>
+                              </div>
+                            </div>
+                            <DialogFooter>
+                              <Button variant="outline" onClick={() => setIsVaccinationDialogOpen(false)}>
+                                Cancel
+                              </Button>
+                              <Button
+                                onClick={() => {
+                                  alert('Vaccination certificate uploaded successfully')
+                                  setIsVaccinationDialogOpen(false)
+                                }}
+                                className="bg-gradient-to-r from-pink-500 to-purple-500"
+                              >
+                                Upload Certificate
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
                     </div>
 
                     <div className="space-y-2">
@@ -931,7 +1216,7 @@ export default function MyUnitPage() {
                         <Syringe className="h-4 w-4 text-purple-600" />
                         Vaccination Records
                       </h4>
-                      {pet.vaccinations.map((vaccination) => {
+                      {(pet.vaccinations || []).map((vaccination: any) => {
                         const isUpcoming = new Date(vaccination.nextDue) > new Date()
                         const daysUntilDue = Math.ceil((new Date(vaccination.nextDue).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
 
@@ -951,15 +1236,15 @@ export default function MyUnitPage() {
                                       daysUntilDue <= 30 && daysUntilDue > 0
                                         ? "bg-orange-100 text-orange-700 text-xs"
                                         : isUpcoming
-                                        ? "bg-green-100 text-green-700 text-xs"
-                                        : "bg-red-100 text-red-700 text-xs"
+                                          ? "bg-green-100 text-green-700 text-xs"
+                                          : "bg-red-100 text-red-700 text-xs"
                                     }
                                   >
                                     {daysUntilDue <= 30 && daysUntilDue > 0
                                       ? "Due Soon"
                                       : isUpcoming
-                                      ? "Valid"
-                                      : "Overdue"}
+                                        ? "Valid"
+                                        : "Overdue"}
                                   </Badge>
                                 </div>
                                 <div className="grid grid-cols-2 gap-2 mt-2 text-xs text-gray-600">
@@ -985,6 +1270,11 @@ export default function MyUnitPage() {
                           </div>
                         )
                       })}
+                      {(!pet.vaccinations || pet.vaccinations.length === 0) && (
+                        <p className="text-xs text-gray-500 italic p-2 bg-white/50 rounded border border-dashed border-purple-200 text-center">
+                          No vaccination records uploaded yet.
+                        </p>
+                      )}
                     </div>
                   </Card>
                 ))}

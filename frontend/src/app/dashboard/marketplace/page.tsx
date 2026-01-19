@@ -36,7 +36,15 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { residentService } from '@/services/resident.service'
+import { toast } from 'sonner'
+import { Skeleton } from '@/components/ui/skeleton'
+import { RoleGuard } from '@/components/auth/role-guard'
 
 const listings = [
   {
@@ -174,10 +182,49 @@ const categories = [
 ]
 
 export default function MarketplacePage() {
+  const queryClient = useQueryClient()
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-  const [selectedListing, setSelectedListing] = useState<typeof listings[0] | null>(null)
+  const [isSellOpen, setIsSellOpen] = useState(false)
+  const [sellForm, setSellForm] = useState({
+    title: '',
+    description: '',
+    price: '',
+    originalPrice: '',
+    category: 'Electronics',
+    condition: 'Good',
+  })
+
+  const { data: marketItems, isLoading, error } = useQuery({
+    queryKey: ['market-items'],
+    queryFn: residentService.getMarketItems
+  })
+
+  const createItemMutation = useMutation({
+    mutationFn: residentService.createMarketItem,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['market-items'] })
+      setIsSellOpen(false)
+      setSellForm({
+        title: '',
+        description: '',
+        price: '',
+        originalPrice: '',
+        category: 'Electronics',
+        condition: 'Good',
+      })
+      toast.success('Item listed successfully!')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to list item')
+  })
+
+  const items = marketItems || []
+
+  const handleSellSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    createItemMutation.mutate(sellForm)
+  }
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-IN').format(price)
@@ -193,268 +240,330 @@ export default function MarketplacePage() {
     return colors[condition] || 'bg-gray-100 text-gray-800'
   }
 
-  const stats = [
-    { label: 'Active Listings', value: listings.filter(l => l.status === 'available').length, icon: ShoppingBag, color: 'bg-blue-500' },
-    { label: 'Sold This Month', value: 8, icon: Tag, color: 'bg-green-500' },
-    { label: 'My Listings', value: 2, icon: User, color: 'bg-purple-500' },
-    { label: 'Saved Items', value: 5, icon: Heart, color: 'bg-red-500' },
-  ]
+  if (isLoading) return <div className="p-8"><Skeleton className="w-full h-[600px] rounded-3xl" /></div>
+  if (error) return <div className="p-8 text-red-500">Error loading items</div>
+
+  const filteredItems = items.filter((item: any) => {
+    const matchesSearch = item.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.description?.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory
+    return matchesSearch && matchesCategory
+  })
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2">
-            <ShoppingBag className="h-8 w-8 text-emerald-600" />
-            Buy & Sell Marketplace
-          </h1>
-          <p className="text-gray-600 mt-1">Buy and sell items within your community</p>
-        </div>
-        <div className="flex gap-2 mt-4 md:mt-0">
-          <Button variant="outline" className="gap-2">
-            <Heart className="h-4 w-4" />
-            Saved
-          </Button>
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            Sell Item
-          </Button>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        {stats.map((stat, index) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-          >
-            <Card className="p-4">
-              <div className={`w-10 h-10 rounded-lg ${stat.color} flex items-center justify-center mb-2`}>
-                <stat.icon className="h-5 w-5 text-white" />
-              </div>
-              <p className="text-2xl font-bold">{stat.value}</p>
-              <p className="text-sm text-gray-600">{stat.label}</p>
-            </Card>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Filters */}
-      <Card className="p-4 mb-6">
-        <div className="flex flex-col md:flex-row gap-4 items-center">
-          <div className="flex-1 relative w-full">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Search items..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
+    <RoleGuard allowedRoles={['resident', 'committee', 'admin', 'super_admin', 'society_admin']}>
+      <div className="min-h-screen bg-gray-50 p-4 md:p-6">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2">
+              <ShoppingBag className="h-8 w-8 text-emerald-600" />
+              Buy & Sell Marketplace
+            </h1>
+            <p className="text-gray-600 mt-1">Buy and sell items within your community</p>
           </div>
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="w-full md:w-40">
-              <SelectValue placeholder="Category" />
-            </SelectTrigger>
-            <SelectContent>
-              {categories.map((cat) => (
-                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select defaultValue="latest">
-            <SelectTrigger className="w-full md:w-40">
-              <SelectValue placeholder="Sort by" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="latest">Latest</SelectItem>
-              <SelectItem value="price-low">Price: Low to High</SelectItem>
-              <SelectItem value="price-high">Price: High to Low</SelectItem>
-              <SelectItem value="popular">Most Popular</SelectItem>
-            </SelectContent>
-          </Select>
-          <div className="flex gap-1">
-            <Button
-              variant={viewMode === 'grid' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setViewMode('grid')}
-            >
-              <Grid className="h-4 w-4" />
+          <div className="flex gap-2 mt-4 md:mt-0">
+            <Button variant="outline" className="gap-2">
+              <Heart className="h-4 w-4" />
+              Saved
             </Button>
-            <Button
-              variant={viewMode === 'list' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setViewMode('list')}
-            >
-              <List className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      {/* Listings Grid */}
-      <div className={`grid gap-4 ${viewMode === 'grid' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
-        {listings.map((listing, index) => (
-          <motion.div
-            key={listing.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
-          >
-            <Dialog>
+            <Dialog open={isSellOpen} onOpenChange={setIsSellOpen}>
               <DialogTrigger asChild>
-                <Card className={`overflow-hidden hover:shadow-lg transition-shadow cursor-pointer ${listing.status === 'sold' ? 'opacity-60' : ''}`}>
-                  {viewMode === 'grid' ? (
-                    <>
-                      {/* Image Placeholder */}
-                      <div className="h-48 bg-gradient-to-br from-gray-200 to-gray-300 relative">
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <ShoppingBag className="h-16 w-16 text-gray-400" />
-                        </div>
-                        {listing.status === 'sold' && (
-                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                            <Badge className="bg-red-600 text-white text-lg px-4 py-1">SOLD</Badge>
-                          </div>
-                        )}
-                        <button className="absolute top-2 right-2 p-2 bg-white rounded-full shadow hover:bg-gray-100">
-                          <Heart className="h-4 w-4 text-gray-600" />
-                        </button>
-                        <Badge className={`absolute top-2 left-2 ${getConditionBadge(listing.condition)}`}>
-                          {listing.condition}
-                        </Badge>
-                      </div>
-                      <div className="p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <Badge variant="outline" className="text-xs">{listing.category}</Badge>
-                          <span className="text-xs text-gray-500 flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {new Date(listing.postedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                          </span>
-                        </div>
-                        <h3 className="font-semibold text-gray-900 mb-2 line-clamp-1">{listing.title}</h3>
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="text-xl font-bold text-emerald-600 flex items-center">
-                            <IndianRupee className="h-4 w-4" />{formatPrice(listing.price)}
-                          </span>
-                          {listing.originalPrice && (
-                            <span className="text-sm text-gray-400 line-through">
-                              ₹{formatPrice(listing.originalPrice)}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-gray-500">
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3" /> {listing.seller.unit}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <span className="flex items-center gap-1">
-                              <Heart className="h-3 w-3" /> {listing.likes}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex p-4 gap-4">
-                      <div className="w-32 h-32 bg-gradient-to-br from-gray-200 to-gray-300 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <ShoppingBag className="h-10 w-10 text-gray-400" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge variant="outline" className="text-xs">{listing.category}</Badge>
-                          <Badge className={`text-xs ${getConditionBadge(listing.condition)}`}>{listing.condition}</Badge>
-                          {listing.status === 'sold' && <Badge variant="destructive">Sold</Badge>}
-                        </div>
-                        <h3 className="font-semibold text-gray-900 mb-1">{listing.title}</h3>
-                        <p className="text-sm text-gray-600 line-clamp-2 mb-2">{listing.description}</p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xl font-bold text-emerald-600 flex items-center">
-                            <IndianRupee className="h-4 w-4" />{formatPrice(listing.price)}
-                          </span>
-                          <span className="text-xs text-gray-500">{listing.seller.unit}</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </Card>
+                <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700">
+                  <Plus className="h-4 w-4" />
+                  Sell Item
+                </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
-                  <DialogTitle>{listing.title}</DialogTitle>
+                  <DialogTitle>List an Item for Sale</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4">
-                  {/* Image */}
-                  <div className="h-64 bg-gradient-to-br from-gray-200 to-gray-300 rounded-lg flex items-center justify-center">
-                    <ShoppingBag className="h-20 w-20 text-gray-400" />
+                <form onSubmit={handleSellSubmit} className="space-y-4 pt-4">
+                  <div className="space-y-2">
+                    <Label>Title</Label>
+                    <Input
+                      placeholder="What are you selling?"
+                      value={sellForm.title}
+                      onChange={e => setSellForm({ ...sellForm, title: e.target.value })}
+                      required
+                    />
                   </div>
-
-                  {/* Price and Badges */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl font-bold text-emerald-600 flex items-center">
-                        <IndianRupee className="h-5 w-5" />{formatPrice(listing.price)}
-                      </span>
-                      {listing.originalPrice && (
-                        <span className="text-lg text-gray-400 line-through">
-                          ₹{formatPrice(listing.originalPrice)}
-                        </span>
-                      )}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Price (₹)</Label>
+                      <Input
+                        type="number"
+                        placeholder="0.00"
+                        value={sellForm.price}
+                        onChange={e => setSellForm({ ...sellForm, price: e.target.value })}
+                        required
+                      />
                     </div>
-                    <div className="flex gap-2">
-                      <Badge variant="outline">{listing.category}</Badge>
-                      <Badge className={getConditionBadge(listing.condition)}>{listing.condition}</Badge>
-                    </div>
-                  </div>
-
-                  {/* Description */}
-                  <div>
-                    <h4 className="font-semibold mb-2">Description</h4>
-                    <p className="text-gray-600">{listing.description}</p>
-                  </div>
-
-                  {/* Seller Info */}
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="font-semibold mb-3">Seller Information</h4>
-                    <div className="flex items-center gap-3">
-                      <Avatar>
-                        <AvatarFallback className="bg-emerald-100 text-emerald-600">
-                          {listing.seller.name.split(' ').map(n => n[0]).join('')}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1">
-                        <p className="font-medium">{listing.seller.name}</p>
-                        <p className="text-sm text-gray-500">{listing.seller.unit}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium">⭐ {listing.seller.rating}</p>
-                        <p className="text-xs text-gray-500">Rating</p>
-                      </div>
+                    <div className="space-y-2">
+                      <Label>Original Price (Optional)</Label>
+                      <Input
+                        type="number"
+                        placeholder="0.00"
+                        value={sellForm.originalPrice}
+                        onChange={e => setSellForm({ ...sellForm, originalPrice: e.target.value })}
+                      />
                     </div>
                   </div>
-
-                  {/* Actions */}
-                  {listing.status === 'available' && (
-                    <div className="flex gap-2">
-                      <Button className="flex-1 gap-2">
-                        <MessageCircle className="h-4 w-4" /> Chat with Seller
-                      </Button>
-                      <Button variant="outline" className="gap-2">
-                        <Phone className="h-4 w-4" /> Call
-                      </Button>
-                      <Button variant="outline" size="icon">
-                        <Heart className="h-4 w-4" />
-                      </Button>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Category</Label>
+                      <Select
+                        value={sellForm.category}
+                        onValueChange={v => setSellForm({ ...sellForm, category: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories.filter(c => c !== 'All').map(c => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                  )}
-                </div>
+                    <div className="space-y-2">
+                      <Label>Condition</Label>
+                      <Select
+                        value={sellForm.condition}
+                        onValueChange={v => setSellForm({ ...sellForm, condition: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="New">New</SelectItem>
+                          <SelectItem value="Like New">Like New</SelectItem>
+                          <SelectItem value="Good">Good</SelectItem>
+                          <SelectItem value="Fair">Fair</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Description</Label>
+                    <Textarea
+                      placeholder="Tell buyers more about the item..."
+                      value={sellForm.description}
+                      onChange={e => setSellForm({ ...sellForm, description: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setIsSellOpen(false)}>Cancel</Button>
+                    <Button type="submit" disabled={createItemMutation.isPending} className="bg-emerald-600 hover:bg-emerald-700">
+                      {createItemMutation.isPending ? 'Listing...' : 'List Item'}
+                    </Button>
+                  </DialogFooter>
+                </form>
               </DialogContent>
             </Dialog>
-          </motion.div>
-        ))}
+          </div>
+        </div>
+
+        {/* Filters */}
+        <Card className="p-4 mb-6">
+          <div className="flex flex-col md:flex-row gap-4 items-center">
+            <div className="flex-1 relative w-full">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search items..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger className="w-full md:w-40">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((cat) => (
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex gap-1">
+              <Button
+                variant={viewMode === 'grid' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('grid')}
+              >
+                <Grid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'list' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('list')}
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        {/* Listings Grid */}
+        <div className={`grid gap-4 ${viewMode === 'grid' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
+          {filteredItems.map((listing: any, index: number) => (
+            <motion.div
+              key={listing.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+            >
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Card className={`overflow-hidden hover:shadow-lg transition-shadow cursor-pointer ${listing.status === 'sold' ? 'opacity-60' : ''}`}>
+                    {viewMode === 'grid' ? (
+                      <>
+                        {/* Image Placeholder */}
+                        <div className="h-48 bg-gradient-to-br from-gray-200 to-gray-300 relative">
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <ShoppingBag className="h-16 w-16 text-gray-400" />
+                          </div>
+                          {listing.status === 'sold' && (
+                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                              <Badge className="bg-red-600 text-white text-lg px-4 py-1">SOLD</Badge>
+                            </div>
+                          )}
+                          <button className="absolute top-2 right-2 p-2 bg-white rounded-full shadow hover:bg-gray-100" onClick={(e) => e.stopPropagation()}>
+                            <Heart className="h-4 w-4 text-gray-600" />
+                          </button>
+                          <Badge className={`absolute top-2 left-2 ${getConditionBadge(listing.condition || 'Good')}`}>
+                            {listing.condition || 'Good'}
+                          </Badge>
+                        </div>
+                        <div className="p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <Badge variant="outline" className="text-xs">{listing.category}</Badge>
+                            <span className="text-xs text-gray-500 flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {new Date(listing.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <h3 className="font-semibold text-gray-900 mb-2 line-clamp-1">{listing.title}</h3>
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-xl font-bold text-emerald-600 flex items-center">
+                              <IndianRupee className="h-4 w-4" />{formatPrice(listing.price || 0)}
+                            </span>
+                            {listing.originalPrice && (
+                              <span className="text-sm text-gray-400 line-through">
+                                ₹{formatPrice(listing.originalPrice)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-gray-500">
+                            <span className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3" /> {listing.owner?.unit || 'Resident'}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="flex items-center gap-1">
+                                <Heart className="h-3 w-3" /> {listing.likes || 0}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex p-4 gap-4">
+                        <div className="w-32 h-32 bg-gradient-to-br from-gray-200 to-gray-300 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <ShoppingBag className="h-10 w-10 text-gray-400" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant="outline" className="text-xs">{listing.category}</Badge>
+                            <Badge className={`text-xs ${getConditionBadge(listing.condition || 'Good')}`}>{listing.condition || 'Good'}</Badge>
+                            {listing.status === 'sold' && <Badge variant="destructive">Sold</Badge>}
+                          </div>
+                          <h3 className="font-semibold text-gray-900 mb-1">{listing.title}</h3>
+                          <p className="text-sm text-gray-600 line-clamp-2 mb-2">{listing.description}</p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xl font-bold text-emerald-600 flex items-center">
+                              <IndianRupee className="h-4 w-4" />{formatPrice(listing.price || 0)}
+                            </span>
+                            <span className="text-xs text-gray-500">{listing.owner?.unit || 'Resident'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </Card>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>{listing.title}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="h-64 bg-gradient-to-br from-gray-200 to-gray-300 rounded-lg flex items-center justify-center">
+                      <ShoppingBag className="h-20 w-20 text-gray-400" />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl font-bold text-emerald-600 flex items-center">
+                          <IndianRupee className="h-5 w-5" />{formatPrice(listing.price || 0)}
+                        </span>
+                        {listing.originalPrice && (
+                          <span className="text-lg text-gray-400 line-through">
+                            ₹{formatPrice(listing.originalPrice)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Badge variant="outline">{listing.category}</Badge>
+                        <Badge className={getConditionBadge(listing.condition || 'Good')}>{listing.condition || 'Good'}</Badge>
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold mb-2">Description</h4>
+                      <p className="text-gray-600">{listing.description}</p>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h4 className="font-semibold mb-3">Seller Information</h4>
+                      <div className="flex items-center gap-3">
+                        <Avatar>
+                          <AvatarFallback className="bg-emerald-100 text-emerald-600">
+                            {listing.owner?.name?.charAt(0) || 'U'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <p className="font-medium">{listing.owner?.name || 'Resident'}</p>
+                          <p className="text-sm text-gray-500">{listing.owner?.unit || 'Resident'}</p>
+                        </div>
+                      </div>
+                    </div>
+                    {listing.status === 'AVAILABLE' && (
+                      <div className="flex gap-2">
+                        <Button className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700">
+                          <MessageCircle className="h-4 w-4" /> Chat with Seller
+                        </Button>
+                        <Button variant="outline" className="gap-2">
+                          <Phone className="h-4 w-4" /> Call
+                        </Button>
+                        <Button variant="outline" size="icon">
+                          <Heart className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </motion.div>
+          ))}
+        </div>
+
+        {filteredItems.length === 0 && (
+          <div className="py-24 text-center bg-white rounded-3xl border-2 border-dashed border-gray-100 mt-6">
+            <div className="h-20 w-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">
+              <ShoppingBag className="h-10 w-10 text-gray-200" />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900">No items found</h3>
+            <p className="text-gray-400 mt-2 max-w-xs mx-auto">Try adjusting your filters or search terms.</p>
+          </div>
+        )}
       </div>
-    </div>
+    </RoleGuard>
   )
 }

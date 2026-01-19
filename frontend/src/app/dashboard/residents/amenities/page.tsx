@@ -53,6 +53,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { residentService } from '@/services/resident.service'
+import { toast } from 'sonner'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,147 +83,57 @@ const amenityColors: Record<string, { bg: string; text: string; gradient: string
   other: { bg: 'bg-gray-100', text: 'text-gray-700', gradient: 'from-gray-500 to-slate-600' },
 }
 
-const amenities = [
-  {
-    id: '1',
-    name: 'Clubhouse',
-    type: 'hall',
-    capacity: 100,
-    pricePerHour: 500,
-    availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-    timings: { start: '09:00', end: '22:00' },
-    status: 'available',
-    description: 'Perfect for parties, meetings, and social gatherings. AC with sound system.',
-    rating: 4.5,
-    bookingsToday: 2,
-  },
-  {
-    id: '2',
-    name: 'Swimming Pool',
-    type: 'pool',
-    capacity: 50,
-    pricePerHour: 0,
-    availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-    timings: { start: '06:00', end: '20:00' },
-    status: 'available',
-    description: 'Olympic size swimming pool with separate kids area and trained lifeguard.',
-    rating: 4.8,
-    bookingsToday: 15,
-  },
-  {
-    id: '3',
-    name: 'Gym & Fitness',
-    type: 'gym',
-    capacity: 30,
-    pricePerHour: 0,
-    availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-    timings: { start: '05:00', end: '23:00' },
-    status: 'available',
-    description: 'Fully equipped modern gym with cardio, weights, and certified trainer.',
-    rating: 4.6,
-    bookingsToday: 28,
-  },
-  {
-    id: '4',
-    name: 'Badminton Court',
-    type: 'court',
-    capacity: 4,
-    pricePerHour: 200,
-    availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-    timings: { start: '06:00', end: '22:00' },
-    status: 'available',
-    description: 'Indoor court with professional synthetic flooring and lighting.',
-    rating: 4.3,
-    bookingsToday: 8,
-  },
-  {
-    id: '5',
-    name: 'Tennis Court',
-    type: 'court',
-    capacity: 4,
-    pricePerHour: 300,
-    availableDays: ['Sat', 'Sun'],
-    timings: { start: '07:00', end: '19:00' },
-    status: 'maintenance',
-    description: 'Outdoor tennis court with floodlights for evening play.',
-    rating: 4.2,
-    bookingsToday: 0,
-  },
-  {
-    id: '6',
-    name: 'Party Hall',
-    type: 'hall',
-    capacity: 150,
-    pricePerHour: 800,
-    availableDays: ['Fri', 'Sat', 'Sun'],
-    timings: { start: '18:00', end: '01:00' },
-    status: 'available',
-    description: 'Grand hall with AC, DJ setup, catering kitchen, and outdoor deck.',
-    rating: 4.9,
-    bookingsToday: 1,
-  },
-]
+// Hardcoded data removed, using dynamic data from backend
 
-const upcomingBookings = [
-  {
-    id: '1',
-    amenity: 'Clubhouse',
-    amenityType: 'hall',
-    date: '2025-01-15',
-    startTime: '18:00',
-    endTime: '22:00',
-    status: 'confirmed',
-    amount: 2000,
-    purpose: 'Birthday Party',
-  },
-  {
-    id: '2',
-    amenity: 'Badminton Court',
-    amenityType: 'court',
-    date: '2025-01-10',
-    startTime: '17:00',
-    endTime: '18:00',
-    status: 'confirmed',
-    amount: 200,
-    purpose: 'Sports',
-  },
-]
-
-const pastBookings = [
-  {
-    id: '3',
-    amenity: 'Party Hall',
-    amenityType: 'hall',
-    date: '2024-12-25',
-    startTime: '19:00',
-    endTime: '23:00',
-    status: 'completed',
-    amount: 3200,
-    purpose: 'Christmas Party',
-  },
-]
-
-function BookingDialog({ amenity, onBookingComplete }: { amenity: typeof amenities[0], onBookingComplete?: (message: string) => void }) {
+function BookingDialog({
+  amenity,
+  onBookingComplete
+}: {
+  amenity: any,
+  onBookingComplete?: (message: string) => void
+}) {
+  const queryClient = useQueryClient()
   const [isOpen, setIsOpen] = useState(false)
   const [selectedDate, setSelectedDate] = useState('')
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
+  const [purpose, setPurpose] = useState('')
+
+  const bookMutation = useMutation({
+    mutationFn: residentService.bookAmenity,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['amenities'] })
+      setIsOpen(false)
+      toast.success(`${amenity.name} booked successfully!`)
+      setSelectedDate('')
+      setStartTime('')
+      setEndTime('')
+      setPurpose('')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to book amenity')
+  })
 
   const calculateTotal = () => {
     if (!startTime || !endTime) return 0
     const start = parseInt(startTime.split(':')[0])
     const end = parseInt(endTime.split(':')[0])
     const hours = end - start
-    return amenity.pricePerHour * hours
+    return (amenity.chargesPerHour || 0) * hours
   }
 
   const handleConfirmBooking = () => {
-    setIsOpen(false)
-    onBookingComplete?.(`${amenity.name} booked successfully!`)
-    // Reset form
-    setSelectedDate('')
-    setStartTime('')
-    setEndTime('')
+    if (!selectedDate || !startTime || !endTime || !purpose) {
+      toast.error('Please fill all required fields')
+      return
+    }
+    bookMutation.mutate({
+      amenityId: amenity.id,
+      date: selectedDate,
+      startTime,
+      endTime,
+      purpose,
+      amount: calculateTotal()
+    })
   }
 
   return (
@@ -264,7 +178,7 @@ function BookingDialog({ amenity, onBookingComplete }: { amenity: typeof ameniti
               <div>
                 <p className="font-medium">{amenity.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  {amenity.pricePerHour === 0 ? 'Free' : `Rs. ${amenity.pricePerHour}/hr`}
+                  {amenity.chargesPerHour === 0 ? 'Free' : `Rs. ${amenity.chargesPerHour}/hr`}
                 </p>
               </div>
             </div>
@@ -278,7 +192,7 @@ function BookingDialog({ amenity, onBookingComplete }: { amenity: typeof ameniti
               onChange={(e) => setSelectedDate(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Available: {amenity.availableDays.join(', ')}
+              Available: {Array.isArray(amenity.availableDays) ? amenity.availableDays.join(', ') : 'All Days'}
             </p>
           </div>
 
@@ -317,7 +231,7 @@ function BookingDialog({ amenity, onBookingComplete }: { amenity: typeof ameniti
 
           <div className="space-y-2">
             <Label>Purpose *</Label>
-            <Select>
+            <Select value={purpose} onValueChange={setPurpose}>
               <SelectTrigger>
                 <SelectValue placeholder="Select purpose" />
               </SelectTrigger>
@@ -345,22 +259,30 @@ function BookingDialog({ amenity, onBookingComplete }: { amenity: typeof ameniti
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Rate</span>
               <span className="font-medium">
-                {amenity.pricePerHour === 0 ? 'Free' : `Rs. ${amenity.pricePerHour}/hr`}
+                {amenity.chargesPerHour === 0 || !amenity.chargesPerHour ? 'Free' : `Rs. ${amenity.chargesPerHour}/hr`}
               </span>
             </div>
             <div className="flex items-center justify-between pt-2 border-t border-blue-200">
               <span className="font-semibold">Total Amount</span>
               <span className="text-xl font-bold text-blue-600">
-                {amenity.pricePerHour === 0 ? 'Free' : `Rs. ${calculateTotal()}`}
+                {amenity.chargesPerHour === 0 || !amenity.chargesPerHour ? 'Free' : `Rs. ${calculateTotal()}`}
               </span>
             </div>
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-2">
             <Button variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
-            <Button className="bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-blue-700 hover:to-purple-700 gap-2" onClick={handleConfirmBooking}>
-              <CheckCircle className="h-4 w-4" />
-              Confirm Booking
+            <Button
+              className="bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-blue-700 hover:to-purple-700 gap-2"
+              onClick={handleConfirmBooking}
+              disabled={bookMutation.isPending}
+            >
+              {bookMutation.isPending ? 'Booking...' : (
+                <>
+                  <CheckCircle className="h-4 w-4" />
+                  Confirm Booking
+                </>
+              )}
             </Button>
           </div>
         </div>
@@ -370,33 +292,37 @@ function BookingDialog({ amenity, onBookingComplete }: { amenity: typeof ameniti
 }
 
 export default function AmenitiesPage() {
-  const [activeTab, setActiveTab] = useState('amenities')
-  const [showSuccess, setShowSuccess] = useState<string | null>(null)
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const { user } = useAuthStore()
+  const [activeTab, setActiveTab] = useState('amenities')
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const isAdmin = user?.role === 'admin'
 
-  const showNotification = (message: string) => {
-    setShowSuccess(message)
-    setTimeout(() => setShowSuccess(null), 3000)
-  }
+  const { data: amenitiesData, isLoading, error } = useQuery({
+    queryKey: ['amenities'],
+    queryFn: residentService.getAmenities
+  })
+
+  const amenities = amenitiesData?.amenities || []
+  const allBookings = amenitiesData?.myBookings || []
+  const upcomingBookings = allBookings.filter((b: any) => new Date(b.date) >= new Date())
+  const pastBookings = allBookings.filter((b: any) => new Date(b.date) < new Date())
 
   const handleAddAmenity = () => {
     setIsAddDialogOpen(false)
-    showNotification('Amenity added successfully!')
+    toast.success('Amenity added successfully!')
   }
 
   const handleViewDetails = (bookingId: string) => {
-    showNotification(`Viewing booking ${bookingId}...`)
+    toast.info(`Viewing booking ${bookingId}...`)
   }
 
   const handleModifyBooking = (bookingId: string) => {
-    showNotification(`Modifying booking ${bookingId}...`)
+    toast.info(`Modifying booking ${bookingId}...`)
   }
 
   const handleCancelBooking = (bookingId: string) => {
     if (confirm('Are you sure you want to cancel this booking?')) {
-      showNotification('Booking cancelled successfully!')
+      toast.success('Booking cancelled successfully!')
     }
   }
 
@@ -405,22 +331,11 @@ export default function AmenitiesPage() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
+  if (isLoading) return <div className="p-8"><Skeleton className="w-full h-[600px] rounded-3xl" /></div>
+  if (error) return <div className="p-8 text-red-500">Error loading amenities</div>
+
   return (
-    <RoleGuard allowedRoles={['admin', 'resident']}>
-      {/* Success Notification */}
-      <AnimatePresence>
-        {showSuccess && (
-          <motion.div
-            initial={{ opacity: 0, y: -50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -50 }}
-            className="fixed top-4 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2"
-          >
-            <CheckCircle2 className="h-5 w-5" />
-            {showSuccess}
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <RoleGuard allowedRoles={['admin', 'resident', 'committee', 'society_admin', 'super_admin']}>
 
       <div className="space-y-6">
         {/* Header */}
@@ -645,17 +560,21 @@ export default function AmenitiesPage() {
                             </div>
                             <div className="flex items-center gap-2 text-sm">
                               <Clock className="h-4 w-4 text-muted-foreground" />
-                              <span>{amenity.timings.start} - {amenity.timings.end}</span>
+                              <span>
+                                {typeof amenity.timings === 'object' && amenity.timings !== null
+                                  ? `${amenity.timings.start} - ${amenity.timings.end}`
+                                  : amenity.timings || 'N/A'}
+                              </span>
                             </div>
                             <div className="flex items-center gap-2 text-sm">
                               <IndianRupee className="h-4 w-4 text-muted-foreground" />
                               <span className="font-medium">
-                                {amenity.pricePerHour === 0 ? 'Free' : `Rs. ${amenity.pricePerHour}/hr`}
+                                {amenity.chargesPerHour === 0 ? 'Free' : `Rs. ${amenity.chargesPerHour}/hr`}
                               </span>
                             </div>
                             <div className="flex items-center gap-2 text-sm">
                               <Calendar className="h-4 w-4 text-muted-foreground" />
-                              <span>{amenity.bookingsToday} today</span>
+                              <span>{amenity.bookingsCount || 0} today</span>
                             </div>
                           </div>
 
@@ -665,7 +584,7 @@ export default function AmenitiesPage() {
                               {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
                                 <span
                                   key={day}
-                                  className={`px-1.5 py-0.5 rounded ${amenity.availableDays.includes(day)
+                                  className={`px-1.5 py-0.5 rounded ${amenity.availableDays?.includes(day)
                                     ? 'bg-green-100 text-green-700'
                                     : 'bg-gray-100 text-gray-400'
                                     }`}
@@ -677,7 +596,7 @@ export default function AmenitiesPage() {
                           </div>
 
                           <div className="pt-2 border-t">
-                            <BookingDialog amenity={amenity} onBookingComplete={showNotification} />
+                            <BookingDialog amenity={amenity} />
                           </div>
                         </CardContent>
                       </Card>
@@ -692,8 +611,9 @@ export default function AmenitiesPage() {
           <TabsContent value="bookings" className="mt-6 space-y-4">
             {upcomingBookings.length > 0 ? (
               upcomingBookings.map((booking, index) => {
-                const AmenityIcon = amenityIcons[booking.amenityType] || Building
-                const colors = amenityColors[booking.amenityType] || amenityColors.other
+                const bookingAmenity = booking.amenity || {}
+                const AmenityIcon = amenityIcons[bookingAmenity.type] || Building
+                const colors = amenityColors[bookingAmenity.type] || amenityColors.other
 
                 return (
                   <motion.div
@@ -710,7 +630,7 @@ export default function AmenitiesPage() {
                               <AmenityIcon className={`h-6 w-6 ${colors.text}`} />
                             </div>
                             <div>
-                              <h3 className="font-semibold">{booking.amenity}</h3>
+                              <h3 className="font-semibold">{bookingAmenity.name}</h3>
                               <p className="text-sm text-muted-foreground">{booking.purpose}</p>
                               <div className="flex items-center gap-3 mt-1 text-sm">
                                 <span className="flex items-center gap-1">
@@ -727,7 +647,7 @@ export default function AmenitiesPage() {
                           <div className="flex items-center gap-4">
                             <div className="text-right">
                               <p className="text-lg font-bold text-blue-600">
-                                {booking.amount === 0 ? 'Free' : `Rs. ${booking.amount}`}
+                                {booking.amountPaid === 0 ? 'Free' : `Rs. ${booking.amountPaid}`}
                               </p>
                               <Badge className="bg-green-100 text-green-700 border-0">
                                 <CheckCircle className="h-3 w-3 mr-1" />
@@ -780,8 +700,8 @@ export default function AmenitiesPage() {
           <TabsContent value="history" className="mt-6 space-y-4">
             {pastBookings.length > 0 ? (
               pastBookings.map((booking, index) => {
-                const AmenityIcon = amenityIcons[booking.amenityType] || Building
-                const colors = amenityColors[booking.amenityType] || amenityColors.other
+                const bookingAmenity = booking.amenity || {}
+                const AmenityIcon = amenityIcons[bookingAmenity.type] || Building
 
                 return (
                   <motion.div
@@ -798,7 +718,7 @@ export default function AmenitiesPage() {
                               <AmenityIcon className="h-6 w-6 text-gray-500" />
                             </div>
                             <div>
-                              <h3 className="font-semibold">{booking.amenity}</h3>
+                              <h3 className="font-semibold">{bookingAmenity.name}</h3>
                               <p className="text-sm text-muted-foreground">{booking.purpose}</p>
                               <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
                                 <span className="flex items-center gap-1">
@@ -814,7 +734,7 @@ export default function AmenitiesPage() {
                           </div>
                           <div className="text-right">
                             <p className="text-lg font-bold text-muted-foreground">
-                              Rs. {booking.amount}
+                              {booking.amountPaid === 0 ? 'Free' : `Rs. ${booking.amountPaid}`}
                             </p>
                             <Badge variant="secondary">
                               <CheckCircle className="h-3 w-3 mr-1" />

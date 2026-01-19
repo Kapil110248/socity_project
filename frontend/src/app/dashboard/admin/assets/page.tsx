@@ -341,7 +341,7 @@ export default function AssetsPage() {
                   <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleIGATESECURITYsset}>
+                  <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleAddAsset}>
                     Add Asset
                   </Button>
                 </div>

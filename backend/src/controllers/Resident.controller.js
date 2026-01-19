@@ -1,0 +1,526 @@
+const prisma = require('../lib/prisma');
+
+class ResidentController {
+    static async getDashboardData(req, res) {
+        try {
+            const userId = req.user.id;
+            const societyId = req.user.societyId;
+
+            // 1. Fetch User and Unit details
+            const user = await prisma.user.findUnique({
+                where: { id: userId },
+                include: {
+                    ownedUnits: {
+                        where: { societyId },
+                        include: { parkingSlots: true, members: true, petsList: true }
+                    },
+                    rentedUnits: {
+                        where: { societyId },
+                        include: { parkingSlots: true, members: true, petsList: true }
+                    }
+                }
+            });
+
+            const unit = user.ownedUnits[0] || user.rentedUnits[0];
+
+            // 2. Gate Updates (Visitors today)
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const visitorsToday = unit ? await prisma.visitor.count({
+                where: {
+                    visitingUnitId: unit.id,
+                    createdAt: { gte: today }
+                }
+            }) : 0;
+
+            const parcelsToCollect = unit ? await prisma.parcel.count({
+                where: {
+                    unitId: unit.id,
+                    status: 'YET_TO_COLLECT'
+                }
+            }) : 0;
+
+            // 3. Announcements (Notices)
+            const announcements = await prisma.notice.findMany({
+                where: {
+                    societyId,
+                    OR: [
+                        { audience: 'ALL' },
+                        { audience: user.role === 'OWNER' ? 'OWNERS' : 'TENANTS' }
+                    ]
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 5
+            });
+
+            // 4. Community Buzz
+            const buzz = await prisma.communityBuzz.findMany({
+                where: { societyId },
+                include: { author: { select: { name: true } } },
+                orderBy: { createdAt: 'desc' },
+                take: 5
+            });
+
+            res.json({
+                unit: unit ? {
+                    unitNo: `${unit.block} - ${unit.number}`,
+                    members: unit.members.length,
+                    pets: unit.petsList.length,
+                    vehicles: unit.parkingSlots.length
+                } : null,
+                gateUpdates: [
+                    { type: 'Visitor', count: visitorsToday, label: 'Today', color: 'bg-purple-100 text-purple-600' },
+                    { type: 'Helper', count: `0/4`, label: 'In campus', color: 'bg-pink-100 text-pink-600' },
+                    { type: 'Parcel', count: parcelsToCollect, label: 'Yet to collect', color: 'bg-blue-100 text-blue-600' }
+                ],
+                dues: { amount: 0, penalty: 0 }, // Placeholder
+                announcements: announcements.map(a => ({
+                    id: a.id,
+                    title: a.title,
+                    description: a.content,
+                    author: 'Admin',
+                    time: a.createdAt,
+                    type: 'announcement'
+                })),
+                buzz: buzz.map(b => ({
+                    id: b.id,
+                    type: b.type.toLowerCase(),
+                    title: b.title,
+                    author: b.author.name,
+                    hasResult: b.hasResult
+                })),
+                events: []
+            });
+
+        } catch (error) {
+            console.error('Resident Dashboard Error:', error);
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    // --- My Unit Methods ---
+    static async getUnitData(req, res) {
+        try {
+            const userId = req.user.id;
+            const societyId = req.user.societyId;
+
+            const user = await prisma.user.findUnique({
+                where: { id: userId },
+                include: {
+                    ownedUnits: {
+                        where: { societyId },
+                        include: { members: true, vehicles: true, petsList: true, owner: true, tenant: true, parkingSlots: true }
+                    },
+                    rentedUnits: {
+                        where: { societyId },
+                        include: { members: true, vehicles: true, petsList: true, owner: true, tenant: true, parkingSlots: true }
+                    }
+                }
+            });
+
+            const unit = user.ownedUnits[0] || user.rentedUnits[0];
+            if (!unit) return res.status(404).json({ error: 'No unit found for this resident' });
+
+            const transformedUnit = {
+                ...unit,
+                unitNumber: `${unit.block}-${unit.number}`,
+                area: `${unit.areaSqFt} sq.ft`,
+                ownershipType: user.ownedUnits.length > 0 ? 'Owner' : 'Tenant',
+                moveInDate: unit.createdAt.toLocaleDateString(),
+                isRented: unit.tenantId !== null
+            };
+
+            res.json(transformedUnit);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async addFamilyMember(req, res) {
+        try {
+            const { unitId, name, relation, age, gender, phone } = req.body;
+            const member = await prisma.unitMember.create({
+                data: { unitId, name, relation, age: parseInt(age), gender, phone }
+            });
+            res.json(member);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async updateFamilyMember(req, res) {
+        try {
+            const { id } = req.params;
+            const { name, relation, age, gender, phone } = req.body;
+            const member = await prisma.unitMember.update({
+                where: { id: parseInt(id) },
+                data: { name, relation, age: parseInt(age), gender, phone }
+            });
+            res.json(member);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async addVehicle(req, res) {
+        try {
+            const { unitId, name, number, type } = req.body;
+            const vehicle = await prisma.unitVehicle.create({
+                data: { unitId, name, number, type }
+            });
+            res.json(vehicle);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async updateVehicle(req, res) {
+        try {
+            const { id } = req.params;
+            const { name, number, type } = req.body;
+            const vehicle = await prisma.unitVehicle.update({
+                where: { id: parseInt(id) },
+                data: { name, number, type }
+            });
+            res.json(vehicle);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async addPet(req, res) {
+        try {
+            const { unitId, name, type, breed, vaccinationStatus } = req.body;
+            const pet = await prisma.unitPet.create({
+                data: { unitId, name, type, breed, vaccinationStatus }
+            });
+            res.json(pet);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async updatePet(req, res) {
+        try {
+            const { id } = req.params;
+            const { name, type, breed, vaccinationStatus } = req.body;
+            const pet = await prisma.unitPet.update({
+                where: { id: parseInt(id) },
+                data: { name, type, breed, vaccinationStatus }
+            });
+            res.json(pet);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    // --- SOS Methods ---
+    static async triggerSOS(req, res) {
+        try {
+            const { type, location } = req.body;
+            const alert = await prisma.sOSAlert.create({
+                data: {
+                    residentId: req.user.id,
+                    societyId: req.user.societyId,
+                    type,
+                    location
+                }
+            });
+            // Logic to notify security/contacts would go here
+            res.json(alert);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async getSOSData(req, res) {
+        try {
+            const userId = req.user.id;
+            const contacts = await prisma.emergencyContact.findMany({ where: { residentId: userId } });
+            const alerts = await prisma.sOSAlert.findMany({
+                where: { residentId: userId },
+                orderBy: { createdAt: 'desc' },
+                take: 10
+            });
+            res.json({ contacts, alerts });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async addEmergencyContact(req, res) {
+        try {
+            const { name, phone, category } = req.body;
+            const contact = await prisma.emergencyContact.create({
+                data: {
+                    residentId: req.user.id,
+                    name,
+                    phone,
+                    category: category || 'custom'
+                }
+            });
+            res.json(contact);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    // --- Helpdesk Methods ---
+    static async getTickets(req, res) {
+        try {
+            const tickets = await prisma.complaint.findMany({
+                where: { reportedById: req.user.id },
+                orderBy: { createdAt: 'desc' }
+            });
+            res.json(tickets);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async createTicket(req, res) {
+        try {
+            const { title, description, category, priority, isPrivate } = req.body;
+            const ticket = await prisma.complaint.create({
+                data: {
+                    title, description, category, priority,
+                    reportedById: req.user.id,
+                    societyId: req.user.societyId,
+                    status: 'OPEN'
+                }
+            });
+            res.json(ticket);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    // --- Marketplace ---
+    static async getMarketItems(req, res) {
+        try {
+            const items = await prisma.marketplaceItem.findMany({
+                where: { societyId: req.user.societyId },
+                include: {
+                    owner: {
+                        select: {
+                            name: true,
+                            ownedUnits: {
+                                select: { block: true, number: true },
+                                take: 1
+                            }
+                        }
+                    }
+                }
+            });
+            res.json(items);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async createMarketItem(req, res) {
+        try {
+            const { title, description, price, originalPrice, condition, category, images } = req.body;
+            const item = await prisma.marketplaceItem.create({
+                data: {
+                    title,
+                    description,
+                    price: parseFloat(price),
+                    originalPrice: originalPrice ? parseFloat(originalPrice) : null,
+                    condition,
+                    category,
+                    images,
+                    ownerId: req.user.id,
+                    societyId: req.user.societyId,
+                    status: 'AVAILABLE'
+                }
+            });
+            res.json(item);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    // --- Services ---
+    static async getServices(req, res) {
+        try {
+            const categories = await prisma.serviceCategory.findMany({ include: { variants: true } });
+            const myRequests = await prisma.serviceInquiry.findMany({ where: { societyId: req.user.societyId } });
+            res.json({ categories, myRequests });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async createServiceInquiry(req, res) {
+        try {
+            const { serviceId, serviceName, type, preferredDate, preferredTime, notes, phone } = req.body;
+            const inquiry = await prisma.serviceInquiry.create({
+                data: {
+                    residentId: req.user.id,
+                    societyId: req.user.societyId,
+                    serviceId: serviceId || null,
+                    serviceName,
+                    type,
+                    preferredDate,
+                    preferredTime,
+                    notes,
+                    phone: phone || req.user.phone,
+                    status: 'PENDING'
+                }
+            });
+            res.json(inquiry);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    // --- Amenities ---
+    static async getAmenities(req, res) {
+        try {
+            const amenities = await prisma.amenity.findMany({ where: { societyId: req.user.societyId } });
+            const myBookings = await prisma.amenityBooking.findMany({
+                where: { userId: req.user.id },
+                include: { amenity: true }
+            });
+            res.json({ amenities, myBookings });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async bookAmenity(req, res) {
+        try {
+            const { amenityId, date, startTime, endTime, purpose, amount } = req.body;
+            const booking = await prisma.amenityBooking.create({
+                data: {
+                    userId: req.user.id,
+                    amenityId: parseInt(amenityId),
+                    date: new Date(date),
+                    startTime,
+                    endTime,
+                    purpose,
+                    amountPaid: parseFloat(amount) || 0,
+                    status: 'CONFIRMED'
+                }
+            });
+            res.json(booking);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    // --- Community ---
+    static async getCommunityFeed(req, res) {
+        try {
+            const posts = await prisma.communityBuzz.findMany({
+                where: { societyId: parseInt(req.user.societyId) },
+                include: {
+                    author: {
+                        select: {
+                            name: true,
+                            role: true,
+                            profileImg: true,
+                            ownedUnits: {
+                                select: {
+                                    block: true,
+                                    number: true
+                                },
+                                take: 1
+                            }
+                        }
+                    },
+                    comments: {
+                        include: {
+                            author: {
+                                select: {
+                                    name: true,
+                                    profileImg: true
+                                }
+                            }
+                        },
+                        orderBy: { createdAt: 'desc' }
+                    }
+                },
+                orderBy: { createdAt: 'desc' }
+            });
+            res.json(posts);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async createPost(req, res) {
+        try {
+            const { title, content, type } = req.body;
+            const post = await prisma.communityBuzz.create({
+                data: {
+                    societyId: parseInt(req.user.societyId),
+                    authorId: parseInt(req.user.id),
+                    title: title || content?.substring(0, 50) || type || 'Post',
+                    content,
+                    type: type || 'POST',
+                },
+                include: {
+                    author: {
+                        select: {
+                            name: true,
+                            role: true,
+                            profileImg: true,
+                            ownedUnits: {
+                                select: {
+                                    block: true,
+                                    number: true
+                                },
+                                take: 1
+                            }
+                        }
+                    }
+                }
+            });
+            res.json(post);
+        } catch (error) {
+            console.error('Error creating post:', error);
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async createCommunityComment(req, res) {
+        try {
+            const { buzzId, content } = req.body;
+            const comment = await prisma.communityComment.create({
+                data: {
+                    buzzId: parseInt(buzzId),
+                    authorId: parseInt(req.user.id),
+                    content
+                },
+                include: {
+                    author: {
+                        select: {
+                            name: true,
+                            profileImg: true
+                        }
+                    }
+                }
+            });
+            res.json(comment);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    // --- Guidelines ---
+    static async getGuidelines(req, res) {
+        try {
+            const guidelines = await prisma.communityGuideline.findMany({
+                where: { societyId: req.user.societyId }
+            });
+            res.json(guidelines);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+}
+
+module.exports = ResidentController;
