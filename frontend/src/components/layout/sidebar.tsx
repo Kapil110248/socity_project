@@ -379,7 +379,7 @@ export function Sidebar() {
 
   // Filter menu items based on user role
   const menuItems = allMenuItems.filter((item) =>
-    item.roles?.includes(user?.role || 'resident')
+    item.roles?.includes((user?.role || 'resident').toLowerCase())
   )
 
   const toggleMenu = (title: string) => {
