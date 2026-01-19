@@ -193,7 +193,11 @@ export default function SettingsPage() {
     formData.append('photo', file)
 
     try {
-      const response = await api.post('/auth/profile/photo', formData)
+      const response = await api.post('/auth/profile/photo', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      })
       
       showNotification('Photo uploaded successfully!')
       queryClient.invalidateQueries({ queryKey: ['user-profile'] })

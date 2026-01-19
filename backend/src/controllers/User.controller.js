@@ -163,8 +163,11 @@ class UserController {
     try {
       const { name, phone, profileImg, password } = req.body;
       
-      const updateData = { name, phone, profileImg };
-      
+      const updateData = {};
+      if (name !== undefined) updateData.name = name;
+      if (phone !== undefined) updateData.phone = phone;
+      if (profileImg !== undefined) updateData.profileImg = profileImg;
+
       // If password is provided, hash it and add to update data
       if (password && password.trim() !== '') {
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -202,13 +205,10 @@ class UserController {
              activeBarcodes = await prisma.emergencyBarcode.count({
                 where: { phone: u.phone, status: 'active' }
              });
-             // Heuristic for Service Requests for B2C users (source=individual + name match)
-             // or just source=individual if we can't match easily, but let's try name match or just 0 if not robust.
-             // Ideally we should add userId to ServiceInquiry.
+             // Fixed: Query by residentId instead of removed residentName/source fields
              serviceRequests = await prisma.serviceInquiry.count({
                 where: { 
-                    residentName: u.name,
-                    source: 'individual'
+                    residentId: u.id
                 }
              });
         }
@@ -256,8 +256,13 @@ class UserController {
       });
 
       // 3. Total Bookings (Service Inquiries from Individuals)
+      // Fixed: source field removed, query via resident relation
       const totalBookings = await prisma.serviceInquiry.count({
-        where: { source: 'individual' }
+        where: { 
+          resident: {
+            role: 'INDIVIDUAL'
+          }
+        }
       });
 
       res.json({
