@@ -45,4 +45,9 @@ export const AmenityService = {
     const response = await api.post(API_CONFIG.AMENITY.BOOK, data);
     return response.data;
   },
+
+  updateBookingStatus: async (id: number | string, status: string) => {
+    const response = await api.patch(API_CONFIG.AMENITY.UPDATE_BOOKING(id), { status });
+    return response.data;
+  },
 };

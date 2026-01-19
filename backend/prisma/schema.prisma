@@ -510,7 +510,7 @@ model AmenityBooking {
   startTime   String
   endTime     String
   purpose     String?
-  status      String   @default("CONFIRMED")
+  status      String   @default("PENDING")
   amountPaid  Float    @default(0)
   
   createdAt   DateTime @default(now())

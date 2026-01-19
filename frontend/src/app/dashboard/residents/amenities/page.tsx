@@ -55,6 +55,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { residentService } from '@/services/resident.service'
+import { AmenityService } from '@/services/amenity.service'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -326,6 +327,19 @@ export default function AmenitiesPage() {
     }
   }
 
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number, status: string }) => AmenityService.updateBookingStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['amenities'] })
+      toast.success('Booking status updated')
+    },
+    onError: (err: any) => toast.error('Failed to update status')
+  })
+
+  const handleUpdateStatus = (id: number, status: string) => {
+    updateStatusMutation.mutate({ id, status })
+  }
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -504,6 +518,15 @@ export default function AmenitiesPage() {
                 <History className="h-4 w-4 mr-1 sm:mr-2" />
                 History
               </TabsTrigger>
+              {isAdmin && (
+                <TabsTrigger
+                  value="pending"
+                  className="data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-yellow-500 rounded-none px-0 pb-3 text-sm sm:text-base whitespace-nowrap"
+                >
+                  <AlertCircle className="h-4 w-4 mr-1 sm:mr-2" />
+                  Pending Requests
+                </TabsTrigger>
+              )}
             </TabsList>
           </div>
 
@@ -607,6 +630,53 @@ export default function AmenitiesPage() {
             </div>
           </TabsContent>
 
+          {/* Pending Approvals Tab (Admin Only) */}
+          {isAdmin && (
+            <TabsContent value="pending" className="mt-6 space-y-4">
+              {allBookings.filter((b: any) => b.status === 'PENDING').length > 0 ? (
+                allBookings.filter((b: any) => b.status === 'PENDING').map((booking: any) => (
+                  <Card key={booking.id} className="border-l-4 border-l-yellow-500 shadow-sm">
+                    <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <h3 className="font-bold text-lg">{booking.amenity?.name || 'Unknown Amenity'}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Requested by: <span className="font-medium text-foreground">{booking.user?.name}</span>
+                          {booking.user?.ownedUnits?.[0] && ` (Unit: ${booking.user.ownedUnits[0].block}-${booking.user.ownedUnits[0].number})`}
+                        </p>
+                        <div className="flex gap-4 mt-2 text-sm text-gray-500">
+                           <span className="flex items-center gap-1"><Calendar className="w-4 h-4"/> {formatDate(booking.date)}</span>
+                           <span className="flex items-center gap-1"><Clock className="w-4 h-4"/> {booking.startTime} - {booking.endTime}</span>
+                        </div>
+                        <p className="text-sm mt-1">Purpose: {booking.purpose}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm" 
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                          onClick={() => handleUpdateStatus(booking.id, 'APPROVED')}
+                        >
+                          Approve
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="destructive"
+                          onClick={() => handleUpdateStatus(booking.id, 'REJECTED')}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                 <div className="text-center py-12 text-muted-foreground bg-muted/30 rounded-xl">
+                    <CheckCircle className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
+                    <p>No pending booking requests</p>
+                 </div>
+              )}
+            </TabsContent>
+          )}
+
           {/* My Bookings Tab */}
           <TabsContent value="bookings" className="mt-6 space-y-4">
             {upcomingBookings.length > 0 ? (
@@ -614,6 +684,14 @@ export default function AmenitiesPage() {
                 const bookingAmenity = booking.amenity || {}
                 const AmenityIcon = amenityIcons[bookingAmenity.type] || Building
                 const colors = amenityColors[bookingAmenity.type] || amenityColors.other
+
+                const statusStyles: Record<string, string> = {
+                   PENDING: "bg-yellow-100 text-yellow-700 border-yellow-200",
+                   APPROVED: "bg-green-100 text-green-700 border-green-200",
+                   CONFIRMED: "bg-green-100 text-green-700 border-green-200",
+                   REJECTED: "bg-red-100 text-red-700 border-red-200",
+                   CANCELLED: "bg-gray-100 text-gray-700 border-gray-200"
+                }
 
                 return (
                   <motion.div
@@ -649,8 +727,8 @@ export default function AmenitiesPage() {
                               <p className="text-lg font-bold text-blue-600">
                                 {booking.amountPaid === 0 ? 'Free' : `Rs. ${booking.amountPaid}`}
                               </p>
-                              <Badge className="bg-green-100 text-green-700 border-0">
-                                <CheckCircle className="h-3 w-3 mr-1" />
+                              <Badge className={`${statusStyles[booking.status] || statusStyles.PENDING} border`}>
+                                {booking.status === 'APPROVED' || booking.status === 'CONFIRMED' ? <CheckCircle className="h-3 w-3 mr-1"/> : <Clock className="h-3 w-3 mr-1"/>}
                                 {booking.status}
                               </Badge>
                             </div>
@@ -665,15 +743,12 @@ export default function AmenitiesPage() {
                                   <Eye className="h-4 w-4 mr-2" />
                                   View Details
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleModifyBooking(booking.id)}>
-                                  <Settings className="h-4 w-4 mr-2" />
-                                  Modify Booking
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem className="text-red-600" onClick={() => handleCancelBooking(booking.id)}>
-                                  <XCircle className="h-4 w-4 mr-2" />
-                                  Cancel Booking
-                                </DropdownMenuItem>
+                                {booking.status === 'PENDING' && (
+                                   <DropdownMenuItem className="text-red-600" onClick={() => handleCancelBooking(booking.id)}>
+                                     <XCircle className="h-4 w-4 mr-2" />
+                                     Cancel Request
+                                   </DropdownMenuItem>
+                                )}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
@@ -702,6 +777,15 @@ export default function AmenitiesPage() {
               pastBookings.map((booking, index) => {
                 const bookingAmenity = booking.amenity || {}
                 const AmenityIcon = amenityIcons[bookingAmenity.type] || Building
+
+                const statusStyles: Record<string, string> = {
+                   PENDING: "bg-yellow-100 text-yellow-700 border-yellow-200",
+                   APPROVED: "bg-green-100 text-green-700 border-green-200",
+                   CONFIRMED: "bg-green-100 text-green-700 border-green-200",
+                   REJECTED: "bg-red-100 text-red-700 border-red-200",
+                   CANCELLED: "bg-gray-100 text-gray-700 border-gray-200",
+                   COMPLETED: "bg-blue-100 text-blue-700 border-blue-200"
+                }
 
                 return (
                   <motion.div
@@ -736,10 +820,10 @@ export default function AmenitiesPage() {
                             <p className="text-lg font-bold text-muted-foreground">
                               {booking.amountPaid === 0 ? 'Free' : `Rs. ${booking.amountPaid}`}
                             </p>
-                            <Badge variant="secondary">
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              {booking.status}
-                            </Badge>
+                            <Badge className={`${statusStyles[booking.status] || statusStyles.COMPLETED} border`}>
+                               {booking.status === 'APPROVED' || booking.status === 'CONFIRMED' ? <CheckCircle className="h-3 w-3 mr-1"/> : <Clock className="h-3 w-3 mr-1"/>}
+                               {booking.status}
+                             </Badge>
                           </div>
                         </div>
                       </CardContent>

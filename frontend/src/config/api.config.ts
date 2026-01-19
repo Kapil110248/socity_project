@@ -107,6 +107,7 @@ export const API_CONFIG = {
     DELETE: (id: number | string) => `/amenities/${id}`,
     BOOKINGS: '/amenities/bookings/all',
     BOOK: '/amenities/bookings',
+    UPDATE_BOOKING: (id: string | number) => `/amenities/bookings/${id}`,
   },
 
   // Notices

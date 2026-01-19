@@ -15,7 +15,7 @@ router.delete('/:id', authorize(['ADMIN', 'SUPER_ADMIN']), AmenityController.del
 // Bookings
 router.get('/bookings/all', AmenityBookingController.list);
 router.post('/bookings', AmenityBookingController.create);
-router.patch('/bookings/:id', AmenityBookingController.update);
+router.patch('/bookings/:id', authorize(['ADMIN', 'SUPER_ADMIN']), AmenityBookingController.update);
 
 module.exports = router;
 

@@ -208,10 +208,35 @@ const itemVariants = {
   visible: { y: 0, opacity: 1 },
 }
 
-function SendWhatsAppButton({ invoice }: { invoice: typeof invoices[0] }) {
-  const message = `Dear ${invoice.resident},
+const formatUnit = (unit: any) => {
+  if (!unit) return '';
+  if (typeof unit === 'object') {
+    return `${unit.block}-${unit.number}`;
+  }
+  return unit;
+};
 
-Your maintenance bill for ${invoice.unit} is ${invoice.status === 'overdue' ? 'OVERDUE' : 'due'}.
+const formatResident = (resident: any) => {
+  if (!resident) return '';
+  if (typeof resident === 'object') {
+    return resident.name;
+  }
+  return resident;
+};
+
+const getResidentPhone = (resident: any) => {
+  if (typeof resident === 'object' && resident) {
+    return resident.phone;
+  }
+  return null;
+};
+
+function SendWhatsAppButton({ invoice }: { invoice: any }) {
+  const unitStr = formatUnit(invoice.unit);
+  const residentName = formatResident(invoice.resident);
+  const message = `Dear ${residentName},
+
+Your maintenance bill for ${unitStr} is ${invoice.status === 'overdue' ? 'OVERDUE' : 'due'}.
 
 Invoice: ${invoice.id}
 Amount: ₹${invoice.amount.toLocaleString()}
@@ -223,7 +248,8 @@ Please pay at your earliest convenience to avoid additional penalties.
 Thank you,
 SocietyHub Management`
 
-  const whatsappUrl = `https://wa.me/${invoice.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`
+  const phone = invoice.phone || getResidentPhone(invoice.resident) || '';
+  const whatsappUrl = `https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`
 
   return (
     <Button
@@ -355,8 +381,8 @@ export default function BillingPage() {
       headers.join(','),
       ...invoicesData.map((inv: any) => [
         inv.id,
-        `${inv.block}-${inv.unit}`,
-        `"${inv.resident}"`,
+        `${formatUnit(inv.unit)}`,
+        `"${formatResident(inv.resident)}"`,
         inv.amount,
         inv.maintenance,
         inv.utilities,
@@ -735,10 +761,10 @@ export default function BillingPage() {
                             <TableCell>
                               <div>
                                 <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-xs">{invoice.unit}</Badge>
-                                  <span className="font-medium text-sm">{invoice.resident}</span>
+                                  <Badge variant="outline" className="text-xs">{formatUnit(invoice.unit)}</Badge>
+                                  <span className="font-medium text-sm">{formatResident(invoice.resident)}</span>
                                 </div>
-                                <span className="text-xs text-gray-500">{invoice.phone}</span>
+                                <span className="text-xs text-gray-500">{invoice.phone || getResidentPhone(invoice.resident) || ''}</span>
                               </div>
                             </TableCell>
                             <TableCell className="text-right">
@@ -791,13 +817,15 @@ export default function BillingPage() {
                                       View Details
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => {
-                                      window.location.href = `mailto:${invoice.resident.toLowerCase().replace(' ', '.')}@email.com?subject=Invoice ${invoice.id}&body=Dear ${invoice.resident},%0D%0A%0D%0APlease find your invoice ${invoice.id} for amount ₹${invoice.amount.toLocaleString()}.%0D%0A%0D%0AThank you.`
+                                      const email = invoice.resident?.email || `${formatResident(invoice.resident).toLowerCase().replace(' ', '.')}@email.com`;
+                                      window.location.href = `mailto:${email}?subject=Invoice ${invoice.id}&body=Dear ${formatResident(invoice.resident)},%0D%0A%0D%0APlease find your invoice ${invoice.id} for amount ₹${invoice.amount.toLocaleString()}.%0D%0A%0D%0AThank you.`
                                     }}>
                                       <Mail className="h-4 w-4 mr-2" />
                                       Send Email
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => {
-                                      window.location.href = `tel:${invoice.phone.replace(/[^0-9]/g, '')}`
+                                      const phone = invoice.phone || getResidentPhone(invoice.resident) || '';
+                                      window.location.href = `tel:${phone.replace(/[^0-9]/g, '')}`
                                     }}>
                                       <Phone className="h-4 w-4 mr-2" />
                                       Call Resident
@@ -863,15 +891,15 @@ export default function BillingPage() {
                     <div className="flex items-center gap-3 mb-3">
                       <Avatar>
                         <AvatarFallback className="bg-blue-100 text-blue-700">
-                          {viewInvoice.resident.split(' ').map(n => n[0]).join('')}
+                          {formatResident(viewInvoice.resident).split(' ').map((n: string) => n[0]).join('')}
                         </AvatarFallback>
                       </Avatar>
                       <div>
-                        <p className="font-semibold">{viewInvoice.resident}</p>
-                        <p className="text-sm text-gray-500">Unit {viewInvoice.unit} • Block {viewInvoice.block}</p>
+                        <p className="font-semibold">{formatResident(viewInvoice.resident)}</p>
+                        <p className="text-sm text-gray-500">Unit {formatUnit(viewInvoice.unit)}</p>
                       </div>
                     </div>
-                    <p className="text-sm text-gray-500">{viewInvoice.phone}</p>
+                    <p className="text-sm text-gray-500">{viewInvoice.phone || getResidentPhone(viewInvoice.resident)}</p>
                   </div>
 
                   <div className="space-y-2">
@@ -898,13 +926,14 @@ export default function BillingPage() {
                   <div className="flex gap-2">
                     <Button className="flex-1" variant="outline" onClick={() => {
                       const message = `Invoice ${viewInvoice.id} - Amount: ₹${viewInvoice.amount.toLocaleString()}`
-                      window.open(`https://wa.me/${viewInvoice.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`, '_blank')
+                      const phone = viewInvoice.phone || getResidentPhone(viewInvoice.resident) || ''
+                      window.open(`https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`, '_blank')
                       showNotification('WhatsApp opened!')
                     }}>
                       <MessageSquare className="h-4 w-4 mr-2" />
                       WhatsApp
                     </Button>
-                    <Button className="flex-1" variant="outline" onClick={() => showNotification(`Email sent to ${viewInvoice.resident}!`)}>
+                    <Button className="flex-1" variant="outline" onClick={() => showNotification(`Email sent to ${formatResident(viewInvoice.resident)}!`)}>
                       <Mail className="h-4 w-4 mr-2" />
                       Email
                     </Button>

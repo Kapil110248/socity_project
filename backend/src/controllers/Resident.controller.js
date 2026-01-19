@@ -573,7 +573,7 @@ class ResidentController {
                     endTime,
                     purpose,
                     amountPaid: parseFloat(amount) || 0,
-                    status: 'CONFIRMED'
+                    status: 'PENDING'
                 }
             });
             res.json(booking);
