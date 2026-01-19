@@ -23,7 +23,14 @@ class ServiceCategoryController {
           icon,
           color,
           variants: {
-            create: variants || []
+            create: (variants || []).map(v => ({
+              name: v.name,
+              price: parseFloat(v.price) || 0, // Ensure price is a float
+              // description is not in the schema for ServiceVariant based on previous viewing, but let's check. 
+              // Wait, previous file view (Step 4496) line 760 shows ServiceVariant schema: id, categoryId, name, price, createdAt. 
+              // description is NOT in ServiceVariant schema.
+              // So we should NOT include description either.
+            }))
           }
         },
         include: { variants: true }
@@ -42,8 +49,7 @@ class ServiceCategoryController {
       // Sanitize variants (remove IDs to fresh create them)
       const sanitizedVariants = (variants || []).map(v => ({
         name: v.name,
-        price: v.price,
-        description: v.description
+        price: parseFloat(v.price) || 0,
       }));
 
       const category = await prisma.$transaction(async (tx) => {
