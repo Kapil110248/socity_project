@@ -1,6 +1,6 @@
 export const API_CONFIG = {
   BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9000/api',
-  
+
   // Authentication & Users
   AUTH: {
     LOGIN: '/auth/login',
@@ -207,10 +207,10 @@ export const API_CONFIG = {
 
   // Billing
   BILLING: {
-    INVOICES: '/billing/invoices',
-    GENERATE: '/billing/invoices/generate',
-    STATS: '/billing/stats',
-    DEFAULTERS: '/billing/defaulters',
+    INVOICES: '/invoices',
+    GENERATE: '/invoices/generate',
+    STATS: '/invoices/stats',
+    PAY: (no: string) => `/invoices/${no}/pay`,
   },
 
   // Reports
