@@ -2,6 +2,9 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
+import { useQuery } from '@tanstack/react-query'
+import { LedgerService } from '@/services/ledger.service'
+import { toast } from 'sonner'
 import {
   Scale,
   Download,
@@ -31,31 +34,33 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-
-const trialBalanceData = [
-  { code: '1001', name: 'Cash in Hand', debit: 150000, credit: 0 },
-  { code: '1002', name: 'Bank - HDFC', debit: 1200000, credit: 0 },
-  { code: '1003', name: 'Bank - ICICI', debit: 800000, credit: 0 },
-  { code: '1004', name: 'Fixed Deposits', debit: 350000, credit: 0 },
-  { code: '2001', name: 'Security Deposits', debit: 0, credit: 300000 },
-  { code: '2002', name: 'Advance from Residents', debit: 0, credit: 100000 },
-  { code: '2003', name: 'Pending Bills', debit: 0, credit: 50000 },
-  { code: '3001', name: 'Maintenance Charges', debit: 0, credit: 600000 },
-  { code: '3002', name: 'Parking Fees', debit: 0, credit: 120000 },
-  { code: '3003', name: 'Amenity Booking', debit: 0, credit: 80000 },
-  { code: '3004', name: 'Late Payment Fees', debit: 0, credit: 30000 },
-  { code: '3005', name: 'Interest Income', debit: 0, credit: 20000 },
-  { code: '4001', name: 'Security Expenses', debit: 180000, credit: 0 },
-  { code: '4002', name: 'Housekeeping', debit: 120000, credit: 0 },
-  { code: '4003', name: 'Electricity Common', debit: 80000, credit: 0 },
-  { code: '4004', name: 'Repairs & Maintenance', debit: 75000, credit: 0 },
-  { code: '4005', name: 'Garden Maintenance', debit: 35000, credit: 0 },
-  { code: '4006', name: 'Administrative', debit: 30000, credit: 0 },
-  { code: '5001', name: 'Capital Fund', debit: 0, credit: 1720000 },
-]
+import { Skeleton } from '@/components/ui/skeleton'
 
 export default function TrialBalancePage() {
   const [period, setPeriod] = useState('current')
+
+  const { data: accountGroups = [], isLoading } = useQuery({
+    queryKey: ['ledger-stats'],
+    queryFn: LedgerService.getStats
+  })
+
+  // Transformation Logic: Flatten the hierarchical groups into a linear list
+  const trialBalanceData = accountGroups.flatMap((group: any) => {
+    return group.accounts.map((account: any) => {
+      // Determine if it's Debit or Credit based on Group Type
+      // Asset/Expense -> Normal Debit
+      // Liability/Income -> Normal Credit
+      const isDebitNature = group.type === 'Asset' || group.type === 'Expense';
+      
+      return {
+        code: account.code,
+        name: account.name,
+        groupName: group.name,
+        debit: isDebitNature ? account.balance : 0,
+        credit: !isDebitNature ? account.balance : 0
+      }
+    })
+  }).sort((a: any, b: any) => a.code.localeCompare(b.code)) // Sort by code
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -65,9 +70,49 @@ export default function TrialBalancePage() {
     }).format(amount)
   }
 
-  const totalDebit = trialBalanceData.reduce((sum, item) => sum + item.debit, 0)
-  const totalCredit = trialBalanceData.reduce((sum, item) => sum + item.credit, 0)
-  const isBalanced = totalDebit === totalCredit
+  const handleExport = () => {
+    if (!trialBalanceData.length) return toast.error("No data to export")
+
+    const headers = ['Account Code', 'Account Name', 'Group', 'Debit', 'Credit']
+    const csvContent = [
+        headers.join(','),
+        ...trialBalanceData.map((item: any) => [
+            item.code,
+            `"${item.name}"`,
+            item.groupName,
+            item.debit,
+            item.credit
+        ].join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', 'trial_balance_export.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const totalDebit = trialBalanceData.reduce((sum: number, item: any) => sum + item.debit, 0)
+  const totalCredit = trialBalanceData.reduce((sum: number, item: any) => sum + item.credit, 0)
+  
+  // Floating point precision check (e.g. difference less than 1 rupee)
+  const difference = Math.abs(totalDebit - totalCredit)
+  const isBalanced = difference < 1.0 
+
+  if (isLoading) {
+    return (
+      <div className="p-6 space-y-6">
+        <Skeleton className="h-12 w-1/3" />
+        <div className="grid grid-cols-3 gap-4">
+           {[1,2,3].map(i => <Skeleton key={i} className="h-24 w-full" />)}
+        </div>
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
@@ -81,11 +126,11 @@ export default function TrialBalancePage() {
           <p className="text-gray-600 mt-1">Verify debit and credit balances</p>
         </div>
         <div className="flex gap-2 mt-4 md:mt-0">
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => window.print()}>
             <Printer className="h-4 w-4" />
             Print
           </Button>
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" onClick={handleExport}>
             <Download className="h-4 w-4" />
             Export
           </Button>
@@ -112,13 +157,13 @@ export default function TrialBalancePage() {
                 <p className={`text-sm ${isBalanced ? 'text-green-600' : 'text-red-600'}`}>
                   {isBalanced
                     ? 'All debits equal credits - books are in order'
-                    : `Difference of ${formatCurrency(Math.abs(totalDebit - totalCredit))}`}
+                    : `Difference of ${formatCurrency(difference)}`}
                 </p>
               </div>
             </div>
             <div className="text-right">
               <p className="text-sm text-gray-600">As of Date</p>
-              <p className="font-semibold">December 19, 2025</p>
+              <p className="font-semibold">{new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
             </div>
           </div>
         </Card>
@@ -171,7 +216,7 @@ export default function TrialBalancePage() {
               <span className="text-gray-600">Difference</span>
             </div>
             <p className={`text-2xl font-bold ${isBalanced ? 'text-green-600' : 'text-red-600'}`}>
-              {formatCurrency(Math.abs(totalDebit - totalCredit))}
+              {formatCurrency(difference)}
             </p>
           </Card>
         </motion.div>
@@ -210,15 +255,17 @@ export default function TrialBalancePage() {
             <TableRow className="bg-gray-50">
               <TableHead>Account Code</TableHead>
               <TableHead>Account Name</TableHead>
+              <TableHead>Group</TableHead>
               <TableHead className="text-right">Debit (₹)</TableHead>
               <TableHead className="text-right">Credit (₹)</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {trialBalanceData.map((item, index) => (
+            {trialBalanceData.map((item: any) => (
               <TableRow key={item.code} className="hover:bg-gray-50">
                 <TableCell className="font-mono">{item.code}</TableCell>
                 <TableCell>{item.name}</TableCell>
+                <TableCell className="text-gray-500 text-sm">{item.groupName}</TableCell>
                 <TableCell className="text-right">
                   {item.debit > 0 ? formatCurrency(item.debit) : '-'}
                 </TableCell>
@@ -229,7 +276,7 @@ export default function TrialBalancePage() {
             ))}
             {/* Totals Row */}
             <TableRow className="bg-gray-100 font-bold">
-              <TableCell colSpan={2} className="text-right">
+              <TableCell colSpan={3} className="text-right">
                 TOTAL
               </TableCell>
               <TableCell className="text-right text-blue-600">

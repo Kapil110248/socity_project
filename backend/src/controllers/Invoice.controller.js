@@ -59,6 +59,7 @@ class InvoiceController {
     static async getStats(req, res) {
         try {
             const societyId = req.user.societyId;
+            console.log('Fetching invoice stats for society:', societyId);
 
             const stats = await prisma.invoice.groupBy({
                 by: ['status'],
@@ -67,31 +68,44 @@ class InvoiceController {
                 _count: { id: true }
             });
 
+            console.log('Raw stats from DB:', JSON.stringify(stats, null, 2));
+
             const result = {
-                totalBilled: 0,
-                collected: 0,
-                pending: 0,
-                overdue: 0,
-                pendingCount: 0,
-                overdueCount: 0
+                totalInvoices: 0,
+                paidInvoices: 0,
+                pendingInvoices: 0,
+                overdueInvoices: 0,
+                totalCollection: 0,
+                pendingAmount: 0,
+                overdueAmount: 0,
+                totalBilled: 0
             };
 
             stats.forEach(s => {
                 const amount = s._sum.amount || 0;
+                const count = s._count.id || 0;
+                
                 result.totalBilled += amount;
-                if (s.status === 'PAID') {
-                    result.collected = amount;
-                } else if (s.status === 'PENDING') {
-                    result.pending = amount;
-                    result.pendingCount = s._count.id;
-                } else if (s.status === 'OVERDUE') {
-                    result.overdue = amount;
-                    result.overdueCount = s._count.id;
+                result.totalInvoices += count;
+
+                const status = s.status.toUpperCase();
+
+                if (status === 'PAID') {
+                    result.totalCollection += amount;
+                    result.paidInvoices += count;
+                } else if (status === 'PENDING') {
+                    result.pendingAmount += amount;
+                    result.pendingInvoices += count;
+                } else if (status === 'OVERDUE') {
+                    result.overdueAmount += amount;
+                    result.overdueInvoices += count;
                 }
             });
 
+            console.log('Computed stats result:', result);
             res.json(result);
         } catch (error) {
+            console.error('Get Stats Error:', error);
             res.status(500).json({ error: error.message });
         }
     }

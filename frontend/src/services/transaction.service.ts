@@ -29,7 +29,8 @@ export const TransactionService = {
     paidTo?: string;
     receivedFrom?: string;
   }) => {
-    const response = await api.post(API_CONFIG.TRANSACTION.CREATE, data);
+    const endpoint = data.type === 'INCOME' ? '/transactions/income' : '/transactions/expense';
+    const response = await api.post(endpoint, data);
     return response.data;
   },
 

@@ -68,6 +68,8 @@ app.use('/api/roles', roleRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/purchase-requests', purchaseRequestRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/ledger', require('./routes/ledger.routes'));
+app.use('/api/journal', require('./routes/journal.routes'));
 
 // New Admin routes
 app.use('/api/meetings', meetingRoutes);

@@ -3,9 +3,9 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { RoleGuard } from '@/components/auth/role-guard'
-import api from '@/lib/api'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import toast from 'react-hot-toast'
+import { TransactionService } from '@/services/transaction.service'
+import { toast } from 'sonner'
 import {
   Plus,
   Search,
@@ -41,140 +41,162 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-
-const stats = [
-  {
-    title: 'Total Payments',
-    value: '₹42,50,000',
-    change: '+15%',
-    icon: DollarSign,
-    color: 'blue',
-  },
-  {
-    title: 'This Month',
-    value: '₹10,85,000',
-    change: '+8%',
-    icon: TrendingUp,
-    color: 'green',
-  },
-  {
-    title: 'Pending',
-    value: '₹1,60,000',
-    change: '-5%',
-    icon: Clock,
-    color: 'orange',
-  },
-  {
-    title: 'Total Payers',
-    value: '248',
-    change: '+12',
-    icon: Users,
-    color: 'purple',
-  },
-]
-
-const payments = [
-  {
-    id: 'PAY-2025-001',
-    invoiceId: 'INV-2025-001',
-    unit: 'A-101',
-    resident: 'Rajesh Kumar',
-    amount: 15000,
-    paymentDate: '2025-01-03',
-    paymentMethod: 'UPI',
-    status: 'completed',
-    transactionId: 'TXN123456789',
-  },
-  {
-    id: 'PAY-2025-002',
-    invoiceId: 'INV-2025-002',
-    unit: 'B-205',
-    resident: 'Priya Sharma',
-    amount: 18500,
-    paymentDate: '2025-01-04',
-    paymentMethod: 'Net Banking',
-    status: 'completed',
-    transactionId: 'TXN987654321',
-  },
-  {
-    id: 'PAY-2025-003',
-    invoiceId: 'INV-2025-003',
-    unit: 'C-304',
-    resident: 'Amit Patel',
-    amount: 16200,
-    paymentDate: '2025-01-05',
-    paymentMethod: 'Credit Card',
-    status: 'pending',
-    transactionId: 'TXN456789123',
-  },
-  {
-    id: 'PAY-2025-004',
-    invoiceId: 'INV-2025-004',
-    unit: 'A-502',
-    resident: 'Neha Gupta',
-    amount: 22000,
-    paymentDate: '2025-01-02',
-    paymentMethod: 'Cheque',
-    status: 'failed',
-    transactionId: 'CHQ741852963',
-  },
-  {
-    id: 'PAY-2025-005',
-    invoiceId: 'INV-2025-005',
-    unit: 'D-108',
-    resident: 'Vikram Singh',
-    amount: 14500,
-    paymentDate: '2025-01-06',
-    paymentMethod: 'UPI',
-    status: 'completed',
-    transactionId: 'TXN159753468',
-  },
-]
+import { Skeleton } from '@/components/ui/skeleton'
+import { format } from 'date-fns'
 
 export default function PaymentsPage() {
   const queryClient = useQueryClient()
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false)
+  const [formData, setFormData] = useState({
+    invoiceNo: '',
+    amount: '',
+    paymentMethod: 'CASH',
+    date: format(new Date(), 'yyyy-MM-dd'),
+    transactionId: '', // Optional reference
+    receivedFrom: '',  // Resident Name
+    description: ''
+  })
 
-  // Fetch Payments (Income Transactions)
-  const { data: paymentsData = [], isLoading } = useQuery({
-    queryKey: ['payments', statusFilter, searchQuery],
+  // 1. Fetch Stats
+  const { data: statsData, isLoading: statsLoading } = useQuery({
+    queryKey: ['payment-stats'],
+    queryFn: TransactionService.getStats
+  })
+
+  // 2. Fetch Payments (Income Transactions)
+  const { data: paymentsData = [], isLoading: paymentsLoading } = useQuery({
+    queryKey: ['payments', statusFilter],
     queryFn: async () => {
-      const response = await api.get('/transactions')
-      // Filter for type=INCOME if not done by backend
-      return response.data.filter((t: any) => t.type === 'INCOME')
+      const allTransactions = await TransactionService.getAll()
+      return allTransactions.filter((t: any) => t.type === 'INCOME')
     },
   })
 
-  // Mutation for recording payment
+  // 3. Record Payment Mutation
   const recordMutation = useMutation({
-    mutationFn: async (newPayment: any) => {
-      return api.post('/transactions/income', newPayment)
-    },
+    mutationFn: (data: any) => TransactionService.create({
+        ...data,
+        type: 'INCOME',
+        category: 'Maintenance', // Default category
+        status: 'PAID'
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments'] })
+      queryClient.invalidateQueries({ queryKey: ['payment-stats'] })
       setIsRecordDialogOpen(false)
+      setFormData({
+        invoiceNo: '',
+        amount: '',
+        paymentMethod: 'CASH',
+        date: format(new Date(), 'yyyy-MM-dd'),
+        transactionId: '',
+        receivedFrom: '',
+        description: ''
+      })
       toast.success('Payment recorded successfully!')
     },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Failed to record payment')
+    }
   })
 
-  const handleRecordPayment = (data: any) => {
-    recordMutation.mutate(data)
+  const handleRecordSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!formData.amount || !formData.receivedFrom) {
+        toast.error('Please fill required fields (Amount, Resident Name)')
+        return;
+    }
+    
+    recordMutation.mutate({
+        amount: parseFloat(formData.amount),
+        date: new Date(formData.date).toISOString(),
+        paymentMethod: formData.paymentMethod,
+        invoiceNo: formData.invoiceNo || undefined,
+        receivedFrom: formData.receivedFrom,
+        description: formData.description + (formData.transactionId ? ` (Ref: ${formData.transactionId})` : '')
+    })
   }
 
-  const normalizedPayments = paymentsData.map((p: any) => ({
-    ...p,
-    resident: p.receivedFrom || 'N/A',
-    paymentDate: new Date(p.date).toLocaleDateString(),
-    status: p.status.toLowerCase(),
-  }))
+  // Export to CSV
+  const handleExport = () => {
+    if (!filteredPayments.length) {
+      toast.error('No data to export')
+      return
+    }
 
-  const filteredPayments = normalizedPayments
+    const headers = ['Payment ID', 'Invoice ID', 'Resident', 'Amount', 'Date', 'Method', 'Transaction Ref', 'Status']
+    const csvContent = [
+      headers.join(','),
+      ...filteredPayments.map((p: any) => [
+        p.id,
+        p.invoiceNo || '-',
+        `"${p.receivedFrom || 'Unknown'}"`, // Quote to handle commas in names
+        p.amount,
+        format(new Date(p.date), 'yyyy-MM-dd'),
+        p.paymentMethod,
+        p.transactionId || '-',
+        p.status
+      ].join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `payments_export_${format(new Date(), 'dd-MM-yyyy')}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  // Filter Logic
+  const filteredPayments = paymentsData.filter((payment: any) => {
+    const matchesSearch = 
+        (payment.receivedFrom?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+        (payment.invoiceNo?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+        (payment.description?.toLowerCase() || '').includes(searchQuery.toLowerCase())
+    
+    const matchesStatus = statusFilter === 'all' || payment.status.toLowerCase() === statusFilter
+
+    return matchesSearch && matchesStatus
+  })
+
+  // Helper for Stats
+  const stats = [
+    {
+      title: 'Total Payments',
+      value: `₹${statsData?.totalIncome?.toLocaleString() || 0}`,
+      change: 'Lifetime',
+      icon: DollarSign,
+      color: 'blue',
+    },
+    {
+      title: 'This Month',
+      value: `₹${statsData?.thisMonthIncome?.toLocaleString() || 0}`,
+      change: 'Current Month',
+      icon: TrendingUp,
+      color: 'green',
+    },
+    {
+      title: 'Pending',
+      value: `₹${statsData?.pendingIncome?.toLocaleString() || 0}`,
+      change: 'To Collect',
+      icon: Clock,
+      color: 'orange',
+    },
+    {
+      title: 'Total Payers',
+      value: statsData?.totalPayers || 0,
+      change: 'Residents',
+      icon: Users,
+      color: 'purple',
+    },
+  ]
 
   return (
     <RoleGuard allowedRoles={['admin']}>
-
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -185,7 +207,7 @@ export default function PaymentsPage() {
           </p>
         </div>
         <div className="flex items-center space-x-3">
-          <Button variant="outline" className="space-x-2">
+          <Button variant="outline" className="space-x-2" onClick={handleExport}>
             <Download className="h-4 w-4" />
             <span>Export</span>
           </Button>
@@ -200,66 +222,91 @@ export default function PaymentsPage() {
               <DialogHeader>
                 <DialogTitle>Record Manual Payment</DialogTitle>
                 <DialogDescription>
-                  Record a payment received through offline mode
+                  Record a payment received through offline mode (Cash, Cheque, etc.)
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 py-4">
+              <form onSubmit={handleRecordSubmit} className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Invoice Number</Label>
-                    <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select invoice" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="inv-001">INV-2025-001</SelectItem>
-                        <SelectItem value="inv-002">INV-2025-002</SelectItem>
-                        <SelectItem value="inv-003">INV-2025-003</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label>Resident Name <span className="text-red-500">*</span></Label>
+                    <Input 
+                        placeholder="e.g. Rajesh Kumar" 
+                        value={formData.receivedFrom}
+                        onChange={(e) => setFormData({...formData, receivedFrom: e.target.value})}
+                    />
                   </div>
                   <div className="space-y-2">
-                    <Label>Amount (₹)</Label>
-                    <Input type="number" placeholder="15000" />
+                    <Label>Amount (₹) <span className="text-red-500">*</span></Label>
+                    <Input 
+                        type="number" 
+                        placeholder="15000" 
+                        value={formData.amount}
+                        onChange={(e) => setFormData({...formData, amount: e.target.value})}
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Payment Method</Label>
-                    <Select>
+                    <Select 
+                        value={formData.paymentMethod} 
+                        onValueChange={(val) => setFormData({...formData, paymentMethod: val})}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select method" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="cheque">Cheque</SelectItem>
-                        <SelectItem value="dd">Demand Draft</SelectItem>
-                        <SelectItem value="online">Online Transfer</SelectItem>
+                        <SelectItem value="CASH">Cash</SelectItem>
+                        <SelectItem value="CHEQUE">Cheque</SelectItem>
+                        <SelectItem value="UPI">UPI</SelectItem>
+                        <SelectItem value="ONLINE">Online Transfer</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Payment Date</Label>
-                    <Input type="date" />
+                    <Input 
+                        type="date" 
+                        value={formData.date}
+                        onChange={(e) => setFormData({...formData, date: e.target.value})}
+                    />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Transaction ID / Reference</Label>
-                  <Input placeholder="TXN123456789" />
+                <div className="grid grid-cols-2 gap-4">
+                     <div className="space-y-2">
+                        <Label>Transaction Ref / ID</Label>
+                        <Input 
+                            placeholder="e.g. UPI Ref No." 
+                            value={formData.transactionId}
+                            onChange={(e) => setFormData({...formData, transactionId: e.target.value})}
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Invoice Number (Optional)</Label>
+                        <Input 
+                            placeholder="e.g. INV-2025-001" 
+                            value={formData.invoiceNo}
+                            onChange={(e) => setFormData({...formData, invoiceNo: e.target.value})}
+                        />
+                    </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Remarks</Label>
-                  <Input placeholder="Optional notes" />
+                  <Input 
+                    placeholder="Optional notes" 
+                    value={formData.description}
+                    onChange={(e) => setFormData({...formData, description: e.target.value})}
+                  />
                 </div>
                 <div className="flex justify-end space-x-2 pt-4">
-                  <Button variant="outline" onClick={() => setIsRecordDialogOpen(false)}>
+                  <Button type="button" variant="outline" onClick={() => setIsRecordDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button className="bg-blue-600 hover:bg-blue-700">
-                    Record Payment
+                  <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={recordMutation.isPending}>
+                    {recordMutation.isPending ? 'Recording...' : 'Record Payment'}
                   </Button>
                 </div>
-              </div>
+              </form>
             </DialogContent>
           </Dialog>
         </div>
@@ -283,32 +330,12 @@ export default function PaymentsPage() {
                       {stat.title}
                     </p>
                     <h3 className="text-2xl font-bold text-gray-900 mt-2">
-                      {stat.value}
+                      {statsLoading ? <Skeleton className="h-8 w-24" /> : stat.value}
                     </h3>
                     <p className="text-sm text-green-600 mt-1">{stat.change}</p>
                   </div>
-                  <div
-                    className={`p-3 rounded-xl ${
-                      stat.color === 'blue'
-                        ? 'bg-blue-100'
-                        : stat.color === 'green'
-                        ? 'bg-green-100'
-                        : stat.color === 'orange'
-                        ? 'bg-orange-100'
-                        : 'bg-purple-100'
-                    }`}
-                  >
-                    <Icon
-                      className={`h-6 w-6 ${
-                        stat.color === 'blue'
-                          ? 'text-blue-600'
-                          : stat.color === 'green'
-                          ? 'text-green-600'
-                          : stat.color === 'orange'
-                          ? 'text-orange-600'
-                          : 'text-purple-600'
-                      }`}
-                    />
+                  <div className={`p-3 rounded-xl bg-${stat.color}-100`}>
+                    <Icon className={`h-6 w-6 text-${stat.color}-600`} />
                   </div>
                 </div>
               </Card>
@@ -336,7 +363,7 @@ export default function PaymentsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="paid">Paid</SelectItem>
               <SelectItem value="pending">Pending</SelectItem>
               <SelectItem value="failed">Failed</SelectItem>
             </SelectContent>
@@ -353,64 +380,78 @@ export default function PaymentsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Payment ID</TableHead>
+              <TableHead>Ref ID</TableHead>
               <TableHead>Invoice ID</TableHead>
-              <TableHead>Unit</TableHead>
               <TableHead>Resident</TableHead>
               <TableHead>Amount</TableHead>
               <TableHead>Payment Date</TableHead>
               <TableHead>Method</TableHead>
-              <TableHead>Transaction ID</TableHead>
+              <TableHead>Description</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredPayments.map((payment: any) => (
+            {paymentsLoading ? (
+                 [...Array(5)].map((_, i) => (
+                    <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                    </TableRow>
+                 ))
+            ) : filteredPayments.length === 0 ? (
+                <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                        No payments found.
+                    </TableCell>
+                </TableRow>
+            ) : (
+            filteredPayments.map((payment: any) => (
               <TableRow key={payment.id}>
-                <TableCell className="font-medium">{payment.id}</TableCell>
-                <TableCell>{payment.invoiceId}</TableCell>
-                <TableCell>{payment.unit}</TableCell>
-                <TableCell>{payment.resident}</TableCell>
-                <TableCell className="font-semibold">
+                <TableCell className="font-medium text-xs text-gray-500">#{payment.id}</TableCell>
+                <TableCell>{payment.invoiceNo || '-'}</TableCell>
+                <TableCell className="font-medium">{payment.receivedFrom || 'Unknown'}</TableCell>
+                <TableCell className="font-semibold text-green-600">
                   ₹{payment.amount.toLocaleString()}
                 </TableCell>
-                <TableCell>{payment.paymentDate}</TableCell>
+                <TableCell>{format(new Date(payment.date), 'dd MMM yyyy')}</TableCell>
                 <TableCell>
                   <div className="flex items-center space-x-2">
                     <CreditCard className="h-4 w-4 text-gray-400" />
-                    <span>{payment.paymentMethod}</span>
+                    <span className="capitalize">{payment.paymentMethod?.toLowerCase()}</span>
                   </div>
                 </TableCell>
-                <TableCell className="text-xs text-gray-600">
-                  {payment.transactionId}
+                <TableCell className="text-sm text-gray-600 max-w-[200px] truncate" title={payment.description}>
+                  {payment.description || '-'}
                 </TableCell>
                 <TableCell>
                   <Badge
                     variant={
-                      payment.status === 'completed'
+                      payment.status === 'PAID'
                         ? 'default'
-                        : payment.status === 'failed'
+                        : payment.status === 'FAILED'
                         ? 'destructive'
                         : 'secondary'
                     }
                     className={
-                      payment.status === 'completed'
+                      payment.status === 'PAID'
                         ? 'bg-green-100 text-green-700 hover:bg-green-100'
-                        : payment.status === 'failed'
+                        : payment.status === 'FAILED'
                         ? 'bg-red-100 text-red-700 hover:bg-red-100'
                         : 'bg-orange-100 text-orange-700 hover:bg-orange-100'
                     }
                   >
-                    {payment.status === 'completed' && (
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                    )}
-                    {payment.status === 'failed' && <XCircle className="h-3 w-3 mr-1" />}
-                    {payment.status === 'pending' && <Clock className="h-3 w-3 mr-1" />}
+                    {payment.status === 'PAID' && <CheckCircle className="h-3 w-3 mr-1" />}
                     {payment.status}
                   </Badge>
                 </TableCell>
               </TableRow>
-            ))}
+            )))}
           </TableBody>
         </Table>
       </Card>

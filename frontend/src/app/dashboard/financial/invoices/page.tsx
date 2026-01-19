@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { RoleGuard } from '@/components/auth/role-guard'
 import {
   Plus,
@@ -10,12 +10,15 @@ import {
   Download,
   Send,
   Eye,
-  Edit,
   Trash2,
   DollarSign,
   Calendar,
   Users,
   TrendingUp,
+  MessageSquare,
+  Mail,
+  Printer,
+  MoreHorizontal
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,108 +40,188 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { BillingService } from '@/services/billing.service'
+import { UnitService } from '@/services/unit.service'
+import { toast } from 'sonner'
+import { Skeleton } from '@/components/ui/skeleton'
+import { format } from 'date-fns'
 
-const stats = [
-  {
-    title: 'Total Invoices',
-    value: '1,245',
-    change: '+12%',
-    icon: DollarSign,
-    color: 'blue',
-  },
-  {
-    title: 'Paid',
-    value: '987',
-    change: '+8%',
-    icon: TrendingUp,
-    color: 'green',
-  },
-  {
-    title: 'Pending',
-    value: '158',
-    change: '-5%',
-    icon: Calendar,
-    color: 'orange',
-  },
-  {
-    title: 'Overdue',
-    value: '100',
-    change: '+3',
-    icon: Users,
-    color: 'red',
-  },
-]
+// --- Formatting Helpers to safe-guard against Object Rendering Errors ---
+const formatUnit = (unit: any) => {
+  if (!unit) return 'N/A';
+  if (typeof unit === 'object') {
+    return `${unit.block}-${unit.number}`;
+  }
+  return unit;
+};
 
-const invoices = [
-  {
-    id: 'INV-2025-001',
-    unit: 'A-101',
-    resident: 'Rajesh Kumar',
-    amount: 15000,
-    issueDate: '2024-12-01',
-    dueDate: '2025-01-05',
-    status: 'paid',
-    paidDate: '2025-01-03',
-  },
-  {
-    id: 'INV-2025-002',
-    unit: 'B-205',
-    resident: 'Priya Sharma',
-    amount: 18500,
-    issueDate: '2024-12-01',
-    dueDate: '2025-01-05',
-    status: 'paid',
-    paidDate: '2025-01-04',
-  },
-  {
-    id: 'INV-2025-003',
-    unit: 'C-304',
-    resident: 'Amit Patel',
-    amount: 16200,
-    issueDate: '2024-12-01',
-    dueDate: '2025-01-05',
-    status: 'pending',
-    paidDate: null,
-  },
-  {
-    id: 'INV-2025-004',
-    unit: 'A-502',
-    resident: 'Neha Gupta',
-    amount: 22000,
-    issueDate: '2024-11-01',
-    dueDate: '2024-12-20',
-    status: 'overdue',
-    paidDate: null,
-  },
-  {
-    id: 'INV-2025-005',
-    unit: 'D-108',
-    resident: 'Vikram Singh',
-    amount: 14500,
-    issueDate: '2024-12-01',
-    dueDate: '2025-01-05',
-    status: 'pending',
-    paidDate: null,
-  },
-]
+const formatResident = (resident: any) => {
+  if (!resident) return 'N/A';
+  if (typeof resident === 'object') {
+    return resident.name || 'Unknown';
+  }
+  return resident;
+};
+
+const getResidentPhone = (resident: any) => {
+  if (typeof resident === 'object' && resident) {
+    return resident.phone;
+  }
+  return null;
+};
 
 export default function InvoicesPage() {
+  const queryClient = useQueryClient()
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [viewInvoice, setViewInvoice] = useState<any>(null)
 
-  const filteredInvoices = invoices.filter((invoice) => {
-    const matchesSearch =
-      invoice.unit.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      invoice.resident.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      invoice.id.toLowerCase().includes(searchQuery.toLowerCase())
-
-    const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter
-
-    return matchesSearch && matchesStatus
+  // 1. Fetch Stats
+  const { data: statsData, isLoading: statsLoading } = useQuery({
+    queryKey: ['billing-stats'],
+    queryFn: BillingService.getStats
   })
+
+  // 2. Fetch Invoices
+  const { data: invoicesData, isLoading: invoicesLoading } = useQuery({
+    queryKey: ['invoices'],
+    queryFn: () => BillingService.getInvoices({ 
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+      search: searchQuery || undefined
+    })
+  })
+
+  // 3. Fetch Units (for Create Dialog)
+  const { data: unitsData } = useQuery({
+    queryKey: ['units'],
+    queryFn: UnitService.getUnits,
+    enabled: isCreateDialogOpen
+  })
+
+  // 4. Create Invoice Mutation
+  const createInvoiceMutation = useMutation({
+    mutationFn: BillingService.createInvoice,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      queryClient.invalidateQueries({ queryKey: ['billing-stats'] })
+      setIsCreateDialogOpen(false)
+      toast.success('Invoice created successfully')
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to create invoice')
+    }
+  })
+
+  // 5. Handle Export
+  const handleExport = () => {
+    if (!invoicesData || invoicesData.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+    
+    // Create CSV content
+    const headers = ['Invoice ID', 'Unit', 'Resident', 'Amount', 'Issue Date', 'Due Date', 'Status'];
+    const rows = invoicesData.map((inv: any) => [
+      inv.id,
+      formatUnit(inv.unit),
+      formatResident(inv.resident),
+      inv.amount,
+      inv.issueDate ? format(new Date(inv.issueDate), 'yyyy-MM-dd') : '',
+      inv.dueDate ? format(new Date(inv.dueDate), 'yyyy-MM-dd') : '',
+      inv.status
+    ]);
+    
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(','), ...rows.map((row: any[]) => row.join(','))].join('\n');
+      
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `invoices_export_${format(new Date(), 'yyyyMMdd')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Export downloaded');
+  }
+
+  // Helper to construct Stats Array
+  const stats = [
+    {
+      title: 'Total Invoices',
+      value: statsData?.totalInvoices || 0,
+      change: 'Lifetime',
+      icon: DollarSign,
+      color: 'blue',
+    },
+    {
+      title: 'Paid',
+      value: statsData?.paidInvoices || 0,
+      change: `₹${statsData?.totalCollection?.toLocaleString() || 0}`,
+      icon: TrendingUp,
+      color: 'green',
+    },
+    {
+      title: 'Pending',
+      value: statsData?.pendingInvoices || 0,
+      change: `₹${statsData?.pendingAmount?.toLocaleString() || 0}`,
+      icon: Calendar,
+      color: 'orange',
+    },
+    {
+      title: 'Overdue',
+      value: statsData?.overdueInvoices || 0,
+      change: 'Action Needed',
+      icon: Users,
+      color: 'red',
+    },
+  ]
+
+  const invoices = invoicesData || []
+
+  const filteredInvoices = invoices.filter((invoice: any) => {
+    const unitStr = formatUnit(invoice.unit).toLowerCase();
+    const residentStr = formatResident(invoice.resident).toLowerCase();
+    const idStr = String(invoice.id).toLowerCase();
+    const query = searchQuery.toLowerCase();
+    
+    return unitStr.includes(query) || residentStr.includes(query) || idStr.includes(query);
+  })
+
+  // Dialog Form State
+  const [formData, setFormData] = useState({
+    unitId: '',
+    amount: '',
+    issueDate: format(new Date(), 'yyyy-MM-dd'),
+    dueDate: format(new Date(new Date().setDate(new Date().getDate() + 15)), 'yyyy-MM-dd'),
+    description: ''
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!formData.unitId || !formData.amount) {
+      toast.error('Please fill required fields')
+      return;
+    }
+    createInvoiceMutation.mutate({
+      unitId: formData.unitId,
+      amount: Number(formData.amount),
+      issueDate: formData.issueDate,
+      dueDate: formData.dueDate,
+      description: formData.description
+    })
+  }
 
   return (
     <RoleGuard allowedRoles={['admin']}>
@@ -153,9 +236,9 @@ export default function InvoicesPage() {
           </p>
         </div>
         <div className="flex items-center space-x-3">
-          <Button variant="outline" className="space-x-2">
+          <Button variant="outline" className="space-x-2" onClick={handleExport}>
             <Download className="h-4 w-4" />
-            <span>Export</span>
+            <span>Export CSV</span>
           </Button>
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
@@ -171,49 +254,68 @@ export default function InvoicesPage() {
                   Generate a new invoice for a unit
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 py-4">
+              <form onSubmit={handleSubmit} className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Unit Number</Label>
-                    <Select>
+                    <Select value={formData.unitId} onValueChange={(val) => setFormData({...formData, unitId: val})}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select unit" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="a-101">A-101</SelectItem>
-                        <SelectItem value="a-102">A-102</SelectItem>
-                        <SelectItem value="b-201">B-201</SelectItem>
+                        {unitsData?.map((unit: any) => (
+                           <SelectItem key={unit.id} value={String(unit.id)}>
+                             {unit.block}-{unit.number} ({unit.owner?.name || 'Vacant'})
+                           </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Amount (₹)</Label>
-                    <Input type="number" placeholder="15000" />
+                    <Input 
+                      type="number" 
+                      placeholder="e.g. 5000" 
+                      value={formData.amount}
+                      onChange={(e) => setFormData({...formData, amount: e.target.value})}
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Issue Date</Label>
-                    <Input type="date" />
+                    <Input 
+                      type="date" 
+                      value={formData.issueDate}
+                      onChange={(e) => setFormData({...formData, issueDate: e.target.value})}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Due Date</Label>
-                    <Input type="date" />
+                    <Input 
+                      type="date"
+                      value={formData.dueDate}
+                      onChange={(e) => setFormData({...formData, dueDate: e.target.value})}
+                    />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Description</Label>
-                  <Input placeholder="Monthly maintenance charge" />
+                  <Input 
+                    placeholder="e.g. Monthly maintenance charge"
+                    value={formData.description}
+                    onChange={(e) => setFormData({...formData, description: e.target.value})}
+                  />
                 </div>
                 <div className="flex justify-end space-x-2 pt-4">
-                  <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                  <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button className="bg-blue-600 hover:bg-blue-700">
-                    Create Invoice
+                  <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={createInvoiceMutation.isPending}>
+                    {createInvoiceMutation.isPending ? 'Creating...' : 'Create Invoice'}
                   </Button>
                 </div>
-              </div>
+              </form>
             </DialogContent>
           </Dialog>
         </div>
@@ -237,34 +339,14 @@ export default function InvoicesPage() {
                       {stat.title}
                     </p>
                     <h3 className="text-2xl font-bold text-gray-900 mt-2">
-                      {stat.value}
+                      {statsLoading ? <Skeleton className="h-8 w-20" /> : stat.value}
                     </h3>
                     <p className={`text-sm mt-1 ${stat.color === 'red' ? 'text-red-600' : 'text-green-600'}`}>
                       {stat.change}
                     </p>
                   </div>
-                  <div
-                    className={`p-3 rounded-xl ${
-                      stat.color === 'blue'
-                        ? 'bg-blue-100'
-                        : stat.color === 'green'
-                        ? 'bg-green-100'
-                        : stat.color === 'orange'
-                        ? 'bg-orange-100'
-                        : 'bg-red-100'
-                    }`}
-                  >
-                    <Icon
-                      className={`h-6 w-6 ${
-                        stat.color === 'blue'
-                          ? 'text-blue-600'
-                          : stat.color === 'green'
-                          ? 'text-green-600'
-                          : stat.color === 'orange'
-                          ? 'text-orange-600'
-                          : 'text-red-600'
-                      }`}
-                    />
+                  <div className={`p-3 rounded-xl bg-${stat.color}-100`}>
+                    <Icon className={`h-6 w-6 text-${stat.color}-600`} />
                   </div>
                 </div>
               </Card>
@@ -297,10 +379,6 @@ export default function InvoicesPage() {
               <SelectItem value="overdue">Overdue</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" className="space-x-2">
-            <Filter className="h-4 w-4" />
-            <span>More Filters</span>
-          </Button>
         </div>
       </Card>
 
@@ -320,25 +398,38 @@ export default function InvoicesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredInvoices.map((invoice) => (
+          {invoicesLoading ? (
+               [...Array(5)].map((_, i) => (
+                 <TableRow key={i}>
+                   <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                   <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                   <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                   <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                   <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                   <TableCell><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
+                   <TableCell><Skeleton className="h-8 w-20" /></TableCell>
+                 </TableRow>
+               ))
+            ) : filteredInvoices.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                  No invoices found matching your criteria.
+                </TableCell>
+              </TableRow>
+            ) : (
+            filteredInvoices.map((invoice: any) => (
               <TableRow key={invoice.id}>
-                <TableCell className="font-medium">{invoice.id}</TableCell>
-                <TableCell>{invoice.unit}</TableCell>
-                <TableCell>{invoice.resident}</TableCell>
+                <TableCell className="font-medium">#{invoice.id}</TableCell>
+                <TableCell>{formatUnit(invoice.unit)}</TableCell>
+                <TableCell>{formatResident(invoice.resident)}</TableCell>
                 <TableCell className="font-semibold">
                   ₹{invoice.amount.toLocaleString()}
                 </TableCell>
-                <TableCell>{invoice.issueDate}</TableCell>
-                <TableCell>{invoice.dueDate}</TableCell>
+                <TableCell>{invoice.issueDate ? format(new Date(invoice.issueDate), 'dd MMM yyyy') : '-'}</TableCell>
+                <TableCell>{invoice.dueDate ? format(new Date(invoice.dueDate), 'dd MMM yyyy') : '-'}</TableCell>
                 <TableCell>
                   <Badge
-                    variant={
-                      invoice.status === 'paid'
-                        ? 'default'
-                        : invoice.status === 'overdue'
-                        ? 'destructive'
-                        : 'secondary'
-                    }
                     className={
                       invoice.status === 'paid'
                         ? 'bg-green-100 text-green-700 hover:bg-green-100'
@@ -356,36 +447,73 @@ export default function InvoicesPage() {
                       variant="ghost"
                       size="icon"
                       title="View"
-                      onClick={() => alert(`Viewing invoice ${invoice.id}\n\nUnit: ${invoice.unit}\nResident: ${invoice.resident}\nAmount: ₹${invoice.amount.toLocaleString()}\nStatus: ${invoice.status}`)}
+                      onClick={() => setViewInvoice(invoice)}
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
-                      title="Send"
+                      title="Send WhatsApp"
+                      className="text-green-600 hover:text-green-700 hover:bg-green-50"
                       onClick={() => {
-                        const message = `Dear ${invoice.resident}, your invoice ${invoice.id} for ₹${invoice.amount.toLocaleString()} is ${invoice.status}. Due date: ${invoice.dueDate}.`
-                        window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank')
+                        const message = `Dear ${formatResident(invoice.resident)}, your invoice #${invoice.id} for ₹${invoice.amount.toLocaleString()} is ${invoice.status.toUpperCase()}. Due date: ${invoice.dueDate}. Please pay to avoid penalties.`
+                        const phone = invoice.phone || getResidentPhone(invoice.resident) || ''
+                        window.open(`https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`, '_blank')
                       }}
                     >
-                      <Send className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title="Download"
-                      onClick={() => alert(`Downloading invoice ${invoice.id} as PDF...`)}
-                    >
-                      <Download className="h-4 w-4" />
+                      <MessageSquare className="h-4 w-4" />
                     </Button>
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+            )))}
           </TableBody>
         </Table>
       </Card>
+      
+      {/* View Invoice Dialog */}
+      <Dialog open={!!viewInvoice} onOpenChange={() => setViewInvoice(null)}>
+        <DialogContent className="max-w-md">
+           {viewInvoice && (
+             <div className="space-y-4">
+               <DialogHeader>
+                 <DialogTitle>Invoice #{viewInvoice.id}</DialogTitle>
+                 <DialogDescription>Details for {formatUnit(viewInvoice.unit)}</DialogDescription>
+               </DialogHeader>
+               
+               <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                 <div className="flex justify-between">
+                    <span className="text-gray-500">Amount</span>
+                    <span className="font-bold text-lg">₹{viewInvoice.amount.toLocaleString()}</span>
+                 </div>
+                 <div className="flex justify-between">
+                    <span className="text-gray-500">Status</span>
+                    <Badge variant={viewInvoice.status === 'paid' ? 'default' : 'secondary'}>{viewInvoice.status}</Badge>
+                 </div>
+                 <div className="flex justify-between">
+                    <span className="text-gray-500">Issue Date</span>
+                    <span>{viewInvoice.issueDate ? format(new Date(viewInvoice.issueDate), 'dd MMM yyyy') : '-'}</span>
+                 </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Due Date</span>
+                    <span>{viewInvoice.dueDate ? format(new Date(viewInvoice.dueDate), 'dd MMM yyyy') : '-'}</span>
+                 </div>
+               </div>
+
+               <div className="space-y-2">
+                 <h4 className="font-medium">Resident Details</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="text-gray-500">Name:</div>
+                    <div>{formatResident(viewInvoice.resident)}</div>
+                    <div className="text-gray-500">Phone:</div>
+                    <div>{viewInvoice.phone || getResidentPhone(viewInvoice.resident) || 'N/A'}</div>
+                  </div>
+               </div>
+             </div>
+           )}
+        </DialogContent>
+      </Dialog>
     </div>
     </RoleGuard>
   )

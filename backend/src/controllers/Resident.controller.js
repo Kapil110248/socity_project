@@ -335,11 +335,38 @@ class ResidentController {
     // --- Helpdesk Methods ---
     static async getTickets(req, res) {
         try {
+            const { role, societyId, id: userId } = req.user;
+            const where = { societyId };
+
+            // Visibility Logic
+            if (role === 'RESIDENT') {
+                where.reportedById = userId;
+            } else if (role === 'ADMIN' || role === 'COMMITTEE') {
+                 // Admins/Committee see all public tickets, 
+                 // OR private tickets assigned to them, 
+                 // OR private tickets they reported
+                 where.OR = [
+                     { isPrivate: false },
+                     { assignedToId: userId },
+                     { reportedById: userId }
+                 ];
+            } else if (role === 'SUPER_ADMIN') {
+                 // Super Admins logic - matching ComplaintController defaults
+                 // showing public tickets 
+                 where.isPrivate = false;
+            }
+
             const tickets = await prisma.complaint.findMany({
-                where: { reportedById: req.user.id },
+                where,
                 orderBy: { createdAt: 'desc' },
                 include: {
-                    reportedBy: { select: { name: true } }
+                    reportedBy: { 
+                        select: { 
+                            name: true, 
+                            role: true,
+                            profileImg: true // Useful for UI avatar
+                        } 
+                    }
                 }
             });
             res.json(tickets);

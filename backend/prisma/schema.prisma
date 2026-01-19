@@ -119,6 +119,8 @@ model Society {
   guidelines   CommunityGuideline[]
   sosAlerts   SOSAlert[]
   invoices    Invoice[]
+  ledgerAccounts LedgerAccount[]
+  journalEntries JournalEntry[]
 }
 
 model User {
@@ -839,4 +841,55 @@ model ServiceInquiry {
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model LedgerAccount {
+  id          Int      @id @default(autoincrement())
+  code        String
+  name        String
+  type        String   // ASSET, LIABILITY, INCOME, EXPENSE
+  
+  societyId   Int
+  society     Society  @relation(fields: [societyId], references: [id])
+  
+  balance     Float    @default(0) // Opening or Cached Balance
+  isSystem    Boolean  @default(false) // Cash, Bank, etc.
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([societyId, code])
+  journalLines JournalLine[]
+}
+
+model JournalEntry {
+  id          Int      @id @default(autoincrement())
+  voucherNo   String
+  date        DateTime
+  narration   String?
+  status      String   @default("DRAFT") // DRAFT, POSTED, REJECTED
+  
+  societyId   Int
+  society     Society  @relation(fields: [societyId], references: [id])
+  
+  createdBy   String?  // Name or ID of user
+  
+  lines       JournalLine[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([societyId, voucherNo])
+}
+
+model JournalLine {
+  id             Int           @id @default(autoincrement())
+  journalEntryId Int
+  journalEntry   JournalEntry  @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  
+  accountId      Int
+  account        LedgerAccount @relation(fields: [accountId], references: [id])
+  
+  debit          Float         @default(0)
+  credit         Float         @default(0)
 }

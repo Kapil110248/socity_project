@@ -1,7 +1,10 @@
 'use client'
 
 import { useState, Fragment } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { LedgerService } from '@/services/ledger.service'
+import { toast } from 'sonner'
 import {
   BookOpen,
   Search,
@@ -14,11 +17,13 @@ import {
   DollarSign,
   Calendar,
   Plus,
+  Loader2,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Table,
   TableBody,
@@ -34,67 +39,80 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-
-const accountGroups = [
-  {
-    id: 1,
-    name: 'Assets',
-    type: 'Asset',
-    balance: 2500000,
-    trend: 'up',
-    accounts: [
-      { id: 11, name: 'Cash in Hand', code: '1001', balance: 150000, type: 'Debit' },
-      { id: 12, name: 'Bank - HDFC', code: '1002', balance: 1200000, type: 'Debit' },
-      { id: 13, name: 'Bank - ICICI', code: '1003', balance: 800000, type: 'Debit' },
-      { id: 14, name: 'Fixed Deposits', code: '1004', balance: 350000, type: 'Debit' },
-    ],
-  },
-  {
-    id: 2,
-    name: 'Liabilities',
-    type: 'Liability',
-    balance: 450000,
-    trend: 'down',
-    accounts: [
-      { id: 21, name: 'Security Deposits', code: '2001', balance: 300000, type: 'Credit' },
-      { id: 22, name: 'Advance from Residents', code: '2002', balance: 100000, type: 'Credit' },
-      { id: 23, name: 'Pending Bills', code: '2003', balance: 50000, type: 'Credit' },
-    ],
-  },
-  {
-    id: 3,
-    name: 'Income',
-    type: 'Income',
-    balance: 850000,
-    trend: 'up',
-    accounts: [
-      { id: 31, name: 'Maintenance Charges', code: '3001', balance: 600000, type: 'Credit' },
-      { id: 32, name: 'Parking Fees', code: '3002', balance: 120000, type: 'Credit' },
-      { id: 33, name: 'Amenity Booking', code: '3003', balance: 80000, type: 'Credit' },
-      { id: 34, name: 'Late Payment Fees', code: '3004', balance: 30000, type: 'Credit' },
-      { id: 35, name: 'Interest Income', code: '3005', balance: 20000, type: 'Credit' },
-    ],
-  },
-  {
-    id: 4,
-    name: 'Expenses',
-    type: 'Expense',
-    balance: 520000,
-    trend: 'up',
-    accounts: [
-      { id: 41, name: 'Security Expenses', code: '4001', balance: 180000, type: 'Debit' },
-      { id: 42, name: 'Housekeeping', code: '4002', balance: 120000, type: 'Debit' },
-      { id: 43, name: 'Electricity Common', code: '4003', balance: 80000, type: 'Debit' },
-      { id: 44, name: 'Repairs & Maintenance', code: '4004', balance: 75000, type: 'Debit' },
-      { id: 45, name: 'Garden Maintenance', code: '4005', balance: 35000, type: 'Debit' },
-      { id: 46, name: 'Administrative', code: '4006', balance: 30000, type: 'Debit' },
-    ],
-  },
-]
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export default function GeneralLedgerPage() {
-  const [expandedGroups, setExpandedGroups] = useState<number[]>([1])
+  const queryClient = useQueryClient()
+  const [expandedGroups, setExpandedGroups] = useState<number[]>([1, 2, 3, 4])
   const [searchQuery, setSearchQuery] = useState('')
+  const [isAddOpen, setIsAddOpen] = useState(false)
+  const [newAccount, setNewAccount] = useState({
+      name: '',
+      code: '',
+      type: 'ASSET'
+  })
+  // Missing Filters State
+  const [accountTypeFilter, setAccountTypeFilter] = useState('all')
+  const [periodFilter, setPeriodFilter] = useState('current')
+
+  const { data: accountGroups = [], isLoading } = useQuery({
+    queryKey: ['ledger-stats'],
+    queryFn: LedgerService.getStats
+  })
+
+  // ... (useMutation logic same as before)
+  const createMutation = useMutation({
+      mutationFn: LedgerService.createAccount,
+      onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['ledger-stats'] })
+          setIsAddOpen(false)
+          setNewAccount({ name: '', code: '', type: 'ASSET' })
+          toast.success('Account created successfully')
+      },
+      onError: (error: any) => {
+          toast.error(error.response?.data?.error || 'Failed to create account')
+      }
+  })
+
+  // Export Logic
+  const handleExport = () => {
+      // Flaten groups to accounts
+      const allAccounts = filteredGroups.flatMap(g => g.accounts.map(a => ({
+          ...a,
+          group: g.name
+      })))
+
+      if (!allAccounts.length) return toast.error("No data to export")
+
+      const headers = ['Group', 'Code', 'Account Name', 'Type', 'Balance']
+      const csvContent = [
+          headers.join(','),
+          ...allAccounts.map((a: any) => [
+              a.group,
+              a.code,
+              `"${a.name}"`,
+              a.type,
+              a.balance
+          ].join(','))
+      ].join('\n')
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', 'general_ledger_export.csv')
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+  }
 
   const toggleGroup = (groupId: number) => {
     setExpandedGroups(prev =>
@@ -111,33 +129,128 @@ export default function GeneralLedgerPage() {
       maximumFractionDigits: 0,
     }).format(amount)
   }
+  
+  const handleCreate = () => {
+    if(!newAccount.name || !newAccount.code) return toast.error("Please fill all fields")
+    createMutation.mutate(newAccount)
+  }
+
+  // Filter Logic Updated
+  const filteredGroups = accountGroups.map((group: any) => {
+     // Filter by Account Type Logic (Asset/Liability etc)
+     // Since backend returns predefined groups (1=Asset, 2=Liability, etc), we filter groups entirely or filtered accounts inside
+     
+     // Correct mapping:
+     // If accountTypeFilter is 'asset', only show Group 1 (Assets).
+     const typeMap: Record<string, string> = {
+         'asset': 'Asset',
+         'liability': 'Liability',
+         'income': 'Income',
+         'expense': 'Expense'
+     }
+
+     if (accountTypeFilter !== 'all' && typeMap[accountTypeFilter] !== group.type) {
+         return { ...group, accounts: [] } 
+     }
+
+     return {
+        ...group,
+        accounts: group.accounts.filter((acc: any) => 
+          (acc.name.toLowerCase().includes(searchQuery.toLowerCase()) || acc.code.includes(searchQuery))
+        )
+     }
+  }).filter((group: any) => group.accounts.length > 0)
+
+
+  if (isLoading) {
+      // ... (skeleton)
+      return (
+      <div className="p-6 space-y-6">
+        <Skeleton className="h-12 w-1/3" />
+        <div className="grid grid-cols-4 gap-4">
+           {[1,2,3,4].map(i => <Skeleton key={i} className="h-24 w-full" />)}
+        </div>
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2">
+           {/* ... Title ... */}
+           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2">
             <BookOpen className="h-8 w-8 text-blue-600" />
             General Ledger
           </h1>
           <p className="text-gray-600 mt-1">Chart of Accounts and Balances</p>
         </div>
         <div className="flex gap-2 mt-4 md:mt-0">
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" onClick={handleExport}>
             <Download className="h-4 w-4" />
             Export
           </Button>
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            New Account
-          </Button>
+          
+          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+              {/* ... Dialog implementation ... */}
+              <DialogTrigger asChild>
+                <Button className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    New Account
+                </Button>
+            </DialogTrigger>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Create New Ledger Account</DialogTitle>
+                    <DialogDescription>Add a new account head to your chart of accounts</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                        <Label>Account Name</Label>
+                        <Input 
+                            placeholder="e.g. Festival Fund" 
+                            value={newAccount.name}
+                            onChange={(e) => setNewAccount({...newAccount, name: e.target.value})}
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Account Code</Label>
+                        <Input 
+                            placeholder="e.g. 5001" 
+                            value={newAccount.code}
+                            onChange={(e) => setNewAccount({...newAccount, code: e.target.value})}
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Type</Label>
+                        <Select value={newAccount.type} onValueChange={(v) => setNewAccount({...newAccount, type: v})}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="ASSET">Asset</SelectItem>
+                                <SelectItem value="LIABILITY">Liability</SelectItem>
+                                <SelectItem value="INCOME">Income</SelectItem>
+                                <SelectItem value="EXPENSE">Expense</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-4">
+                        <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
+                        <Button onClick={handleCreate} disabled={createMutation.isPending}>
+                            {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Create Account'}
+                        </Button>
+                    </div>
+                </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        {accountGroups.map((group, index) => (
+        {/* ... Summary Cards Mapping ... */}
+         {accountGroups.map((group: any, index: number) => (
           <motion.div
             key={group.id}
             initial={{ opacity: 0, y: 20 }}
@@ -172,7 +285,7 @@ export default function GeneralLedgerPage() {
               className="pl-10"
             />
           </div>
-          <Select defaultValue="all">
+          <Select value={accountTypeFilter} onValueChange={setAccountTypeFilter}>
             <SelectTrigger className="w-full md:w-40">
               <SelectValue placeholder="Account Type" />
             </SelectTrigger>
@@ -184,7 +297,7 @@ export default function GeneralLedgerPage() {
               <SelectItem value="expense">Expenses</SelectItem>
             </SelectContent>
           </Select>
-          <Select defaultValue="current">
+          <Select value={periodFilter} onValueChange={setPeriodFilter}>
             <SelectTrigger className="w-full md:w-40">
               <SelectValue placeholder="Period" />
             </SelectTrigger>
@@ -212,9 +325,12 @@ export default function GeneralLedgerPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {accountGroups.map((group) => (
+            {filteredGroups.length === 0 ? (
+                 <TableRow><TableCell colSpan={7} className="text-center py-6 text-gray-500">No accounts match your filters</TableCell></TableRow>
+            ) : filteredGroups.map((group: any) => (
               <Fragment key={group.id}>
-                <TableRow
+                {/* ... Rows ... */}
+                 <TableRow
                   key={group.id}
                   className="bg-blue-50 cursor-pointer hover:bg-blue-100"
                   onClick={() => toggleGroup(group.id)}
@@ -239,7 +355,7 @@ export default function GeneralLedgerPage() {
                   </TableCell>
                   <TableCell className="text-right font-bold">{formatCurrency(group.balance)}</TableCell>
                 </TableRow>
-                {expandedGroups.includes(group.id) && group.accounts.map((account) => (
+                {expandedGroups.includes(group.id) && group.accounts.map((account: any) => (
                   <TableRow key={account.id} className="hover:bg-gray-50">
                     <TableCell></TableCell>
                     <TableCell className="text-gray-600">{account.code}</TableCell>
