@@ -362,17 +362,7 @@
 
 import ClientPage from '../ClientPage'
 
-/**
- * REQUIRED because you are using: output: "export"
- * Yahan aap apne real ticket IDs bhi daal sakte ho
- */
-export async function generateStaticParams() {
-  return [
-    { id: '101' },
-    { id: '102' },
-    { id: '103' },
-  ]
-}
+
 
 export default function Page() {
   return <ClientPage />

@@ -13,6 +13,7 @@ import {
   Send,
   Plus,
   Loader2,
+  FileText
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -62,6 +63,7 @@ export default function ServicesPage() {
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
   const [selectedCategory, setSelectedCategory] = useState<any | null>(null)
+  const [selectedRequest, setSelectedRequest] = useState<any | null>(null)
   const [isBookingOpen, setIsBookingOpen] = useState(false)
   const [isCallbackOpen, setIsCallbackOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('browse')
@@ -331,7 +333,7 @@ export default function ServicesPage() {
                               </div>
                             </div>
                             <div className="flex gap-2">
-                              <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">View Details</Button>
+                              <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => setSelectedRequest(request)}>View Details</Button>
                               <ArrowRight className="h-5 w-5 text-gray-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" />
                             </div>
                           </div>
@@ -401,6 +403,70 @@ export default function ServicesPage() {
                 disabled={createInquiryMutation.isPending}
               >
                 {createInquiryMutation.isPending ? 'Processing...' : 'Confirm Appointment'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Details Dialog */}
+        <Dialog open={!!selectedRequest} onOpenChange={(open) => !open && setSelectedRequest(null)}>
+          <DialogContent className="max-w-md p-0 overflow-hidden rounded-2xl border-0 shadow-2xl">
+            <DialogHeader className="p-8 bg-indigo-600 text-white">
+              <DialogTitle className="text-2xl font-bold flex items-center gap-3">
+                {selectedRequest?.type === 'BOOKING' ? <Calendar className="h-6 w-6" /> : <Phone className="h-6 w-6" />}
+                {selectedRequest?.serviceName}
+              </DialogTitle>
+              <DialogDescription className="text-indigo-100">
+                Request ID: #{selectedRequest?.id}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="p-8 space-y-6 bg-white">
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                 <span className="text-gray-500 font-medium">Status</span>
+                 <Badge className={`${statusColors[selectedRequest?.status?.toLowerCase()] || 'bg-gray-100'} px-3 py-1`}>
+                    {selectedRequest?.status}
+                 </Badge>
+              </div>
+
+              <div className="space-y-4">
+                 <div className="flex items-start gap-4">
+                    <Building2 className="h-5 w-5 text-gray-400 mt-0.5" />
+                    <div>
+                       <p className="text-sm text-gray-500 font-bold uppercase">Vendor</p>
+                       <p className="font-medium text-gray-900">{selectedRequest?.vendorName || 'Pending Assignment'}</p>
+                    </div>
+                 </div>
+
+                 <div className="flex items-start gap-4">
+                    <Calendar className="h-5 w-5 text-gray-400 mt-0.5" />
+                    <div>
+                       <p className="text-sm text-gray-500 font-bold uppercase">Preferred Date</p>
+                       <p className="font-medium text-gray-900">{selectedRequest?.preferredDate ? new Date(selectedRequest.preferredDate).toLocaleDateString() : 'N/A'}</p>
+                    </div>
+                 </div>
+
+                 <div className="flex items-start gap-4">
+                    <Clock className="h-5 w-5 text-gray-400 mt-0.5" />
+                    <div>
+                       <p className="text-sm text-gray-500 font-bold uppercase">Preferred Time</p>
+                       <p className="font-medium text-gray-900">{selectedRequest?.preferredTime || 'N/A'}</p>
+                    </div>
+                 </div>
+
+                 {selectedRequest?.notes && (
+                   <div className="flex items-start gap-4">
+                      <FileText className="h-5 w-5 text-gray-400 mt-0.5" />
+                      <div>
+                         <p className="text-sm text-gray-500 font-bold uppercase">Notes</p>
+                         <p className="text-gray-600 italic">"{selectedRequest.notes}"</p>
+                      </div>
+                   </div>
+                 )}
+              </div>
+            </div>
+            <DialogFooter className="p-8 pt-0 bg-white">
+              <Button className="w-full bg-gray-100 hover:bg-gray-200 text-gray-900 font-bold h-12 rounded-xl" onClick={() => setSelectedRequest(null)}>
+                Close
               </Button>
             </DialogFooter>
           </DialogContent>

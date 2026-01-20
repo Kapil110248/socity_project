@@ -143,11 +143,42 @@ export default function SOSPage() {
     const timestamp = new Date().toLocaleString()
     setAlertTimestamp(timestamp)
 
-    triggerSOSMutation.mutate({
-      type: selectedType || 'panic',
-      location: `Unit: ${user?.unit || 'Unknown'}`,
-      description: `Emergency Alert: ${selectedType || 'Panic'}`,
-    })
+    const baseLocation = `Unit: ${user?.unit || 'Unknown'}`;
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          // Create a clickable Google Maps link
+          const mapLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
+          const finalLocation = `${baseLocation} | GPS: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+          
+          triggerSOSMutation.mutate({
+            type: selectedType || 'panic',
+            location: finalLocation,
+            description: `Emergency Alert: ${selectedType || 'Panic'} (Map: ${mapLink})`,
+          })
+        },
+        (error) => {
+          console.error("Error getting location:", error);
+          // Fallback to just Unit if GPS fails/denied
+          toast.error("Could not fetch GPS location, sending Unit info only.");
+          triggerSOSMutation.mutate({
+            type: selectedType || 'panic',
+            location: baseLocation,
+            description: `Emergency Alert: ${selectedType || 'Panic'}`,
+          })
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      );
+    } else {
+      // Fallback for browsers without geolocation
+      triggerSOSMutation.mutate({
+        type: selectedType || 'panic',
+        location: baseLocation,
+        description: `Emergency Alert: ${selectedType || 'Panic'}`,
+      })
+    }
   }
 
   const handleAddContact = () => {

@@ -35,6 +35,10 @@ export const residentService = {
         const response = await api.put(`/resident/unit/pet/${id}`, data);
         return response.data;
     },
+    getMyPayments: async () => {
+        const response = await api.get('/resident/payments');
+        return response.data;
+    },
 
     // SOS
     getSOSData: async () => {
@@ -57,6 +61,10 @@ export const residentService = {
     },
     createTicket: async (data: any) => {
         const response = await api.post('/resident/tickets', data);
+        return response.data;
+    },
+    getTicketById: async (id: string) => {
+        const response = await api.get(`/resident/tickets/${id}`);
         return response.data;
     },
 
@@ -96,11 +104,34 @@ export const residentService = {
         return response.data;
     },
     createPost: async (data: any) => {
-        const response = await api.post('/resident/community/post', data);
+        const formData = new FormData();
+        formData.append('type', data.type);
+        formData.append('content', data.content);
+        formData.append('title', data.title || '');
+        if (data.image) {
+            formData.append('image', data.image);
+        }
+        const response = await api.post('/resident/community/post', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        });
         return response.data;
     },
     createComment: async (data: any) => {
         const response = await api.post('/resident/community/comment', data);
+        return response.data;
+    },
+    toggleLike: async (buzzId: number) => {
+        const response = await api.post('/resident/community/like', { buzzId });
+        return response.data;
+    },
+    updatePost: async (id: number, data: { title?: string; content: string; type: string }) => {
+        const response = await api.put(`/resident/community/post/${id}`, data);
+        return response.data;
+    },
+    deletePost: async (id: number) => {
+        const response = await api.delete(`/resident/community/post/${id}`);
         return response.data;
     },
 

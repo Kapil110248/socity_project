@@ -165,6 +165,8 @@ model User {
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  
+  buzzLikes   BuzzLike[]
 }
 
 model RoleModel {
@@ -355,6 +357,7 @@ model Invoice {
   maintenance Float
   utilities   Float
   penalty     Float    @default(0)
+  description String?
   
   dueDate     DateTime
   status      String   // PAID, PENDING, OVERDUE
@@ -566,6 +569,8 @@ model CommunityBuzz {
   comments    CommunityComment[]
   
   createdAt   DateTime @default(now())
+  
+  likedBy     BuzzLike[]
 }
 
 model CommunityComment {
@@ -578,6 +583,17 @@ model CommunityComment {
   createdAt   DateTime      @default(now())
 }
 
+model BuzzLike {
+  id        Int      @id @default(autoincrement())
+  buzzId    Int
+  buzz      CommunityBuzz @relation(fields: [buzzId], references: [id])
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([buzzId, userId])
+}
+
 model UnitMember {
   id        Int      @id @default(autoincrement())
   unitId    Int
@@ -587,6 +603,8 @@ model UnitMember {
   age       Int?
   gender    String?
   phone     String?
+  email     String?
+  profileImg String?
   createdAt DateTime @default(now())
 }
 
@@ -597,6 +615,8 @@ model UnitVehicle {
   name      String   // e.g. "BMW X5"
   number    String
   type      String   // 4-WHEELER, 2-WHEELER
+  color     String?
+  parkingSlot String?
   createdAt DateTime @default(now())
 }
 
@@ -814,6 +834,7 @@ model ServiceInquiry {
   notes         String?  @db.Text
   
   vendorName    String?
+  vendorId      Int?
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

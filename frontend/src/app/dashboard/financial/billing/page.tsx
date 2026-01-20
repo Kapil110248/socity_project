@@ -67,6 +67,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { BillingService } from '@/services/billing.service'
+import { UnitService } from '@/services/unit.service'
 import { toast } from 'sonner'
 
 const stats = [
@@ -246,13 +247,20 @@ export default function BillingPage() {
   const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false)
   const [showSuccess, setShowSuccess] = useState<string | null>(null)
 
-  // Form State for Generate Bills
-  const [genMonth, setGenMonth] = useState('jan-2025')
-  const [genDueDate, setGenDueDate] = useState('2025-01-15')
-  const [genBlock, setGenBlock] = useState('all')
-  const [genMaintenance, setGenMaintenance] = useState('12000')
-  const [genUtility, setGenUtility] = useState('3000')
+  // Form State for Single Invoice Creation
+  const [newInvoice, setNewInvoice] = useState({
+    unitId: '',
+    amount: '',
+    issueDate: new Date().toISOString().split('T')[0],
+    dueDate: new Date(new Date().setDate(new Date().getDate() + 15)).toISOString().split('T')[0],
+    description: ''
+  });
 
+  // Fetch units for dropdown
+  const { data: units = [] } = useQuery({
+    queryKey: ['units'],
+    queryFn: UnitService.getUnits
+  });
   const queryClient = useQueryClient();
 
   // Fetch billing stats
@@ -271,17 +279,25 @@ export default function BillingPage() {
     })
   });
 
-  // Generate bills mutation
-  const generateMutation = useMutation({
-    mutationFn: BillingService.generateInvoices,
+  // Create single invoice mutation
+  const createInvoiceMutation = useMutation({
+    mutationFn: BillingService.createInvoice,
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       queryClient.invalidateQueries({ queryKey: ['billing-stats'] });
       setIsGenerateDialogOpen(false);
-      showNotification(data.message || 'Bills generated successfully!');
+      // Reset form
+      setNewInvoice({
+        unitId: '',
+        amount: '',
+        issueDate: new Date().toISOString().split('T')[0],
+        dueDate: new Date(new Date().setDate(new Date().getDate() + 15)).toISOString().split('T')[0],
+        description: ''
+      });
+      showNotification('Invoice created successfully!');
     },
     onError: (error: any) => {
-      toast.error(error.message || 'Failed to generate bills');
+      toast.error(error.message || 'Failed to create invoice');
     }
   });
 
@@ -303,17 +319,54 @@ export default function BillingPage() {
     setTimeout(() => setShowSuccess(null), 3000)
   }
 
-  const handleGenerateBills = () => {
-    generateMutation.mutate({
-      month: genMonth,
-      dueDate: genDueDate,
-      block: genBlock !== 'all' ? genBlock : undefined,
-      maintenanceAmount: parseFloat(genMaintenance),
-      utilityAmount: parseFloat(genUtility)
+  const handleCreateInvoice = () => {
+    if (!newInvoice.unitId || !newInvoice.amount || !newInvoice.issueDate || !newInvoice.dueDate) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    createInvoiceMutation.mutate({
+      unitId: newInvoice.unitId,
+      amount: parseFloat(newInvoice.amount),
+      issueDate: newInvoice.issueDate,
+      dueDate: newInvoice.dueDate,
+      description: newInvoice.description
     });
   }
 
   const handleExport = () => {
+    if (!invoicesData || invoicesData.length === 0) {
+      toast.error('No invoices to export')
+      return
+    }
+
+    const headers = ['Invoice ID', 'Unit', 'Resident', 'Amount', 'Maintenance', 'Utilities', 'Penalty', 'Status', 'Due Date', 'Paid Date', 'Payment Mode']
+    const csvContent = [
+      headers.join(','),
+      ...invoicesData.map((inv: any) => [
+        inv.id,
+        `${inv.block}-${inv.unit}`,
+        `"${inv.resident}"`,
+        inv.amount,
+        inv.maintenance,
+        inv.utilities,
+        inv.penalty,
+        inv.status,
+        inv.dueDate,
+        inv.paidDate || '',
+        inv.paymentMode || ''
+      ].join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `invoices-${new Date().toISOString().split('T')[0]}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+
     showNotification('Data exported successfully!')
   }
 
@@ -392,184 +445,150 @@ export default function BillingPage() {
             <Dialog open={isGenerateDialogOpen} onOpenChange={setIsGenerateDialogOpen}>
               <DialogTrigger asChild>
                 <Button size="sm" className="bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg shadow-teal-500/25 text-xs sm:text-sm">
-                  <Sparkles className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Generate Bills</span>
-                  <span className="sm:hidden">Bills</span>
+                  <Plus className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Create Invoice</span>
+                  <span className="sm:hidden">Create</span>
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-lg">
                 <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-blue-500" />
-                    Generate Monthly Bills
-                  </DialogTitle>
+                  <DialogTitle>Create New Invoice</DialogTitle>
                   <DialogDescription>
-                    Auto-generate and send invoices to all or selected units
+                    Generate a new invoice for a unit
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label>Billing Month</Label>
-                    <Select value={genMonth} onValueChange={setGenMonth}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select month" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="jan-2025">January 2025</SelectItem>
-                        <SelectItem value="dec-2024">December 2024</SelectItem>
-                        <SelectItem value="nov-2024">November 2024</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Due Date</Label>
-                    <Input type="date" value={genDueDate} onChange={(e) => setGenDueDate(e.target.value)} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Maintenance Amount</Label>
-                    <Input type="number" value={genMaintenance} onChange={(e) => setGenMaintenance(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Utility Amount</Label>
-                    <Input type="number" value={genUtility} onChange={(e) => setGenUtility(e.target.value)} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Select Block</Label>
-                    <Select value={genBlock} onValueChange={setGenBlock}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select block" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Blocks</SelectItem>
-                        <SelectItem value="A">Block A</SelectItem>
-                        <SelectItem value="B">Block B</SelectItem>
-                        <SelectItem value="C">Block C</SelectItem>
-                        <SelectItem value="D">Block D</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Apply Late Fee (After Due Date)</Label>
-                  <div className="grid grid-cols-3 gap-4">
-                    <Input type="number" placeholder="Amount" defaultValue="500" />
-                    <Select defaultValue="fixed">
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="fixed">Fixed Amount</SelectItem>
-                        <SelectItem value="percent">Percentage</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select defaultValue="monthly">
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="once">One Time</SelectItem>
-                        <SelectItem value="monthly">Per Month</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2 pt-2">
-                  <Checkbox id="send-whatsapp" defaultChecked />
-                  <Label htmlFor="send-whatsapp" className="text-sm">
-                    Send invoice via WhatsApp
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox id="send-email" defaultChecked />
-                  <Label htmlFor="send-email" className="text-sm">
-                    Send invoice via Email
-                  </Label>
-                </div>
-                <div className="p-4 rounded-lg bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-100">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">Summary</p>
-                      <p className="text-xs text-gray-500 mt-1">Total per unit</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Unit Number</Label>
+                      <Select
+                        value={newInvoice.unitId}
+                        onValueChange={(val) => setNewInvoice({ ...newInvoice, unitId: val })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select Unit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {units && units.length > 0 ? (
+                            units.map((u: any) => (
+                              <SelectItem key={u.id} value={u.id.toString()}>{`${u.block}-${u.number}`}</SelectItem>
+                            ))
+                          ) : (
+                            <>
+                              <SelectItem value="1">A-101</SelectItem>
+                              <SelectItem value="2">A-102</SelectItem>
+                              <SelectItem value="3">B-101</SelectItem>
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-blue-600">₹{(parseFloat(genMaintenance) + parseFloat(genUtility)).toLocaleString()}</p>
-                      <p className="text-xs text-gray-500">Per Invoice</p>
+                    <div className="space-y-2">
+                      <Label>Amount (₹)</Label>
+                      <Input
+                        type="number"
+                        value={newInvoice.amount}
+                        onChange={(e) => setNewInvoice({ ...newInvoice, amount: e.target.value })}
+                        placeholder="0.00"
+                      />
                     </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Issue Date</Label>
+                      <Input
+                        type="date"
+                        value={newInvoice.issueDate}
+                        onChange={(e) => setNewInvoice({ ...newInvoice, issueDate: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Due Date</Label>
+                      <Input
+                        type="date"
+                        value={newInvoice.dueDate}
+                        onChange={(e) => setNewInvoice({ ...newInvoice, dueDate: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Description</Label>
+                    <Input
+                      value={newInvoice.description}
+                      onChange={(e) => setNewInvoice({ ...newInvoice, description: e.target.value })}
+                      placeholder="Enter description"
+                    />
                   </div>
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setIsGenerateDialogOpen(false)}>Cancel</Button>
-                  <Button variant="outline" onClick={() => showNotification('Preview generated!')}>Preview Bills</Button>
                   <Button
-                    className="bg-gradient-to-r from-teal-500 to-cyan-500 text-white"
-                    onClick={handleGenerateBills}
-                    disabled={generateMutation.isPending}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={handleCreateInvoice}
+                    disabled={createInvoiceMutation.isPending}
                   >
-                    {generateMutation.isPending ? <Clock className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
-                    Generate & Send
+                    {createInvoiceMutation.isPending ? 'Creating...' : 'Create Invoice'}
                   </Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-          </div>
-        </motion.div>
+          </div >
+        </motion.div >
 
         {/* Stats */}
-        <motion.div variants={containerVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {stats.map((stat, index) => {
-            const Icon = stat.icon
-            let value = stat.value;
-            let change = stat.change;
+        < motion.div variants={containerVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" >
+          {
+            stats.map((stat, index) => {
+              const Icon = stat.icon
+              let value = stat.value;
+              let change = stat.change;
 
-            // Use live data if available
-            if (!statsLoading && billingStats) {
-              if (stat.title === 'Total Billed') {
-                value = `₹${(billingStats.totalBilled || 0).toLocaleString()}`;
-              } else if (stat.title === 'Collected') {
-                value = `₹${(billingStats.collected || 0).toLocaleString()}`;
-                const rate = billingStats.totalBilled > 0
-                  ? ((billingStats.collected / billingStats.totalBilled) * 100).toFixed(0)
-                  : 0;
-                change = `${rate}% collection rate`;
-              } else if (stat.title === 'Pending') {
-                value = `₹${(billingStats.pending || 0).toLocaleString()}`;
-                change = `${billingStats.pendingCount || 0} invoices pending`;
-              } else if (stat.title === 'Overdue') {
-                value = `₹${(billingStats.overdue || 0).toLocaleString()}`;
-                change = `${billingStats.overdueCount || 0} invoices overdue`;
+              // Use live data if available
+              if (!statsLoading && billingStats) {
+                if (stat.title === 'Total Billed') {
+                  value = `₹${(billingStats.totalBilled || 0).toLocaleString()}`;
+                } else if (stat.title === 'Collected') {
+                  value = `₹${(billingStats.collected || 0).toLocaleString()}`;
+                  const rate = billingStats.totalBilled > 0
+                    ? ((billingStats.collected / billingStats.totalBilled) * 100).toFixed(0)
+                    : 0;
+                  change = `${rate}% collection rate`;
+                } else if (stat.title === 'Pending') {
+                  value = `₹${(billingStats.pending || 0).toLocaleString()}`;
+                  change = `${billingStats.pendingCount || 0} invoices pending`;
+                } else if (stat.title === 'Overdue') {
+                  value = `₹${(billingStats.overdue || 0).toLocaleString()}`;
+                  change = `${billingStats.overdueCount || 0} invoices overdue`;
+                }
               }
-            }
 
-            return (
-              <motion.div key={index} variants={itemVariants}>
-                <Card className="relative overflow-hidden border-0 shadow-md hover:shadow-xl transition-all duration-300 group">
-                  <div className={`absolute inset-0 bg-gradient-to-br ${stat.bgGradient} opacity-50`} />
-                  <CardContent className="p-5 relative">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-600 mb-1">{stat.title}</p>
-                        <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">
-                          {statsLoading ? '...' : value}
-                        </h3>
-                        <p className="text-xs text-gray-500">{statsLoading ? 'Loading...' : change}</p>
+              return (
+                <motion.div key={index} variants={itemVariants}>
+                  <Card className="relative overflow-hidden border-0 shadow-md hover:shadow-xl transition-all duration-300 group">
+                    <div className={`absolute inset-0 bg-gradient-to-br ${stat.bgGradient} opacity-50`} />
+                    <CardContent className="p-5 relative">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-600 mb-1">{stat.title}</p>
+                          <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">
+                            {statsLoading ? '...' : value}
+                          </h3>
+                          <p className="text-xs text-gray-500">{statsLoading ? 'Loading...' : change}</p>
+                        </div>
+                        <div className={`p-3 rounded-xl bg-gradient-to-br ${stat.gradient} shadow-lg group-hover:scale-110 transition-transform`}>
+                          <Icon className="h-5 w-5 text-white" />
+                        </div>
                       </div>
-                      <div className={`p-3 rounded-xl bg-gradient-to-br ${stat.gradient} shadow-lg group-hover:scale-110 transition-transform`}>
-                        <Icon className="h-5 w-5 text-white" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            )
-          })}
-        </motion.div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )
+            })
+          }
+        </motion.div >
 
         {/* Tabs */}
-        <motion.div variants={itemVariants}>
+        < motion.div variants={itemVariants} >
           <Tabs
             value={statusFilter === 'all' ? 'invoices' : statusFilter}
             onValueChange={(value) => setStatusFilter(value === 'invoices' ? 'all' : value)}
@@ -804,10 +823,11 @@ export default function BillingPage() {
               </Card>
             </div>
           </Tabs>
-        </motion.div>
+        </motion.div >
 
         {/* Invoice Detail Dialog */}
-        <Dialog open={!!viewInvoice} onOpenChange={() => setViewInvoice(null)}>
+        < Dialog open={!!viewInvoice
+        } onOpenChange={() => setViewInvoice(null)}>
           <DialogContent className="max-w-lg">
             {viewInvoice && (
               <>

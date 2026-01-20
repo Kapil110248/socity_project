@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const ResidentController = require('../controllers/Resident.controller');
 const { authenticate } = require('../middlewares/auth.middleware');
+const upload = require('../middlewares/upload.middleware');
 
 router.get('/dashboard', authenticate, ResidentController.getDashboardData);
 
@@ -13,6 +14,7 @@ router.post('/unit/vehicle', authenticate, ResidentController.addVehicle);
 router.put('/unit/vehicle/:id', authenticate, ResidentController.updateVehicle);
 router.post('/unit/pet', authenticate, ResidentController.addPet);
 router.put('/unit/pet/:id', authenticate, ResidentController.updatePet);
+router.get('/payments', authenticate, ResidentController.getPaymentHistory);
 
 // SOS
 router.get('/sos/data', authenticate, ResidentController.getSOSData);
@@ -21,6 +23,7 @@ router.post('/sos/contact', authenticate, ResidentController.addEmergencyContact
 
 // Helpdesk
 router.get('/tickets', authenticate, ResidentController.getTickets);
+router.get('/tickets/:id', authenticate, ResidentController.getTicket);
 router.post('/tickets', authenticate, ResidentController.createTicket);
 
 // Marketplace
@@ -37,8 +40,11 @@ router.post('/amenities/book', authenticate, ResidentController.bookAmenity);
 
 // Community
 router.get('/community/feed', authenticate, ResidentController.getCommunityFeed);
-router.post('/community/post', authenticate, ResidentController.createPost);
+router.post('/community/post', authenticate, upload.single('image'), ResidentController.createPost);
+router.put('/community/post/:id', authenticate, ResidentController.updatePost);
+router.delete('/community/post/:id', authenticate, ResidentController.deletePost);
 router.post('/community/comment', authenticate, ResidentController.createCommunityComment);
+router.post('/community/like', authenticate, ResidentController.toggleLike);
 
 // Guidelines
 router.get('/guidelines', authenticate, ResidentController.getGuidelines);

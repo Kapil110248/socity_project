@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
+import { residentService } from '@/services/resident.service'
 import {
   ArrowLeft,
   Send,
@@ -37,84 +39,34 @@ export default function ClientPage() {
   const { id } = useParams()
   const router = useRouter()
   const { user } = useAuthStore()
-
-  const [ticket, setTicket] = useState<SupportTicket | null>(null)
   const [newMessage, setNewMessage] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const foundTicket = mockTickets.find(t => t.id === id)
+  const { data: ticket, isLoading, error } = useQuery({
+    queryKey: ['ticket', id],
+    queryFn: () => residentService.getTicketById(id as string),
+    enabled: !!id
+  })
 
-    if (!foundTicket || !user) {
-      router.push('/dashboard/helpdesk/tickets')
-      return
-    }
-
-    const canView = () => {
-      if (user.role === 'resident' || user.role === 'committee') {
-        return foundTicket.residentId === user.id
-      }
-      if (user.role === 'admin') {
-        if (foundTicket.isPrivate) return foundTicket.handlerId === user.id
-        return true
-      }
-      if (user.role === 'super_admin') {
-        return !foundTicket.isPrivate
-      }
-      return false
-    }
-
-    if (!canView()) {
-      router.push('/dashboard/helpdesk/tickets')
-      return
-    }
-
-    setTicket(foundTicket)
-  }, [id, user, router])
-
+  // Scroll to bottom on load/new message
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [ticket?.messages])
+  }, [ticket]) // Ideally depends on messages length
+
+  // Handle Loading & Error states
+  if (isLoading) return <div className="p-8">Loading ticket...</div>
+  if (error || !ticket) return <div className="p-8 text-red-500">Error loading ticket or unauthorized.</div>
 
   const handleSendMessage = () => {
-    if (!newMessage.trim() || !ticket || !user) return
-
-    const message: TicketMessage = {
-      id: `msg-${Date.now()}`,
-      senderId: user.id,
-      senderName: user.name,
-      senderRole: user.role,
-      content: newMessage,
-      createdAt: new Date().toISOString(),
-    }
-
-    setTicket(prev =>
-      prev
-        ? {
-            ...prev,
-            messages: [...prev.messages, message],
-            updatedAt: new Date().toISOString(),
-          }
-        : null
-    )
-
+    // Placeholder for future implementation
+    console.log('Sending message:', newMessage)
     setNewMessage('')
   }
-
-  const handleStatusChange = (status: TicketStatus) => {
-    if (!ticket) return
-    setTicket({ ...ticket, status, updatedAt: new Date().toISOString() })
-  }
-
-  const handleEscalation = () => {
-    if (!ticket) return
-    setTicket({ ...ticket, escalatedToTech: true })
-  }
-
-  if (!ticket || !user) return null
-
+  
+  // Reuse existing status logic if needed or simplify
+  
   return (
     <div className="flex flex-col h-[calc(100vh-120px)]">
       {/* Header */}
@@ -132,55 +84,34 @@ export default function ClientPage() {
         </div>
       </div>
 
-      {/* Chat */}
+      {/* Main Content */}
+       <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-6">
+           <div className="flex items-start gap-4">
+                <Avatar className="h-10 w-10 ring-2 ring-white">
+                    <AvatarFallback className="bg-blue-100 text-blue-600 font-bold uppercase">
+                        {ticket.reportedBy?.name?.charAt(0) || 'U'}
+                    </AvatarFallback>
+                </Avatar>
+                <div>
+                     <p className="font-bold text-gray-900">{ticket.reportedBy?.name || 'User'}</p>
+                     <p className="text-xs text-gray-500">Created on {new Date(ticket.createdAt).toLocaleDateString()}</p>
+                     <p className="text-gray-700 mt-4 leading-relaxed">{ticket.description}</p>
+                </div>
+           </div>
+       </div>
+
+      {/* Chat Placeholder (Will need Messages API support later) */}
+      {/* 
       <Card className="flex-1 flex flex-col overflow-hidden">
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4">
-          {ticket.messages.map(msg => (
-            <div
-              key={msg.id}
-              className={cn(
-                'flex gap-3 max-w-[80%]',
-                msg.senderId === user.id && 'ml-auto flex-row-reverse'
-              )}
-            >
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="text-xs font-bold">
-                  {msg.senderName[0]}
-                </AvatarFallback>
-              </Avatar>
-
-              <div>
-                <div
-                  className={cn(
-                    'p-3 rounded-xl text-sm',
-                    msg.senderId === user.id
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100'
-                  )}
-                >
-                  {msg.content}
-                </div>
-                <p className="text-[10px] text-gray-400 mt-1">
-                  {msg.senderName}
-                </p>
-              </div>
-            </div>
-          ))}
+             // Messages map here
         </div>
-
-        {/* Input */}
         <div className="p-4 border-t flex gap-2">
-          <Input
-            value={newMessage}
-            onChange={e => setNewMessage(e.target.value)}
-            placeholder="Type message..."
-            onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-          />
-          <Button onClick={handleSendMessage}>
-            <Send className="h-4 w-4" />
-          </Button>
+          <Input ... />
+          <Button ... ><Send /></Button>
         </div>
       </Card>
+      */}
     </div>
   )
 }

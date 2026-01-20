@@ -23,6 +23,17 @@ export const BillingService = {
     return response.data;
   },
 
+  createInvoice: async (data: {
+    unitId: string;
+    amount: number;
+    issueDate: string;
+    dueDate: string;
+    description: string;
+  }) => {
+    const response = await api.post(API_CONFIG.BILLING.INVOICES, data);
+    return response.data;
+  },
+
   getStats: async () => {
     const response = await api.get(API_CONFIG.BILLING.STATS);
     return response.data;

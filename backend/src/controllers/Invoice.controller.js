@@ -89,6 +89,51 @@ class InvoiceController {
         }
     }
 
+    static async create(req, res) {
+        try {
+            const { unitId, amount, issueDate, dueDate, description } = req.body;
+            const societyId = req.user.societyId;
+
+            console.log('Creating single invoice:', { unitId, amount, issueDate, dueDate, societyId });
+
+            const unit = await prisma.unit.findFirst({
+                where: {
+                    id: parseInt(unitId),
+                    societyId
+                },
+                include: { owner: true, tenant: true }
+            });
+
+            if (!unit) {
+                console.error(`Unit not found for ID: ${unitId} in Society: ${societyId}`);
+                return res.status(404).json({ error: 'Unit not found' });
+            }
+
+            const invoiceNo = `INV-${Date.now().toString().slice(-6)}`;
+
+            const invoice = await prisma.invoice.create({
+                data: {
+                    invoiceNo,
+                    societyId,
+                    unitId: unit.id,
+                    residentId: unit.tenantId || unit.ownerId, // Fallback to owner if no tenant
+                    amount: parseFloat(amount),
+                    maintenance: parseFloat(amount), // Assuming generic amount is maintenance for now
+                    utilities: 0,
+                    dueDate: new Date(dueDate),
+                    status: 'PENDING',
+                    description: description || null
+                }
+            });
+
+
+            res.status(201).json(invoice);
+        } catch (error) {
+            console.error('Create Invoice Error:', error);
+            res.status(500).json({ error: error.message });
+        }
+    }
+
     static async generateBills(req, res) {
         try {
             const { month, dueDate, block, maintenanceAmount, utilityAmount, lateFee } = req.body;
