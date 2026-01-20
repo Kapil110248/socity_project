@@ -3,7 +3,7 @@ import { useAuthStore } from './stores/auth-store';
 import { API_CONFIG } from '../config/api.config';
 
 const api = axios.create({
-  baseURL: API_CONFIG.BASE_URL,
+  baseURL: 'http://localhost:9000/api', // Hardcoded for debugging
   headers: {
     'Content-Type': 'application/json',
   },

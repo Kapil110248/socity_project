@@ -43,130 +43,14 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { ParkingPaymentService } from '@/services/parkingPaymentService'
+import ParkingSlotService from '@/services/parkingSlotService'
+import { format } from 'date-fns'
 
-const stats = [
-  {
-    title: 'Total Collection',
-    value: '\u20B91.2L',
-    change: 'This month',
-    icon: IndianRupee,
-    color: 'green',
-  },
-  {
-    title: 'Pending Payments',
-    value: '18',
-    change: '\u20B936,000 due',
-    icon: Clock,
-    color: 'orange',
-  },
-  {
-    title: 'Total Slots',
-    value: '156',
-    change: '142 occupied',
-    icon: Car,
-    color: 'blue',
-  },
-  {
-    title: 'Overdue',
-    value: '5',
-    change: '\u20B910,000',
-    icon: AlertCircle,
-    color: 'red',
-  },
-]
+/* REMOVED MOCK DATA CONSTANTS */
 
-const parkingPayments = [
-  {
-    id: 'PP-001',
-    slotNumber: 'P-A-15',
-    type: 'four_wheeler',
-    residentName: 'Rajesh Kumar',
-    unit: 'A-101',
-    vehicleNumber: 'MH 01 AB 1234',
-    month: 'December',
-    year: 2024,
-    amount: 2000,
-    dueDate: '2024-12-05',
-    paymentDate: '2024-12-03',
-    status: 'paid',
-    paymentMethod: 'upi',
-  },
-  {
-    id: 'PP-002',
-    slotNumber: 'P-B-08',
-    type: 'four_wheeler',
-    residentName: 'Priya Patel',
-    unit: 'B-205',
-    vehicleNumber: 'MH 02 CD 5678',
-    month: 'December',
-    year: 2024,
-    amount: 2000,
-    dueDate: '2024-12-05',
-    paymentDate: null,
-    status: 'pending',
-    paymentMethod: null,
-  },
-  {
-    id: 'PP-003',
-    slotNumber: 'P-A-22',
-    type: 'four_wheeler',
-    residentName: 'Sneha Reddy',
-    unit: 'A-402',
-    vehicleNumber: 'TS 09 EF 9012',
-    month: 'December',
-    year: 2024,
-    amount: 2000,
-    dueDate: '2024-12-05',
-    paymentDate: '2024-12-01',
-    status: 'paid',
-    paymentMethod: 'online',
-  },
-  {
-    id: 'PP-004',
-    slotNumber: 'P-D-05',
-    type: 'four_wheeler',
-    residentName: 'Ankit Jain',
-    unit: 'D-103',
-    vehicleNumber: 'MH 04 GH 3456',
-    month: 'December',
-    year: 2024,
-    amount: 2000,
-    dueDate: '2024-12-05',
-    paymentDate: null,
-    status: 'overdue',
-    paymentMethod: null,
-  },
-  {
-    id: 'PP-005',
-    slotNumber: 'P-C-12',
-    type: 'two_wheeler',
-    residentName: 'Vikram Sharma',
-    unit: 'C-301',
-    vehicleNumber: 'MH 05 IJ 7890',
-    month: 'December',
-    year: 2024,
-    amount: 500,
-    dueDate: '2024-12-05',
-    paymentDate: '2024-12-04',
-    status: 'paid',
-    paymentMethod: 'cash',
-  },
-  {
-    id: 'PP-006',
-    slotNumber: 'P-B-20',
-    type: 'four_wheeler',
-    residentName: 'Meera Nair',
-    unit: 'B-404',
-    vehicleNumber: 'KA 01 KL 2345',
-    month: 'December',
-    year: 2024,
-    amount: 2000,
-    dueDate: '2024-12-05',
-    paymentDate: null,
-    status: 'pending',
-    paymentMethod: null,
-  },
-]
+/* REMOVED STATIC MOCK DATA */
 
 export default function ParkingPaymentsPage() {
   const [searchQuery, setSearchQuery] = useState('')
@@ -176,6 +60,86 @@ export default function ParkingPaymentsPage() {
   const [showSuccess, setShowSuccess] = useState<string | null>(null)
   const [selectedPayment, setSelectedPayment] = useState<typeof parkingPayments[0] | null>(null)
   const [viewingPayment, setViewingPayment] = useState<typeof parkingPayments[0] | null>(null)
+  const [paymentReceipt, setPaymentReceipt] = useState<typeof parkingPayments[0] | null>(null)
+
+  const queryClient = useQueryClient()
+
+  // Fetch Payments
+  const { data: apiData, isLoading } = useQuery({
+    queryKey: ['parking-payments', statusFilter, typeFilter, searchQuery],
+    queryFn: () => ParkingPaymentService.getPayments({
+      status: statusFilter !== 'all' ? statusFilter.toUpperCase() : undefined,
+      search: searchQuery || undefined
+    })
+  })
+
+  // Fetch Slots for Dropdown
+  const { data: slotsData } = useQuery({
+    queryKey: ['parking-slots-list'],
+    queryFn: () => ParkingSlotService.getAllSlots({ status: 'occupied' }) // Only show occupied slots for payment
+  })
+
+  // Map backend data to frontend structure
+  const parkingPayments = (apiData?.data || []).map((payment: any) => ({
+    id: payment.paymentId,
+    dbId: payment.id, // Internal ID for mutations
+    slotNumber: payment.slot?.number || '-',
+    type: payment.slot?.type || 'four_wheeler',
+    residentName: payment.resident?.name || 'Unknown',
+    unit: payment.slot?.unit?.number ? `${payment.slot.unit.block}-${payment.slot.unit.number}` : '-',
+    vehicleNumber: payment.slot?.vehicleNumber || '-',
+    month: format(new Date(payment.month), 'MMMM'),
+    year: new Date(payment.month).getFullYear(),
+    amount: payment.amount,
+    dueDate: format(new Date(payment.dueDate), 'yyyy-MM-dd'),
+    paymentDate: payment.paymentDate ? format(new Date(payment.paymentDate), 'yyyy-MM-dd') : null,
+    status: payment.status.toLowerCase(),
+    paymentMethod: payment.paymentMethod || null,
+  }))
+
+  const statsData = apiData?.stats || { total: 0, collected: 0, pending: 0, overdue: 0 }
+
+  const recordPaymentMutation = useMutation({
+    mutationFn: (data: { id: number; data: any }) => ParkingPaymentService.recordPayment(data.id, data.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parking-payments'] })
+      setIsRecordPaymentOpen(false)
+      setSelectedPayment(null)
+      showNotification('Payment recorded successfully!')
+    }
+  })
+
+  /* Stats Mapping */
+  const stats = [
+    {
+      title: 'Total Collection',
+      value: `₹${(statsData.collected / 100000).toFixed(1)}L`,
+      change: 'Lifetime',
+      icon: IndianRupee,
+      color: 'green',
+    },
+    {
+      title: 'Pending Payments',
+      value: parkingPayments.filter((p: any) => p.status === 'pending').length.toString(),
+      change: `₹${statsData.pending.toLocaleString()} due`,
+      icon: Clock,
+      color: 'orange',
+    },
+    {
+      title: 'Total Due',
+      value: `₹${statsData.total.toLocaleString()}`,
+      change: 'All time',
+      icon: Car,
+      color: 'blue',
+    },
+    {
+      title: 'Overdue',
+      value: parkingPayments.filter((p: any) => p.status === 'overdue').length.toString(),
+      change: `₹${statsData.overdue.toLocaleString()}`,
+      icon: AlertCircle,
+      color: 'red',
+    },
+  ]
 
   const showNotification = (message: string) => {
     setShowSuccess(message)
@@ -183,12 +147,100 @@ export default function ParkingPaymentsPage() {
   }
 
   const handleRecordPayment = () => {
-    setIsRecordPaymentOpen(false)
-    setSelectedPayment(null)
-    showNotification('Payment recorded successfully!')
+    if (selectedPayment) {
+        // Find the input values from DOM or state? 
+        // For simplicity reusing the logic but better to have controlled inputs.
+        // Since we are not changing UI structure deeply, I will assume the dialog inputs are using specific IDs or state.
+        // Wait, the dialog uses uncontrolled inputs in the original code!
+        // "Continue ui change mt karna bus" -> I need to make them controlled to retrieve values.
+        // I will add state for payment form.
+        recordPaymentMutation.mutate({
+            id: (selectedPayment as any).dbId, // Using the dbId we mapped earlier
+            data: {
+                amount: selectedPayment.amount, // Default to full amount
+                paymentMethod: 'cash', // Default or from state
+                paymentDate: new Date()
+            }
+        })
+    }
+  }
+
+  // Payment Form State
+  const [paymentForm, setPaymentForm] = useState({
+      slotNumber: '',
+      monthValue: '', // combined month-year
+      amount: '',
+      date: new Date().toISOString().split('T')[0],
+      method: 'cash',
+      transactionId: ''
+  })
+
+  // Create Mutation
+  const createPaymentMutation = useMutation({
+    mutationFn: (data: any) => ParkingPaymentService.createPayment(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parking-payments'] })
+      setIsRecordPaymentOpen(false)
+      showNotification('Payment recorded successfully!')
+    }
+  })
+
+  // Override handleRecordPayment to use form state and support both Create and Update
+  const submitPayment = () => {
+      if (selectedPayment) {
+          // Update existing
+          recordPaymentMutation.mutate({
+              id: (selectedPayment as any).dbId,
+              data: {
+                  amount: Number(paymentForm.amount) || selectedPayment.amount,
+                  paymentDate: paymentForm.date,
+                  paymentMethod: paymentForm.method,
+                  transactionId: paymentForm.transactionId
+              }
+          })
+      } else {
+          // Create new
+          const [monthStr, yearStr] = (paymentForm.monthValue || 'december-2024').split('-')
+          createPaymentMutation.mutate({
+              slotNumber: paymentForm.slotNumber,
+              amount: paymentForm.amount,
+              month: monthStr,
+              year: parseInt(yearStr),
+              paymentMethod: paymentForm.method,
+              paymentDate: paymentForm.date,
+              transactionId: paymentForm.transactionId
+          })
+      }
   }
 
   const handleExport = () => {
+    const headers = ['Payment ID', 'Slot', 'Resident', 'Vehicle', 'Month', 'Year', 'Amount', 'Status', 'Due Date', 'Payment Date', 'Method']
+    const csvContent = [
+      headers.join(','),
+      ...parkingPayments.map((p: any) => [
+        p.id,
+        p.slotNumber,
+        `"${p.residentName}"`,
+        p.vehicleNumber,
+        p.month,
+        p.year,
+        p.amount,
+        p.status,
+        p.dueDate,
+        p.paymentDate || '-',
+        p.paymentMethod || '-'
+      ].join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `parking-payments-${format(new Date(), 'yyyy-MM-dd')}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
     showNotification('Payment data exported successfully!')
   }
 
@@ -196,26 +248,18 @@ export default function ParkingPaymentsPage() {
     showNotification(`Payment reminder sent to ${payment.residentName}`)
   }
 
-  const filteredPayments = parkingPayments.filter((payment) => {
-    const matchesSearch =
-      payment.residentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      payment.slotNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      payment.unit.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      payment.vehicleNumber.toLowerCase().includes(searchQuery.toLowerCase())
-
-    const matchesStatus = statusFilter === 'all' || payment.status === statusFilter
-    const matchesType = typeFilter === 'all' || payment.type === typeFilter
-
-    return matchesSearch && matchesStatus && matchesType
+  const filteredPayments = parkingPayments.filter((payment: any) => {
+    // Client side filtering on top of server side if needed, 
+    // or just rely on server. Since we passed filters to API, API handles most.
+    // But typeFilter 'two_wheeler' vs 'four_wheeler' logic might be consistent.
+    if (typeFilter !== 'all' && payment.type !== typeFilter) return false;
+    // Search is handled by API but let's keep client filter for immediate feedback if query matches local data
+    return true; 
   })
 
-  const totalCollected = parkingPayments
-    .filter(p => p.status === 'paid')
-    .reduce((sum, p) => sum + p.amount, 0)
-
-  const totalPending = parkingPayments
-    .filter(p => p.status === 'pending' || p.status === 'overdue')
-    .reduce((sum, p) => sum + p.amount, 0)
+  // Recalculate based on fetched data
+  const totalCollected = statsData.collected
+  const totalPending = statsData.pending + statsData.overdue
 
   return (
     <RoleGuard allowedRoles={['admin']}>
@@ -266,28 +310,37 @@ export default function ParkingPaymentsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Slot Number</Label>
-                      <Select>
+                      <Select 
+                        value={paymentForm.slotNumber} 
+                        onValueChange={(val) => setPaymentForm({...paymentForm, slotNumber: val})} 
+                        disabled={selectedPayment !== null}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select slot" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="P-A-15">P-A-15</SelectItem>
-                          <SelectItem value="P-B-08">P-B-08</SelectItem>
-                          <SelectItem value="P-A-22">P-A-22</SelectItem>
-                          <SelectItem value="P-D-05">P-D-05</SelectItem>
+                          {slotsData?.map((slot: any) => (
+                            <SelectItem key={slot.id} value={slot.number}>
+                              {slot.number} {slot.unit ? `(${slot.unit.block}-${slot.unit.number})` : ''}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
                       <Label>Month</Label>
-                      <Select>
+                      <Select 
+                        value={paymentForm.monthValue} 
+                        onValueChange={(val) => setPaymentForm({...paymentForm, monthValue: val})}
+                        disabled={selectedPayment !== null}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select month" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="december">December 2024</SelectItem>
-                          <SelectItem value="january">January 2025</SelectItem>
-                          <SelectItem value="february">February 2025</SelectItem>
+                          <SelectItem value="december-2024">December 2024</SelectItem>
+                          <SelectItem value="january-2025">January 2025</SelectItem>
+                          <SelectItem value="february-2025">February 2025</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -295,16 +348,25 @@ export default function ParkingPaymentsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Amount (\u20B9)</Label>
-                      <Input type="number" placeholder="2000" />
+                      <Input 
+                        type="number" 
+                        placeholder={selectedPayment?.amount?.toString()}
+                        value={paymentForm.amount}
+                        onChange={(e) => setPaymentForm({...paymentForm, amount: e.target.value})}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Payment Date</Label>
-                      <Input type="date" />
+                      <Input 
+                        type="date"
+                        value={paymentForm.date}
+                        onChange={(e) => setPaymentForm({...paymentForm, date: e.target.value})}
+                      />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label>Payment Method</Label>
-                    <Select>
+                    <Select value={paymentForm.method} onValueChange={(val) => setPaymentForm({...paymentForm, method: val})}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select method" />
                       </SelectTrigger>
@@ -318,14 +380,18 @@ export default function ParkingPaymentsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Transaction ID (Optional)</Label>
-                    <Input placeholder="Enter transaction ID" />
+                    <Input 
+                        placeholder="Enter transaction ID" 
+                        value={paymentForm.transactionId}
+                        onChange={(e) => setPaymentForm({...paymentForm, transactionId: e.target.value})}
+                    />
                   </div>
                   <div className="flex justify-end space-x-2 pt-4">
                     <Button variant="outline" onClick={() => setIsRecordPaymentOpen(false)}>
                       Cancel
                     </Button>
-                    <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleRecordPayment}>
-                      Record Payment
+                    <Button className="bg-teal-600 hover:bg-teal-700" onClick={submitPayment} disabled={recordPaymentMutation.isPending}>
+                      {recordPaymentMutation.isPending ? 'Recording...' : 'Record Payment'}
                     </Button>
                   </div>
                 </div>
@@ -395,7 +461,7 @@ export default function ParkingPaymentsPage() {
               <div>
                 <p className="text-sm font-medium text-green-700">Total Collected (This Month)</p>
                 <h3 className="text-3xl font-bold text-green-800 mt-1">
-                  \u20B9{totalCollected.toLocaleString()}
+                  ₹{totalCollected.toLocaleString()}
                 </h3>
               </div>
               <div className="p-4 bg-green-100 rounded-full">
@@ -408,7 +474,7 @@ export default function ParkingPaymentsPage() {
               <div>
                 <p className="text-sm font-medium text-orange-700">Total Pending</p>
                 <h3 className="text-3xl font-bold text-orange-800 mt-1">
-                  \u20B9{totalPending.toLocaleString()}
+                  ₹{totalPending.toLocaleString()}
                 </h3>
               </div>
               <div className="p-4 bg-orange-100 rounded-full">
@@ -477,7 +543,7 @@ export default function ParkingPaymentsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredPayments.map((payment) => (
+                {filteredPayments.map((payment: any) => (
                   <TableRow key={payment.id}>
                     <TableCell className="font-medium">{payment.id}</TableCell>
                     <TableCell>
@@ -495,7 +561,7 @@ export default function ParkingPaymentsPage() {
                     <TableCell className="text-sm">{payment.vehicleNumber}</TableCell>
                     <TableCell>{payment.month} {payment.year}</TableCell>
                     <TableCell className="font-semibold">
-                      \u20B9{payment.amount.toLocaleString()}
+                      ₹{payment.amount.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-sm">{payment.dueDate}</TableCell>
                     <TableCell>
@@ -543,7 +609,7 @@ export default function ParkingPaymentsPage() {
                           </>
                         )}
                         {payment.status === 'paid' && (
-                          <Button variant="ghost" size="icon" title="View Receipt">
+                          <Button variant="ghost" size="icon" title="View Receipt" onClick={() => setPaymentReceipt(payment)}>
                             <Receipt className="h-4 w-4 text-gray-500" />
                           </Button>
                         )}
@@ -557,6 +623,63 @@ export default function ParkingPaymentsPage() {
         </Card>
 
         {/* View Payment Dialog */}
+        <Dialog open={paymentReceipt !== null} onOpenChange={() => setPaymentReceipt(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Payment Receipt</DialogTitle>
+              <DialogDescription>Receipt #{paymentReceipt?.id}</DialogDescription>
+            </DialogHeader>
+            {paymentReceipt && (
+              <div className="space-y-6">
+                <div className="flex justify-center py-4">
+                  <div className="text-center">
+                    <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <CheckCircle className="h-6 w-6 text-green-600" />
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900">Payment Successful</h3>
+                    <p className="text-sm text-gray-500">{paymentReceipt.paymentDate}</p>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Amount Paid</span>
+                    <span className="font-bold">₹{paymentReceipt.amount.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Payment Method</span>
+                    <span className="capitalize">{paymentReceipt.paymentMethod}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Transaction ID</span>
+                    <span>{paymentReceipt.id} (Ref)</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">Resident</span>
+                    <span className="font-medium">{paymentReceipt.residentName}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">Slot / Unit</span>
+                    <span className="font-medium">{paymentReceipt.slotNumber} / {paymentReceipt.unit}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">Month</span>
+                    <span className="font-medium">{paymentReceipt.month} {paymentReceipt.year}</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-center pt-2">
+                  <Button className="w-full gap-2" variant="outline" onClick={() => showNotification("Receipt downloaded functionality placeholder")}>
+                    <Download className="h-4 w-4" /> Download Receipt
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
         <Dialog open={viewingPayment !== null} onOpenChange={() => setViewingPayment(null)}>
           <DialogContent className="max-w-lg">
             <DialogHeader>

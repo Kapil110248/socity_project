@@ -128,6 +128,9 @@ model Society {
 
   journalEntries JournalEntry[]
   unitVehicles UnitVehicle[]
+  parkingPayments ParkingPayment[]
+  staff       Staff[]
+  moveRequests MoveRequest[]
 }
 
 model User {
@@ -182,6 +185,7 @@ model User {
   reportedIncidents Incident[] @relation("ReportedIncidents")
   assignedIncidents Incident[] @relation("AssignedIncidents")
   patrolLogs        PatrolLog[] @relation("GuardPatrols")
+  parkingPayments   ParkingPayment[]
 }
 
 model RoleModel {
@@ -248,6 +252,7 @@ model Unit {
   vehicles    UnitVehicle[]
   petsList    UnitPet[]
   invoices    Invoice[]
+  moveRequests MoveRequest[]
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -259,8 +264,12 @@ model ParkingSlot {
   id          Int      @id @default(autoincrement())
   number      String
   type        String   // 4-Wheeler, 2-Wheeler
-  status      String   // ALLOCATED, VACANT, VISITOR
+  status      String   // ALLOCATED, VACANT, VISITOR, MAINTENANCE
   
+  block       String?
+  floor       String?
+  monthlyCharge Float  @default(0)
+
   societyId   Int
   society     Society  @relation(fields: [societyId], references: [id])
   
@@ -270,6 +279,37 @@ model ParkingSlot {
   vehicleNumber String?
   
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  payments    ParkingPayment[]
+}
+
+model ParkingPayment {
+  id          Int      @id @default(autoincrement())
+  paymentId   String   @unique // PP-{Year}-{Sequence}
+  
+  slotId      Int
+  slot        ParkingSlot @relation(fields: [slotId], references: [id])
+  
+  residentId  Int? // Snapshot of resident at time of generation
+  resident    User?    @relation(fields: [residentId], references: [id])
+  
+  amount      Float
+  month       DateTime // First day of the month
+  dueDate     DateTime
+  status      String   @default("PENDING") // PAID, PENDING, OVERDUE
+  
+  paymentDate DateTime?
+  paymentMethod String?
+  transactionId String?
+  
+  societyId   Int
+  society     Society  @relation(fields: [societyId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([slotId, month, societyId])
 }
 
 model Complaint {
@@ -1100,4 +1140,128 @@ model PatrolLog {
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model Staff {
+  id        Int      @id @default(autoincrement())
+  name      String
+  role      String   @default("GUARD") // GUARD, MAID, DRIVER
+  phone     String
+  password  String   // Hashed password for login
+  email     String?
+  
+  shift     String?  // Morning, Afternoon, Night
+  gate      String?  // Main Gate, Back Gate
+  
+  status    String   @default("OFF_DUTY") // ON_DUTY, OFF_DUTY, ON_LEAVE
+  attendanceStatus String? // PRESENT, ABSENT, LATE, UPCOMING, COMPLETED
+  checkInTime String? // Store as string "HH:MM AM/PM" or DateTime
+  
+  rating    Float    @default(0)
+  photo     String?
+  joiningDate DateTime @default(now())
+  
+  address   String?
+  emergencyContact String?
+  idProof   String?
+  idNumber  String?
+
+  societyId Int
+  society   Society  @relation(fields: [societyId], references: [id])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum MoveRequestType {
+  MOVE_IN
+  MOVE_OUT
+}
+
+enum MoveRequestStatus {
+  PENDING
+  APPROVED
+  SCHEDULED
+  COMPLETED
+  REJECTED
+}
+
+enum NOCStatus {
+  PENDING
+  OBTAINED
+  ISSUED
+}
+
+enum DepositStatus {
+  PAID
+  REFUND_PENDING
+  REFUNDED
+}
+
+model MoveRequest {
+  id              Int               @id @default(autoincrement())
+  type            MoveRequestType
+  unitId          Int?
+  unit            Unit?             @relation(fields: [unitId], references: [id])
+  residentName    String
+  phone           String
+  email           String?
+  scheduledDate   DateTime
+  timeSlot        String
+  status          MoveRequestStatus @default(PENDING)
+  vehicleType     String?
+  vehicleNumber   String?
+  nocStatus       NOCStatus         @default(PENDING)
+  depositStatus   DepositStatus?
+  depositAmount   Float?
+  checklistItems  Json?             // Array of {item: string, completed: boolean}
+  notes           String?           @db.Text
+  
+  societyId       Int
+  society         Society           @relation(fields: [societyId], references: [id])
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+model Amenity {
+  id              Int              @id @default(autoincrement())
+  name            String
+  description     String?
+  type            String?
+  capacity        Int?
+  chargesPerHour  Float?           @default(0)
+  availableDays   String?
+  timings         Json?
+  status          String           @default("AVAILABLE")
+  bookings        AmenityBooking[]
+  
+  societyId       Int
+  society         Society          @relation(fields: [societyId], references: [id])
+  
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([societyId])
+}
+
+model AmenityBooking {
+  id          Int      @id @default(autoincrement())
+  amenityId   Int
+  amenity     Amenity  @relation(fields: [amenityId], references: [id])
+  
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  
+  startTime   DateTime
+  endTime     DateTime
+  purpose     String?
+  amountPaid  Float    @default(0)
+  status      String   @default("PENDING")
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([amenityId])
+  @@index([userId])
 }

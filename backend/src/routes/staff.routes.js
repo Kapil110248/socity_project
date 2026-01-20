@@ -6,22 +6,16 @@ const { authenticate, authorize } = require('../middlewares/auth.middleware');
 router.use(authenticate);
 router.use(authorize(['ADMIN', 'SUPER_ADMIN']));
 
-// List all staff
-router.get('/', StaffController.getAll);
+// List all staff (supports query params: role, status, shift)
+router.get('/', StaffController.list);
 
-// List guards only
-router.get('/guards', StaffController.getGuards);
-
-// List maids only
-router.get('/maids', StaffController.getMaids);
-
-// Add staff member
+// Create new staff
 router.post('/', StaffController.create);
 
-// Update staff status
-router.patch('/:id/status', StaffController.updateStatus);
+// Update staff details (generic update)
+router.patch('/:id', StaffController.update);
 
-// Remove staff
-router.delete('/:id', StaffController.remove);
+// Delete staff
+router.delete('/:id', StaffController.delete);
 
 module.exports = router;

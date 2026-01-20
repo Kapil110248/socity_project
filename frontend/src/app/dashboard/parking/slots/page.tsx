@@ -3,10 +3,10 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { RoleGuard } from '@/components/auth/role-guard'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus,
   Search,
-  Filter,
   Download,
   Car,
   Bike,
@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   MapPin,
   User,
+  UserX,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -42,205 +43,239 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-
-const stats = [
-  {
-    title: 'Total Slots',
-    value: '156',
-    change: 'All parking slots',
-    icon: Car,
-    color: 'blue',
-  },
-  {
-    title: 'Occupied',
-    value: '142',
-    change: '91% occupancy',
-    icon: CheckCircle,
-    color: 'green',
-  },
-  {
-    title: 'Available',
-    value: '10',
-    change: 'Ready to assign',
-    icon: Clock,
-    color: 'orange',
-  },
-  {
-    title: 'Under Maintenance',
-    value: '4',
-    change: 'Temporarily blocked',
-    icon: AlertCircle,
-    color: 'red',
-  },
-]
-
-const parkingSlots = [
-  {
-    id: 'PS-001',
-    slotNumber: 'P-A-15',
-    type: 'four_wheeler',
-    block: 'Block A',
-    floor: 'Basement 1',
-    assignedTo: 'Rajesh Kumar',
-    assignedUnit: 'A-101',
-    vehicleNumber: 'MH 01 AB 1234',
-    monthlyCharge: 2000,
-    status: 'occupied',
-  },
-  {
-    id: 'PS-002',
-    slotNumber: 'P-B-08',
-    type: 'four_wheeler',
-    block: 'Block B',
-    floor: 'Basement 1',
-    assignedTo: 'Priya Patel',
-    assignedUnit: 'B-205',
-    vehicleNumber: 'MH 02 CD 5678',
-    monthlyCharge: 2000,
-    status: 'occupied',
-  },
-  {
-    id: 'PS-003',
-    slotNumber: 'P-A-22',
-    type: 'four_wheeler',
-    block: 'Block A',
-    floor: 'Basement 2',
-    assignedTo: 'Sneha Reddy',
-    assignedUnit: 'A-402',
-    vehicleNumber: 'TS 09 EF 9012',
-    monthlyCharge: 2000,
-    status: 'occupied',
-  },
-  {
-    id: 'PS-004',
-    slotNumber: 'P-D-05',
-    type: 'four_wheeler',
-    block: 'Block D',
-    floor: 'Basement 1',
-    assignedTo: 'Ankit Jain',
-    assignedUnit: 'D-103',
-    vehicleNumber: 'MH 04 GH 3456',
-    monthlyCharge: 2000,
-    status: 'occupied',
-  },
-  {
-    id: 'PS-005',
-    slotNumber: 'P-C-12',
-    type: 'two_wheeler',
-    block: 'Block C',
-    floor: 'Ground',
-    assignedTo: 'Vikram Sharma',
-    assignedUnit: 'C-301',
-    vehicleNumber: 'MH 05 IJ 7890',
-    monthlyCharge: 500,
-    status: 'occupied',
-  },
-  {
-    id: 'PS-006',
-    slotNumber: 'P-A-30',
-    type: 'four_wheeler',
-    block: 'Block A',
-    floor: 'Basement 2',
-    assignedTo: null,
-    assignedUnit: null,
-    vehicleNumber: null,
-    monthlyCharge: 2000,
-    status: 'available',
-  },
-  {
-    id: 'PS-007',
-    slotNumber: 'P-B-25',
-    type: 'four_wheeler',
-    block: 'Block B',
-    floor: 'Basement 2',
-    assignedTo: null,
-    assignedUnit: null,
-    vehicleNumber: null,
-    monthlyCharge: 2000,
-    status: 'available',
-  },
-  {
-    id: 'PS-008',
-    slotNumber: 'P-C-18',
-    type: 'two_wheeler',
-    block: 'Block C',
-    floor: 'Ground',
-    assignedTo: null,
-    assignedUnit: null,
-    vehicleNumber: null,
-    monthlyCharge: 500,
-    status: 'maintenance',
-  },
-]
+import ParkingSlotService, { ParkingSlot } from '@/services/parkingSlotService'
+import { UnitService } from '@/services/unit.service'
+import { toast } from 'sonner'
 
 export default function ParkingSlotsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
   const [blockFilter, setBlockFilter] = useState('all')
+  
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false)
-  const [showSuccess, setShowSuccess] = useState<string | null>(null)
-  const [selectedSlot, setSelectedSlot] = useState<typeof parkingSlots[0] | null>(null)
-  const [viewingSlot, setViewingSlot] = useState<typeof parkingSlots[0] | null>(null)
+  
+  const [selectedSlot, setSelectedSlot] = useState<ParkingSlot | null>(null)
+  const [viewingSlot, setViewingSlot] = useState<ParkingSlot | null>(null)
+  
+  const [newSlot, setNewSlot] = useState({
+    number: '',
+    type: 'four_wheeler',
+    block: 'Block A',
+    floor: 'Ground',
+    monthlyCharge: '',
+    status: 'available'
+  })
 
+  // Assignment states
+  const [selectedUnit, setSelectedUnit] = useState('')
+  const [assignVehicleNo, setAssignVehicleNo] = useState('')
+
+  const queryClient = useQueryClient()
+  
   const showNotification = (message: string) => {
-    setShowSuccess(message)
-    setTimeout(() => setShowSuccess(null), 3000)
+      toast.success(message)
   }
 
-  const handleAddSlot = () => {
-    setIsAddDialogOpen(false)
-    showNotification('Parking slot added successfully!')
+  // Fetch Slots
+  const { data: slots = [], isLoading } = useQuery({
+    queryKey: ['parking-slots', statusFilter, typeFilter, blockFilter, searchQuery],
+    queryFn: () => ParkingSlotService.getAllSlots({
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+      type: typeFilter !== 'all' ? typeFilter : undefined,
+      block: blockFilter !== 'all' ? blockFilter : undefined,
+      search: searchQuery || undefined
+    })
+  })
+
+  // Fetch Stats
+  const { data: statsData } = useQuery({
+    queryKey: ['parking-stats'],
+    queryFn: ParkingSlotService.getStats
+  })
+
+  // Fetch Units for assignment
+  const { data: units = [] } = useQuery({
+    queryKey: ['units'],
+    queryFn: async () => {
+        const res = await UnitService.getUnits();
+        return Array.isArray(res) ? res : (res.data || []);
+    },
+    enabled: isAssignDialogOpen
+  })
+
+
+  /* Edit State */
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editingSlot, setEditingSlot] = useState<ParkingSlot | null>(null)
+
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: ParkingSlotService.createSlot,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parking-slots'] })
+      queryClient.invalidateQueries({ queryKey: ['parking-stats'] })
+      setIsAddDialogOpen(false)
+      setNewSlot({ number: '', type: 'four_wheeler', block: 'Block A', floor: 'Ground', monthlyCharge: '', status: 'available' })
+    }
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: (data: { id: number, data: any }) => ParkingSlotService.updateSlot(data.id, data.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parking-slots'] })
+      queryClient.invalidateQueries({ queryKey: ['parking-stats'] })
+      setIsEditDialogOpen(false)
+      setEditingSlot(null)
+      setEditingSlot(null)
+      showNotification('Parking slot updated successfully!')
+    }
+  })
+
+  const assignMutation = useMutation({
+    mutationFn: (data: { id: number; unitId: number; vehicleNumber: string }) => 
+      ParkingSlotService.assignSlot(data.id, { unitId: data.unitId, vehicleNumber: data.vehicleNumber }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parking-slots'] })
+      queryClient.invalidateQueries({ queryKey: ['parking-stats'] })
+      setIsAssignDialogOpen(false)
+      setSelectedSlot(null)
+      setSelectedUnit('')
+      setAssignVehicleNo('')
+    }
+  })
+
+  const unassignMutation = useMutation({
+    mutationFn: ParkingSlotService.unassignSlot,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parking-slots'] })
+      queryClient.invalidateQueries({ queryKey: ['parking-stats'] })
+    }
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: ParkingSlotService.deleteSlot,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parking-slots'] })
+      queryClient.invalidateQueries({ queryKey: ['parking-stats'] })
+    }
+  })
+
+
+  const handleCreate = () => {
+    createMutation.mutate({
+      ...newSlot,
+      monthlyCharge: Number(newSlot.monthlyCharge)
+    })
   }
 
-  const handleAssignSlot = () => {
-    setIsAssignDialogOpen(false)
-    setSelectedSlot(null)
-    showNotification('Slot assigned successfully!')
-  }
-
-  const handleExport = () => {
-    showNotification('Parking data exported successfully!')
-  }
-
-  const handleUnassign = (slot: typeof parkingSlots[0]) => {
-    if (confirm(`Unassign slot ${slot.slotNumber} from ${slot.assignedTo}?`)) {
-      showNotification(`Slot ${slot.slotNumber} unassigned successfully!`)
+  const handleAssign = () => {
+    if (selectedSlot && selectedUnit && assignVehicleNo) {
+      assignMutation.mutate({
+        id: selectedSlot.id,
+        unitId: parseInt(selectedUnit),
+        vehicleNumber: assignVehicleNo
+      })
     }
   }
 
-  const filteredSlots = parkingSlots.filter((slot) => {
-    const matchesSearch =
-      slot.slotNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (slot.assignedTo?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
-      (slot.vehicleNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
+  const handleUnassign = (slot: ParkingSlot) => {
+    if (confirm(`Unassign slot ${slot.number}?`)) {
+      unassignMutation.mutate(slot.id)
+    }
+  }
 
-    const matchesStatus = statusFilter === 'all' || slot.status === statusFilter
-    const matchesType = typeFilter === 'all' || slot.type === typeFilter
-    const matchesBlock = blockFilter === 'all' || slot.block === blockFilter
+  const handleDelete = (id: number) => {
+      if (confirm('Are you sure you want to delete this slot?')) {
+          deleteMutation.mutate(id)
+      }
+  }
 
-    return matchesSearch && matchesStatus && matchesType && matchesBlock
-  })
+  const handleExport = () => {
+    if (!slots || slots.length === 0) {
+      showNotification('No data to export')
+      return
+    }
+
+    const headers = ['Slot Number', 'Type', 'Block', 'Floor', 'Status', 'Monthly Charge', 'Assigned To', 'Vehicle Number']
+    const csvContent = [
+      headers.join(','),
+      ...slots.map((slot: ParkingSlot) => [
+        slot.number,
+        slot.type,
+        slot.block || '-',
+        slot.floor || '-',
+        slot.status,
+        slot.monthlyCharge,
+        slot.unit ? (slot.unit.owner?.name || slot.unit.tenant?.name || 'Occupied') : 'Available',
+        slot.vehicleNumber || '-'
+      ].map(field => `"${field}"`).join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `parking_slots_${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    showNotification('Exported successfully')
+  }
+
+  const handleUpdate = () => {
+      if (editingSlot) {
+          updateMutation.mutate({
+              id: editingSlot.id,
+              data: {
+                  number: editingSlot.number,
+                  type: editingSlot.type,
+                  block: editingSlot.block,
+                  floor: editingSlot.floor,
+                  monthlyCharge: Number(editingSlot.monthlyCharge)
+              }
+          })
+      }
+  }
+
+
+  const stats = [
+    {
+      title: 'Total Slots',
+      value: statsData?.total || 0,
+      change: 'All parking slots',
+      icon: Car,
+      color: 'blue',
+    },
+    {
+      title: 'Occupied',
+      value: statsData?.occupied || 0,
+      change: `${statsData?.total ? Math.round((statsData.occupied / statsData.total) * 100) : 0}% occupancy`,
+      icon: CheckCircle,
+      color: 'green',
+    },
+    {
+      title: 'Available',
+      value: statsData?.available || 0,
+      change: 'Ready to assign',
+      icon: Clock,
+      color: 'orange',
+    },
+    {
+      title: 'Under Maintenance',
+      value: statsData?.maintenance || 0,
+      change: 'Temporarily blocked',
+      icon: AlertCircle,
+      color: 'red',
+    },
+  ]
 
   return (
     <RoleGuard allowedRoles={['admin', 'guard']}>
       <div className="space-y-6">
-        {/* Success Notification */}
-        <AnimatePresence>
-          {showSuccess && (
-            <motion.div
-              initial={{ opacity: 0, y: -50 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -50 }}
-              className="fixed top-4 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2"
-            >
-              <CheckCircle2 className="h-5 w-5" />
-              {showSuccess}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
+        
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -272,11 +307,18 @@ export default function ParkingSlotsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Slot Number *</Label>
-                      <Input placeholder="P-A-30" />
+                      <Input 
+                        placeholder="P-A-30" 
+                        value={newSlot.number}
+                        onChange={(e) => setNewSlot({...newSlot, number: e.target.value})}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Type *</Label>
-                      <Select>
+                      <Select 
+                        value={newSlot.type} 
+                        onValueChange={(val) => setNewSlot({...newSlot, type: val})}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select type" />
                         </SelectTrigger>
@@ -292,7 +334,10 @@ export default function ParkingSlotsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Block *</Label>
-                      <Select>
+                      <Select 
+                        value={newSlot.block} 
+                        onValueChange={(val) => setNewSlot({...newSlot, block: val})}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select block" />
                         </SelectTrigger>
@@ -306,7 +351,10 @@ export default function ParkingSlotsPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Floor *</Label>
-                      <Select>
+                      <Select 
+                        value={newSlot.floor} 
+                        onValueChange={(val) => setNewSlot({...newSlot, floor: val})}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select floor" />
                         </SelectTrigger>
@@ -320,14 +368,19 @@ export default function ParkingSlotsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Monthly Charge (\u20B9) *</Label>
-                    <Input type="number" placeholder="2000" />
+                    <Input 
+                        type="number" 
+                        placeholder="2000" 
+                        value={newSlot.monthlyCharge}
+                        onChange={(e) => setNewSlot({...newSlot, monthlyCharge: e.target.value})}
+                    />
                   </div>
                   <div className="flex justify-end space-x-2 pt-4">
                     <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                       Cancel
                     </Button>
-                    <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleAddSlot}>
-                      Add Slot
+                    <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleCreate} disabled={createMutation.isPending}>
+                      {createMutation.isPending ? 'Adding...' : 'Add Slot'}
                     </Button>
                   </div>
                 </div>
@@ -455,10 +508,19 @@ export default function ParkingSlotsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredSlots.map((slot) => (
+                {isLoading ? (
+                    <TableRow>
+                        <TableCell colSpan={9} className="text-center py-8">Loading slots...</TableCell>
+                    </TableRow>
+                ) : slots.length === 0 ? (
+                    <TableRow>
+                        <TableCell colSpan={9} className="text-center py-8">No parking slots found</TableCell>
+                    </TableRow>
+                ) : (
+                    slots.map((slot: ParkingSlot) => (
                   <TableRow key={slot.id}>
-                    <TableCell className="font-medium">{slot.id}</TableCell>
-                    <TableCell className="font-semibold">{slot.slotNumber}</TableCell>
+                    <TableCell className="font-medium">#{slot.id}</TableCell>
+                    <TableCell className="font-semibold">{slot.number}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         {slot.type === 'four_wheeler' ? (
@@ -472,14 +534,14 @@ export default function ParkingSlotsPage() {
                     <TableCell>
                       <div className="flex items-center gap-1 text-sm">
                         <MapPin className="h-3 w-3 text-gray-400" />
-                        <span>{slot.block}, {slot.floor}</span>
+                        <span>{slot.block || '-'}, {slot.floor || '-'}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      {slot.assignedTo ? (
+                      {slot.unit ? (
                         <div>
-                          <p className="font-medium">{slot.assignedTo}</p>
-                          <p className="text-xs text-gray-500">{slot.assignedUnit}</p>
+                          <p className="font-medium">{slot.unit.owner?.name || slot.unit.tenant?.name || 'Unknown'}</p>
+                          <p className="text-xs text-gray-500">{slot.unit.block}-{slot.unit.number}</p>
                         </div>
                       ) : (
                         <span className="text-gray-400">Not assigned</span>
@@ -489,7 +551,7 @@ export default function ParkingSlotsPage() {
                       {slot.vehicleNumber || '-'}
                     </TableCell>
                     <TableCell className="font-semibold">
-                      \u20B9{slot.monthlyCharge.toLocaleString()}
+                      \u20B9{(slot.monthlyCharge || 0).toLocaleString()}
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -532,16 +594,16 @@ export default function ParkingSlotsPage() {
                             title="Unassign"
                             onClick={() => handleUnassign(slot)}
                           >
-                            <Trash2 className="h-4 w-4 text-red-500" />
+                            <UserX className="h-4 w-4 text-orange-500" />
                           </Button>
                         )}
-                        <Button variant="ghost" size="icon" title="Edit">
-                          <Edit className="h-4 w-4" />
+                        <Button variant="ghost" size="icon" title="Delete" onClick={() => handleDelete(slot.id)}>
+                             <Trash2 className="h-4 w-4 text-red-500" />
                         </Button>
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                )))}
               </TableBody>
             </Table>
           </div>
@@ -553,38 +615,39 @@ export default function ParkingSlotsPage() {
             <DialogHeader>
               <DialogTitle>Assign Parking Slot</DialogTitle>
               <DialogDescription>
-                Assign slot {selectedSlot?.slotNumber} to a resident
+                Assign slot {selectedSlot?.number} to a resident
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label>Select Resident *</Label>
-                <Select>
+                <Select value={selectedUnit} onValueChange={setSelectedUnit}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select resident" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="resident1">Rajesh Kumar (A-101)</SelectItem>
-                    <SelectItem value="resident2">Priya Patel (B-205)</SelectItem>
-                    <SelectItem value="resident3">Sneha Reddy (A-402)</SelectItem>
-                    <SelectItem value="resident4">Ankit Jain (D-103)</SelectItem>
+                    {units.map((unit: any) => (
+                        <SelectItem key={unit.id} value={unit.id.toString()}>
+                            {unit.owner?.name || unit.tenant?.name || `Unit ${unit.block}-${unit.number}`} ({unit.block}-{unit.number})
+                        </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Vehicle Number *</Label>
-                <Input placeholder="MH 01 AB 1234" />
-              </div>
-              <div className="space-y-2">
-                <Label>Start Date</Label>
-                <Input type="date" />
+                <Input 
+                    placeholder="MH 01 AB 1234" 
+                    value={assignVehicleNo}
+                    onChange={(e) => setAssignVehicleNo(e.target.value)}
+                />
               </div>
               <div className="flex justify-end space-x-2 pt-4">
                 <Button variant="outline" onClick={() => setIsAssignDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleAssignSlot}>
-                  Assign Slot
+                <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleAssign} disabled={assignMutation.isPending}>
+                  {assignMutation.isPending ? 'Assigning...' : 'Assign Slot'}
                 </Button>
               </div>
             </div>
@@ -603,11 +666,11 @@ export default function ParkingSlotsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-muted-foreground text-xs">Slot ID</Label>
-                    <p className="font-medium">{viewingSlot.id}</p>
+                    <p className="font-medium">#{viewingSlot.id}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground text-xs">Slot Number</Label>
-                    <p className="font-medium">{viewingSlot.slotNumber}</p>
+                    <p className="font-medium">{viewingSlot.number}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground text-xs">Type</Label>
@@ -621,29 +684,29 @@ export default function ParkingSlotsPage() {
                   </div>
                   <div>
                     <Label className="text-muted-foreground text-xs">Block</Label>
-                    <p className="font-medium">{viewingSlot.block}</p>
+                    <p className="font-medium">{viewingSlot.block || '-'}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground text-xs">Floor</Label>
-                    <p className="font-medium">{viewingSlot.floor}</p>
+                    <p className="font-medium">{viewingSlot.floor || '-'}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground text-xs">Monthly Charge</Label>
-                    <p className="font-medium text-green-600">\u20B9{viewingSlot.monthlyCharge.toLocaleString()}</p>
+                    <p className="font-medium text-green-600">\u20B9{(viewingSlot.monthlyCharge || 0).toLocaleString()}</p>
                   </div>
-                  {viewingSlot.assignedTo && (
+                  {viewingSlot.unit && (
                     <>
                       <div>
                         <Label className="text-muted-foreground text-xs">Assigned To</Label>
-                        <p className="font-medium">{viewingSlot.assignedTo}</p>
+                        <p className="font-medium">{viewingSlot.unit.owner?.name || viewingSlot.unit.tenant?.name || 'Unknown'}</p>
                       </div>
                       <div>
                         <Label className="text-muted-foreground text-xs">Unit</Label>
-                        <p className="font-medium">{viewingSlot.assignedUnit}</p>
+                        <p className="font-medium">{viewingSlot.unit.block}-{viewingSlot.unit.number}</p>
                       </div>
                       <div>
                         <Label className="text-muted-foreground text-xs">Vehicle Number</Label>
-                        <p className="font-medium">{viewingSlot.vehicleNumber}</p>
+                        <p className="font-medium">{viewingSlot.vehicleNumber || '-'}</p>
                       </div>
                     </>
                   )}
@@ -654,6 +717,101 @@ export default function ParkingSlotsPage() {
               </div>
             )}
           </DialogContent>
+        {/* Edit Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Edit Parking Slot</DialogTitle>
+              <DialogDescription>
+                Update parking slot details
+              </DialogDescription>
+            </DialogHeader>
+            {editingSlot && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Slot Number *</Label>
+                  <Input 
+                    placeholder="P-A-30" 
+                    value={editingSlot.number}
+                    onChange={(e) => setEditingSlot({...editingSlot, number: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Type *</Label>
+                  <Select 
+                    value={editingSlot.type} 
+                    onValueChange={(val) => setEditingSlot({...editingSlot, type: val})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="two_wheeler">Two Wheeler</SelectItem>
+                      <SelectItem value="four_wheeler">Four Wheeler</SelectItem>
+                      <SelectItem value="reserved">Reserved</SelectItem>
+                      <SelectItem value="visitor">Visitor</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Block *</Label>
+                  <Select 
+                    value={editingSlot.block} 
+                    onValueChange={(val) => setEditingSlot({...editingSlot, block: val})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select block" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Block A">Block A</SelectItem>
+                      <SelectItem value="Block B">Block B</SelectItem>
+                      <SelectItem value="Block C">Block C</SelectItem>
+                      <SelectItem value="Block D">Block D</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Floor *</Label>
+                  <Select 
+                    value={editingSlot.floor} 
+                    onValueChange={(val) => setEditingSlot({...editingSlot, floor: val})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select floor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Ground">Ground</SelectItem>
+                      <SelectItem value="Basement 1">Basement 1</SelectItem>
+                      <SelectItem value="Basement 2">Basement 2</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Monthly Charge (\u20B9) *</Label>
+                <Input 
+                    type="number" 
+                    placeholder="2000" 
+                    value={editingSlot.monthlyCharge}
+                    onChange={(e) => setEditingSlot({...editingSlot, monthlyCharge: parseFloat(e.target.value)})}
+                />
+              </div>
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleUpdate} disabled={updateMutation.isPending}>
+                  {updateMutation.isPending ? 'Updating...' : 'Update Slot'}
+                </Button>
+              </div>
+            </div>
+            )}
+          </DialogContent>
+        </Dialog>
+        
         </Dialog>
       </div>
     </RoleGuard>

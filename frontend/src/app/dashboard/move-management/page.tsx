@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { MoveRequestService } from '@/services/moveRequestService'
 import {
   Truck,
   Plus,
@@ -54,108 +56,87 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 
-const moveRequests = [
-  {
-    id: 'MR-2025-001',
-    type: 'move-in',
-    unit: 'A-501',
-    residentName: 'Rahul Sharma',
-    phone: '+91 98765 43210',
-    email: 'rahul.sharma@email.com',
-    scheduledDate: '2025-12-22',
-    timeSlot: '10:00 AM - 2:00 PM',
-    status: 'approved',
-    vehicleType: 'Truck',
-    vehicleNumber: 'MH 01 AB 1234',
-    nocStatus: 'obtained',
-    depositStatus: 'paid',
-    depositAmount: 5000,
-    checklistItems: [
-      { item: 'NOC from previous society', completed: true },
-      { item: 'ID proof verification', completed: true },
-      { item: 'Move-in deposit paid', completed: true },
-      { item: 'Parking slot allocated', completed: true },
-      { item: 'Key handover', completed: false },
-    ],
-    notes: 'Family of 4, 2 vehicles to be registered',
-  },
-  {
-    id: 'MR-2025-002',
-    type: 'move-out',
-    unit: 'B-203',
-    residentName: 'Priya Patel',
-    phone: '+91 98765 11111',
-    email: 'priya.patel@email.com',
-    scheduledDate: '2025-12-20',
-    timeSlot: '2:00 PM - 6:00 PM',
-    status: 'pending',
-    vehicleType: 'Mini Truck',
-    vehicleNumber: 'MH 02 CD 5678',
-    nocStatus: 'pending',
-    depositStatus: 'refund_pending',
-    depositAmount: 5000,
-    checklistItems: [
-      { item: 'No dues clearance', completed: true },
-      { item: 'Maintenance paid till date', completed: true },
-      { item: 'Key return', completed: false },
-      { item: 'Meter reading taken', completed: false },
-      { item: 'Deposit refund initiated', completed: false },
-    ],
-    notes: 'Relocating to Bangalore, requested NOC urgently',
-  },
-  {
-    id: 'MR-2025-003',
-    type: 'move-in',
-    unit: 'C-102',
-    residentName: 'Amit Singh',
-    phone: '+91 98765 22222',
-    email: 'amit.singh@email.com',
-    scheduledDate: '2025-12-25',
-    timeSlot: '8:00 AM - 12:00 PM',
-    status: 'scheduled',
-    vehicleType: 'Large Truck',
-    vehicleNumber: 'MH 04 EF 9012',
-    nocStatus: 'obtained',
-    depositStatus: 'paid',
-    depositAmount: 5000,
-    checklistItems: [
-      { item: 'NOC from previous society', completed: true },
-      { item: 'ID proof verification', completed: true },
-      { item: 'Move-in deposit paid', completed: true },
-      { item: 'Parking slot allocated', completed: false },
-      { item: 'Key handover', completed: false },
-    ],
-    notes: 'Has 3 vehicles - need to allocate parking',
-  },
-  {
-    id: 'MR-2025-004',
-    type: 'move-out',
-    unit: 'D-405',
-    residentName: 'Sneha Kapoor',
-    phone: '+91 98765 33333',
-    email: 'sneha.kapoor@email.com',
-    scheduledDate: '2025-12-18',
-    timeSlot: '10:00 AM - 2:00 PM',
-    status: 'completed',
-    vehicleType: 'Truck',
-    vehicleNumber: 'MH 03 GH 3456',
-    nocStatus: 'issued',
-    depositStatus: 'refunded',
-    depositAmount: 5000,
-    checklistItems: [
-      { item: 'No dues clearance', completed: true },
-      { item: 'Maintenance paid till date', completed: true },
-      { item: 'Key return', completed: true },
-      { item: 'Meter reading taken', completed: true },
-      { item: 'Deposit refund initiated', completed: true },
-    ],
-    notes: 'All formalities completed smoothly',
-  },
-]
+// Mock data removed
 
 export default function MoveManagementPage() {
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedRequest, setSelectedRequest] = useState<typeof moveRequests[0] | null>(null)
+  const [selectedRequest, setSelectedRequest] = useState<any>(null)
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [formData, setFormData] = useState({
+    type: 'move-in',
+    unitId: '',
+    residentName: '',
+    phone: '',
+    email: '',
+    scheduledDate: '',
+    timeSlot: '',
+    vehicleType: '',
+    vehicleNumber: '',
+    notes: ''
+  })
+  const queryClient = useQueryClient()
+
+  // Fetch move requests from backend
+  const { data: apiData, isLoading } = useQuery({
+    queryKey: ['move-requests'],
+    queryFn: () => MoveRequestService.getAll()
+  })
+
+  // Transform API data to match UI expectations if necessary
+  // The API returns data with fields that might need simple mapping (e.g. enums)
+  const moveRequests = (apiData?.data || []).map((req: any) => ({
+    ...req,
+    type: req.type.replace('_', '-').toLowerCase(), // MOVE_IN -> move-in
+    status: req.status.toLowerCase(), // PENDING -> pending
+    nocStatus: req.nocStatus?.toLowerCase() || 'pending',
+    depositStatus: req.depositStatus?.toLowerCase() || 'pending',
+    // Ensure numeric format for ID or keep valid string
+    // Assuming backend returns numeric ID, but UI might expect "MR-2025-XXX" format or we can just use the number
+    // Let's keep it simple for now
+  }))
+
+  const statsData = apiData?.stats || { total: 0, moveIns: 0, moveOuts: 0, pending: 0 }
+
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: (data: any) => MoveRequestService.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['move-requests'] })
+      setIsCreateDialogOpen(false)
+      setFormData({
+        type: 'move-in',
+        unitId: '',
+        residentName: '',
+        phone: '',
+        email: '',
+        scheduledDate: '',
+        timeSlot: '',
+        vehicleType: '',
+        vehicleNumber: '',
+        notes: ''
+      })
+    }
+  })
+
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => MoveRequestService.updateStatus(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['move-requests'] })
+      // Close dialog if open? logic depends on UI flow
+    }
+  })
+
+  const handleApprove = (id: number) => {
+    updateStatusMutation.mutate({ id, data: { status: 'APPROVED' } })
+  }
+
+  const handleReject = (id: number) => {
+    updateStatusMutation.mutate({ id, data: { status: 'REJECTED' } })
+  }
+
+  const handleIssueNOC = (id: number) => {
+    updateStatusMutation.mutate({ id, data: { nocStatus: 'ISSUED' } })
+  }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -187,10 +168,10 @@ export default function MoveManagementPage() {
   }
 
   const stats = [
-    { label: 'Total Requests', value: moveRequests.length, icon: Truck, color: 'bg-blue-500' },
-    { label: 'Move-ins', value: moveRequests.filter(m => m.type === 'move-in').length, icon: ArrowRight, color: 'bg-green-500' },
-    { label: 'Move-outs', value: moveRequests.filter(m => m.type === 'move-out').length, icon: ArrowLeft, color: 'bg-orange-500' },
-    { label: 'Pending Approval', value: moveRequests.filter(m => m.status === 'pending').length, icon: Clock, color: 'bg-yellow-500' },
+    { label: 'Total Requests', value: statsData.total, icon: Truck, color: 'bg-blue-500' },
+    { label: 'Move-ins', value: statsData.moveIns, icon: ArrowRight, color: 'bg-green-500' },
+    { label: 'Move-outs', value: statsData.moveOuts, icon: ArrowLeft, color: 'bg-orange-500' },
+    { label: 'Pending Approval', value: statsData.pending, icon: Clock, color: 'bg-yellow-500' },
   ]
 
   return (
@@ -209,10 +190,127 @@ export default function MoveManagementPage() {
             <Download className="h-4 w-4" />
             Export
           </Button>
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            New Request
-          </Button>
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                New Request
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Create New Move Request</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Type</label>
+                    <Select
+                      value={formData.type}
+                      onValueChange={(value) => setFormData({ ...formData, type: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="move-in">Move In</SelectItem>
+                        <SelectItem value="move-out">Move Out</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Unit</label>
+                    <Input
+                      placeholder="e.g. 101"
+                      value={formData.unitId}
+                      onChange={(e) => setFormData({ ...formData, unitId: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Resident Name</label>
+                  <Input
+                    value={formData.residentName}
+                    onChange={(e) => setFormData({ ...formData, residentName: e.target.value })}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Phone</label>
+                    <Input
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Email</label>
+                    <Input
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Date</label>
+                    <Input
+                      type="date"
+                      value={formData.scheduledDate}
+                      onChange={(e) => setFormData({ ...formData, scheduledDate: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Time Slot</label>
+                    <Select
+                      value={formData.timeSlot}
+                      onValueChange={(value) => setFormData({ ...formData, timeSlot: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select time" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Morning (9 AM - 12 PM)">Morning (9 AM - 12 PM)</SelectItem>
+                        <SelectItem value="Afternoon (12 PM - 4 PM)">Afternoon (12 PM - 4 PM)</SelectItem>
+                        <SelectItem value="Evening (4 PM - 8 PM)">Evening (4 PM - 8 PM)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Vehicle Type</label>
+                    <Input
+                      value={formData.vehicleType}
+                      onChange={(e) => setFormData({ ...formData, vehicleType: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Vehicle No.</label>
+                    <Input
+                      value={formData.vehicleNumber}
+                      onChange={(e) => setFormData({ ...formData, vehicleNumber: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Notes</label>
+                  <Input
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  />
+                </div>
+
+                <Button className="w-full" onClick={() => createMutation.mutate(formData)}>
+                  Create Request
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -404,7 +502,7 @@ export default function MoveManagementPage() {
                             <div>
                               <h4 className="font-semibold mb-2">Checklist</h4>
                               <div className="space-y-2">
-                                {request.checklistItems.map((item, idx) => (
+                                {(request.checklistItems || []).map((item, idx) => (
                                   <div key={idx} className="flex items-center gap-2 text-sm">
                                     {item.completed ? (
                                       <CheckCircle className="h-4 w-4 text-green-500" />
@@ -428,12 +526,12 @@ export default function MoveManagementPage() {
                             {/* Actions */}
                             {request.status === 'pending' && (
                               <div className="flex gap-2 pt-4">
-                                <Button className="flex-1">Approve</Button>
-                                <Button variant="destructive" className="flex-1">Reject</Button>
+                                <Button className="flex-1" onClick={() => handleApprove(request.id)}>Approve</Button>
+                                <Button variant="destructive" className="flex-1" onClick={() => handleReject(request.id)}>Reject</Button>
                               </div>
                             )}
                             {request.status === 'approved' && request.type === 'move-out' && request.nocStatus === 'pending' && (
-                              <Button className="w-full gap-2">
+                              <Button className="w-full gap-2" onClick={() => handleIssueNOC(request.id)}>
                                 <FileText className="h-4 w-4" /> Issue NOC
                               </Button>
                             )}

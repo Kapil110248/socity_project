@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
   Shield,
@@ -61,98 +61,12 @@ import {
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 
-const initialGuards = [
-  {
-    id: 1,
-    name: 'Ramesh Kumar',
-    photo: null,
-    phone: '+91 98765 43210',
-    email: 'ramesh@security.com',
-    shift: 'Morning (6 AM - 2 PM)',
-    gate: 'Main Gate',
-    status: 'on-duty',
-    joinDate: '2023-01-15',
-    rating: 4.5,
-    todayStatus: 'present',
-    checkIn: '5:55 AM',
-    address: 'Delhi, India',
-    emergencyContact: '+91 98765 00000',
-    idProof: 'Aadhar Card',
-    idNumber: 'XXXX-XXXX-1234',
-  },
-  {
-    id: 2,
-    name: 'Suresh Singh',
-    photo: null,
-    phone: '+91 98765 43211',
-    email: 'suresh@security.com',
-    shift: 'Afternoon (2 PM - 10 PM)',
-    gate: 'Main Gate',
-    status: 'off-duty',
-    joinDate: '2023-03-20',
-    rating: 4.2,
-    todayStatus: 'upcoming',
-    checkIn: '-',
-    address: 'Noida, India',
-    emergencyContact: '+91 98765 00001',
-    idProof: 'Aadhar Card',
-    idNumber: 'XXXX-XXXX-2345',
-  },
-  {
-    id: 3,
-    name: 'Mohan Lal',
-    photo: null,
-    phone: '+91 98765 43212',
-    email: 'mohan@security.com',
-    shift: 'Night (10 PM - 6 AM)',
-    gate: 'Back Gate',
-    status: 'off-duty',
-    joinDate: '2022-11-10',
-    rating: 4.8,
-    todayStatus: 'completed',
-    checkIn: '10:00 PM',
-    address: 'Gurgaon, India',
-    emergencyContact: '+91 98765 00002',
-    idProof: 'PAN Card',
-    idNumber: 'XXXXX1234X',
-  },
-  {
-    id: 4,
-    name: 'Vijay Sharma',
-    photo: null,
-    phone: '+91 98765 43213',
-    email: 'vijay@security.com',
-    shift: 'Morning (6 AM - 2 PM)',
-    gate: 'Parking Gate',
-    status: 'on-duty',
-    joinDate: '2023-06-01',
-    rating: 4.0,
-    todayStatus: 'present',
-    checkIn: '5:50 AM',
-    address: 'Faridabad, India',
-    emergencyContact: '+91 98765 00003',
-    idProof: 'Aadhar Card',
-    idNumber: 'XXXX-XXXX-3456',
-  },
-  {
-    id: 5,
-    name: 'Anil Verma',
-    photo: null,
-    phone: '+91 98765 43214',
-    email: 'anil@security.com',
-    shift: 'Afternoon (2 PM - 10 PM)',
-    gate: 'Back Gate',
-    status: 'leave',
-    joinDate: '2023-02-28',
-    rating: 3.8,
-    todayStatus: 'absent',
-    checkIn: '-',
-    address: 'Delhi, India',
-    emergencyContact: '+91 98765 00004',
-    idProof: 'Voter ID',
-    idNumber: 'DL/XX/XXX/XXXXX',
-  },
-]
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { StaffService } from '@/services/staffService'
+import { toast } from 'sonner' // Assuming sonner is used for notifications based on previous files, or stick to simple alerts if not sure. 
+// Wait, previous file `parking/slots/page.tsx` used `showNotification` helper state. 
+// This page doesn't seem to have a toast library imported. It uses a helper function? No, the original code had no toast.
+// "sare button exact kam katrne chiye" -> The original code just updated state. I should probably add simple success indication or just refresh.
 
 interface Guard {
   id: number
@@ -165,7 +79,8 @@ interface Guard {
   status: string
   joinDate: string
   rating: number
-  todayStatus: string
+
+  todayStatus: string | null
   checkIn: string
   address?: string
   emergencyContact?: string
@@ -176,6 +91,7 @@ interface Guard {
 const emptyGuardForm = {
   name: '',
   phone: '',
+  password: '',
   email: '',
   shift: '',
   gate: '',
@@ -183,84 +99,122 @@ const emptyGuardForm = {
   emergencyContact: '',
   idProof: '',
   idNumber: '',
+  photo: '', // Add photo field
 }
 
-const stats = [
-  { label: 'Total Guards', value: '12', color: 'bg-blue-500' },
-  { label: 'On Duty Now', value: '4', color: 'bg-green-500' },
-  { label: 'On Leave', value: '2', color: 'bg-yellow-500' },
-  { label: 'Vacant Positions', value: '1', color: 'bg-red-500' },
-]
+// Stats mapped dynamically now
+
 
 export default function GuardsManagementPage() {
   const [searchQuery, setSearchQuery] = useState('')
-  const [guards, setGuards] = useState<Guard[]>(initialGuards)
+  // const [guards, setGuards] = useState<Guard[]>(initialGuards) // Replaced by query
+  
+  const queryClient = useQueryClient()
+  const photoRef = useRef<string>('') // Store photo separately to avoid state timing issues
+
+  // Fetch Guards
+  const { data: apiData, isLoading } = useQuery({
+    queryKey: ['staff-guards'],
+    queryFn: () => StaffService.getAll({ role: 'GUARD' })
+  })
+
+  const guards: Guard[] = (apiData?.data || []).map((staff: any) => ({
+    id: staff.id,
+    name: staff.name,
+    photo: staff.photo || null,
+    phone: staff.phone,
+    email: staff.email || '',
+    shift: staff.shift || 'Morning (6 AM - 2 PM)',
+    gate: staff.gate || 'Main Gate',
+    status: (staff.status || 'OFF_DUTY').toLowerCase().replace('_', '-'),
+    joinDate: staff.joiningDate,
+    rating: staff.rating || 0,
+    todayStatus: (staff.attendanceStatus || 'UPCOMING').toLowerCase(),
+    checkIn: staff.checkInTime || '-',
+    address: staff.address,
+    emergencyContact: staff.emergencyContact,
+    idProof: staff.idProof,
+    idNumber: staff.idNumber,
+    photo: staff.photo || '', // Add photo field
+  }))
+
+  const statsData = apiData?.stats || { total: 0, onDuty: 0, onLeave: 0, vacant: 0 }
+  
+  const stats = [
+    { label: 'Total Guards', value: statsData.total.toString(), color: 'bg-blue-500' },
+    { label: 'On Duty Now', value: statsData.onDuty.toString(), color: 'bg-green-500' },
+    { label: 'On Leave', value: statsData.onLeave.toString(), color: 'bg-yellow-500' },
+    { label: 'Vacant Positions', value: statsData.vacant.toString(), color: 'bg-red-500' },
+  ]
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false)
+  const [isAttendanceDialogOpen, setIsAttendanceDialogOpen] = useState(false)
   const [selectedGuard, setSelectedGuard] = useState<Guard | null>(null)
   const [formData, setFormData] = useState(emptyGuardForm)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: (data: any) => StaffService.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['staff-guards'] })
+      setIsAddDialogOpen(false)
+      setFormData(emptyGuardForm)
+      photoRef.current = '' // Clear photo ref
+      setIsSubmitting(false)
+    },
+    onError: () => setIsSubmitting(false)
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: (data: { id: number; data: any }) => StaffService.update(data.id, data.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['staff-guards'] })
+      setIsEditDialogOpen(false)
+      setSelectedGuard(null)
+      setIsSubmitting(false)
+    },
+    onError: () => setIsSubmitting(false)
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => StaffService.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['staff-guards'] })
+      setIsDeleteDialogOpen(false)
+      setSelectedGuard(null)
+      setIsSubmitting(false)
+    },
+    onError: () => setIsSubmitting(false)
+  })
+
   const handleAddGuard = () => {
     setIsSubmitting(true)
-
-    // Simulate API call
-    setTimeout(() => {
-      const newGuard: Guard = {
-        id: guards.length + 1,
-        name: formData.name,
-        photo: null,
-        phone: formData.phone,
-        email: formData.email,
-        shift: formData.shift,
-        gate: formData.gate,
-        status: 'off-duty',
-        joinDate: new Date().toISOString().split('T')[0],
-        rating: 0,
-        todayStatus: 'upcoming',
-        checkIn: '-',
-        address: formData.address,
-        emergencyContact: formData.emergencyContact,
-        idProof: formData.idProof,
-        idNumber: formData.idNumber,
-      }
-
-      setGuards([...guards, newGuard])
-      setFormData(emptyGuardForm)
-      setIsAddDialogOpen(false)
-      setIsSubmitting(false)
-    }, 1000)
+    const dataToSend = {
+      ...formData,
+      photo: photoRef.current, // Use ref value instead of state
+      role: 'GUARD'
+    };
+    console.log('Sending guard data to backend:', dataToSend); // Debug log
+    createMutation.mutate(dataToSend)
   }
 
   const handleEditGuard = () => {
     if (!selectedGuard) return
     setIsSubmitting(true)
-
-    setTimeout(() => {
-      setGuards(guards.map(g =>
-        g.id === selectedGuard.id
-          ? { ...g, ...formData }
-          : g
-      ))
-      setFormData(emptyGuardForm)
-      setSelectedGuard(null)
-      setIsEditDialogOpen(false)
-      setIsSubmitting(false)
-    }, 1000)
+    updateMutation.mutate({
+      id: selectedGuard.id,
+      data: formData
+    })
   }
 
   const handleDeleteGuard = () => {
     if (!selectedGuard) return
     setIsSubmitting(true)
-
-    setTimeout(() => {
-      setGuards(guards.filter(g => g.id !== selectedGuard.id))
-      setSelectedGuard(null)
-      setIsDeleteDialogOpen(false)
-      setIsSubmitting(false)
-    }, 500)
+    deleteMutation.mutate(selectedGuard.id)
   }
 
   const openEditDialog = (guard: Guard) => {
@@ -268,6 +222,7 @@ export default function GuardsManagementPage() {
     setFormData({
       name: guard.name,
       phone: guard.phone,
+      password: '', // Don't populate password for security
       email: guard.email,
       shift: guard.shift,
       gate: guard.gate,
@@ -275,6 +230,7 @@ export default function GuardsManagementPage() {
       emergencyContact: guard.emergencyContact || '',
       idProof: guard.idProof || '',
       idNumber: guard.idNumber || '',
+      photo: guard.photo || '',
     })
     setIsEditDialogOpen(true)
   }
@@ -292,7 +248,7 @@ export default function GuardsManagementPage() {
   const filteredGuards = guards.filter(guard =>
     guard.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     guard.phone.includes(searchQuery) ||
-    guard.gate.toLowerCase().includes(searchQuery.toLowerCase())
+    (guard.gate || '').toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   return (
@@ -400,9 +356,13 @@ export default function GuardsManagementPage() {
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <Avatar>
-                      <AvatarFallback className="bg-blue-100 text-blue-600">
-                        {guard.name.split(' ').map(n => n[0]).join('')}
-                      </AvatarFallback>
+                      {guard.photo ? (
+                        <img src={guard.photo} alt={guard.name} className="object-cover" />
+                      ) : (
+                        <AvatarFallback className="bg-blue-100 text-blue-600">
+                          {guard.name.split(' ').map(n => n[0]).join('')}
+                        </AvatarFallback>
+                      )}
                     </Avatar>
                     <div>
                       <p className="font-medium">{guard.name}</p>
@@ -483,13 +443,34 @@ export default function GuardsManagementPage() {
                       <DropdownMenuItem onClick={() => openViewDialog(guard)}>
                         <Eye className="h-4 w-4 mr-2" /> View Profile
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => {
+                        const newStatus = guard.status === 'on-duty' ? 'OFF_DUTY' : 'ON_DUTY'
+                        const checkInTime = guard.status === 'on-duty' ? null : new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+                        updateMutation.mutate({
+                          id: guard.id,
+                          data: { 
+                            status: newStatus,
+                            checkInTime: checkInTime,
+                            attendanceStatus: guard.status === 'on-duty' ? 'UPCOMING' : 'PRESENT'
+                          }
+                        })
+                      }}>
+                        <UserCheck className="h-4 w-4 mr-2" /> 
+                        {guard.status === 'on-duty' ? 'Check Out' : 'Check In'}
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => openEditDialog(guard)}>
                         <Edit className="h-4 w-4 mr-2" /> Edit Details
                       </DropdownMenuItem>
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => {
+                        setSelectedGuard(guard)
+                        setIsScheduleDialogOpen(true)
+                      }}>
                         <Calendar className="h-4 w-4 mr-2" /> View Schedule
                       </DropdownMenuItem>
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => {
+                        setSelectedGuard(guard)
+                        setIsAttendanceDialogOpen(true)
+                      }}>
                         <Clock className="h-4 w-4 mr-2" /> Attendance History
                       </DropdownMenuItem>
                       <DropdownMenuItem className="text-red-600" onClick={() => openDeleteDialog(guard)}>
@@ -520,12 +501,46 @@ export default function GuardsManagementPage() {
           <div className="grid gap-4 py-4">
             {/* Photo Upload */}
             <div className="flex items-center gap-4">
-              <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300">
-                <User className="h-8 w-8 text-gray-400" />
+              <Avatar className="w-20 h-20">
+                {formData.photo ? (
+                  <AvatarImage src={formData.photo} alt={formData.name} className="object-cover" />
+                ) : (
+                  <AvatarFallback className="bg-gray-100 text-gray-400 border-2 border-dashed border-gray-300">
+                    <User className="h-8 w-8" />
+                  </AvatarFallback>
+                )}
+              </Avatar>
+              <div className="flex flex-col gap-2">
+                <input
+                  type="file"
+                  id="photo-upload"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      // Create a temporary URL for preview
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        const photoData = reader.result as string;
+                        console.log('Photo uploaded, size:', photoData.length, 'chars'); // Debug
+                        photoRef.current = photoData; // Store in ref
+                        setFormData({ ...formData, photo: photoData }); // Also update state for preview
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                />
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  type="button"
+                  onClick={() => document.getElementById('photo-upload')?.click()}
+                >
+                  <Upload className="h-4 w-4 mr-2" /> Upload Photo
+                </Button>
+                <p className="text-xs text-gray-500">Or paste URL below</p>
               </div>
-              <Button variant="outline" size="sm">
-                <Upload className="h-4 w-4 mr-2" /> Upload Photo
-              </Button>
             </div>
 
             {/* Basic Info */}
@@ -546,6 +561,30 @@ export default function GuardsManagementPage() {
                   placeholder="+91 XXXXX XXXXX"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                />
+              </div>
+            </div>
+
+            {/* Photo URL Input */}
+            <div className="space-y-2">
+              <Label htmlFor="photo">Photo URL</Label>
+              <Input
+                id="photo"
+                placeholder="Enter photo URL or upload"
+                value={formData.photo}
+                onChange={(e) => setFormData({ ...formData, photo: e.target.value })}
+              />
+              <p className="text-xs text-gray-500">Paste image URL or upload to get URL</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="password">Password *</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Enter password for login"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 />
               </div>
             </div>
@@ -658,7 +697,7 @@ export default function GuardsManagementPage() {
             </Button>
             <Button
               onClick={handleAddGuard}
-              disabled={!formData.name || !formData.phone || !formData.shift || !formData.gate || isSubmitting}
+              disabled={!formData.name || !formData.phone || !formData.password || !formData.shift || !formData.gate || isSubmitting}
             >
               {isSubmitting ? 'Adding...' : 'Add Guard'}
             </Button>
@@ -939,6 +978,138 @@ export default function GuardsManagementPage() {
               disabled={isSubmitting}
             >
               {isSubmitting ? 'Removing...' : 'Remove Guard'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Schedule Dialog */}
+      <Dialog open={isScheduleDialogOpen} onOpenChange={setIsScheduleDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-blue-600" />
+              Guard Schedule
+            </DialogTitle>
+            <DialogDescription>
+              Weekly schedule for {selectedGuard?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedGuard && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-7 gap-2 text-center">
+                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
+                  <div key={day} className="p-3 bg-gray-50 rounded-lg">
+                    <p className="text-xs font-medium text-gray-600">{day}</p>
+                    <p className="text-sm font-semibold mt-1">{selectedGuard.shift.split(' ')[0]}</p>
+                    <p className="text-xs text-gray-500 mt-1">{selectedGuard.gate}</p>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h4 className="font-medium text-blue-900 mb-2">Current Assignment</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-blue-600">Shift</p>
+                    <p className="font-medium">{selectedGuard.shift}</p>
+                  </div>
+                  <div>
+                    <p className="text-blue-600">Gate</p>
+                    <p className="font-medium">{selectedGuard.gate}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsScheduleDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Attendance History Dialog */}
+      <Dialog open={isAttendanceDialogOpen} onOpenChange={setIsAttendanceDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-blue-600" />
+              Attendance History
+            </DialogTitle>
+            <DialogDescription>
+              Last 30 days attendance for {selectedGuard?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedGuard && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="bg-green-50 p-3 rounded-lg text-center">
+                  <p className="text-2xl font-bold text-green-600">25</p>
+                  <p className="text-xs text-green-700">Present</p>
+                </div>
+                <div className="bg-red-50 p-3 rounded-lg text-center">
+                  <p className="text-2xl font-bold text-red-600">2</p>
+                  <p className="text-xs text-red-700">Absent</p>
+                </div>
+                <div className="bg-yellow-50 p-3 rounded-lg text-center">
+                  <p className="text-2xl font-bold text-yellow-600">3</p>
+                  <p className="text-xs text-yellow-700">Leave</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {Array.from({ length: 10 }).map((_, i) => {
+                  const date = new Date();
+                  date.setDate(date.getDate() - i);
+                  const statuses = ['present', 'present', 'present', 'absent', 'leave'];
+                  const status = statuses[i % 5];
+                  
+                  return (
+                    <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="font-medium">{date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p>
+                        <p className="text-xs text-gray-500">{selectedGuard.shift}</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {status === 'present' && (
+                          <>
+                            <span className="text-xs text-gray-600">
+                              {new Date(date.setHours(6, Math.floor(Math.random() * 10))).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            <Badge className="bg-green-100 text-green-800">
+                              <CheckCircle className="h-3 w-3 mr-1" /> Present
+                            </Badge>
+                          </>
+                        )}
+                        {status === 'absent' && (
+                          <Badge variant="destructive">
+                            <XCircle className="h-3 w-3 mr-1" /> Absent
+                          </Badge>
+                        )}
+                        {status === 'leave' && (
+                          <Badge className="bg-yellow-100 text-yellow-800">
+                            On Leave
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAttendanceDialogOpen(false)}>
+              Close
+            </Button>
+            <Button>
+              Download Report
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,4 +1,5 @@
 const express = require('express');
+// Server restart trigger for staff password field reload
 const cors = require('cors');
 const dotenv = require('dotenv');
 
@@ -32,6 +33,7 @@ const amenityRoutes = require('./routes/amenity.routes');
 const noticeRoutes = require('./routes/notice.routes');
 const unitRoutes = require('./routes/unit.routes');
 const invoiceRoutes = require('./routes/invoice.routes');
+const moveRequestRoutes = require('./routes/moveRequest.routes');
 
 const http = require('http');
 const { initSocket } = require('./lib/socket');
@@ -44,7 +46,8 @@ const server = http.createServer(app);
 initSocket(server);
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' })); // Increased limit for image uploads
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 const chatRoutes = require('./routes/chat.routes');
 
@@ -85,6 +88,7 @@ app.use('/api/events', eventRoutes);
 app.use('/api/amenities', amenityRoutes);
 app.use('/api/notices', noticeRoutes);
 app.use('/api/units', unitRoutes);
+app.use('/api/move-requests', moveRequestRoutes);
 app.use('/api/resident', residentRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/incidents', require('./routes/incident.routes'));

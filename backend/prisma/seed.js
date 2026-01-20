@@ -446,6 +446,75 @@ async function main() {
       skipDuplicates: true
   });
 
+  // Incidents
+  const guard = await prisma.user.findFirst({ where: { role: 'GUARD' } });
+  
+  if (guard && resident1) {
+      await prisma.incident.createMany({
+          data: [
+              {
+                  title: 'Unauthorized Entry Attempt',
+                  description: 'A person tried to enter the gate by tailgating a resident vehicle.',
+                  location: 'Gate 2',
+                  severity: 'high',
+                  status: 'resolved',
+                  societyId: society.id,
+                  reportedById: guard.id
+              },
+              {
+                  title: 'Water Leakage in Block B',
+                  description: 'Main pipe burst reported near basement parking.',
+                  location: 'Block B Basement',
+                  severity: 'medium',
+                  status: 'in-progress',
+                  societyId: society.id,
+                  reportedById: resident1.id
+              },
+              {
+                  title: 'Suspicious Package',
+                  description: 'Unclaimed bag found near the clubhouse main entrance.',
+                  location: 'Clubhouse',
+                  severity: 'critical',
+                  status: 'open',
+                  societyId: society.id,
+                  reportedById: guard.id
+              }
+          ],
+          skipDuplicates: true
+      });
+
+      // Patrol Logs
+      await prisma.patrolLog.createMany({
+          data: [
+              {
+                  area: 'Block A & B',
+                  notes: 'All clear. Checkpoints scanned.',
+                  status: 'completed',
+                  societyId: society.id,
+                  guardId: guard.id,
+                  startTime: new Date(new Date().setHours(11, 0, 0, 0))
+              },
+              {
+                  area: 'Society Perimeter',
+                  notes: 'South fence check complete. Minor foliage clearing required.',
+                  status: 'completed',
+                  societyId: society.id,
+                  guardId: guard.id,
+                  startTime: new Date(new Date().setHours(10, 0, 0, 0))
+              },
+              {
+                  area: 'Parking Area',
+                  notes: 'Vehicle KA-05-ZZ-1111 parked in wrong slot.',
+                  status: 'issue-found',
+                  societyId: society.id,
+                  guardId: guard.id,
+                  startTime: new Date(new Date().setHours(9, 0, 0, 0))
+              }
+          ],
+          skipDuplicates: true
+      });
+  }
+
   console.log('Seeding completed');
 }
 
