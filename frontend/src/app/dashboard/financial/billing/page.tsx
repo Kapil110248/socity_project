@@ -320,13 +320,24 @@ export default function BillingPage() {
   }
 
   const handleCreateInvoice = () => {
-    if (!newInvoice.unitId || !newInvoice.amount || !newInvoice.issueDate || !newInvoice.dueDate) {
-      toast.error('Please fill in all required fields');
+    console.log('Attempting to create invoice:', newInvoice);
+
+    const amount = parseFloat(newInvoice.amount);
+
+    if (!newInvoice.unitId || isNaN(amount) || amount <= 0 || !newInvoice.issueDate || !newInvoice.dueDate) {
+      console.warn('Validation failed:', {
+        unitId: !!newInvoice.unitId,
+        amount: !isNaN(amount) && amount > 0,
+        issueDate: !!newInvoice.issueDate,
+        dueDate: !!newInvoice.dueDate
+      });
+      toast.error('Please fill in all required fields with valid values');
       return;
     }
+
     createInvoiceMutation.mutate({
       unitId: newInvoice.unitId,
-      amount: parseFloat(newInvoice.amount),
+      amount,
       issueDate: newInvoice.issueDate,
       dueDate: newInvoice.dueDate,
       description: newInvoice.description

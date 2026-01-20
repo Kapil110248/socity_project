@@ -29,11 +29,17 @@ class InvoiceController {
             });
 
             res.json(invoices.map(inv => ({
-                id: inv.invoiceNo,
-                unit: inv.unit.number,
-                block: inv.unit.block,
-                resident: inv.resident?.name || 'Resident',
-                phone: inv.resident?.phone || 'N/A',
+                id: inv.id,
+                invoiceNo: inv.invoiceNo,
+                unit: {
+                    number: inv.unit.number,
+                    block: inv.unit.block,
+                    type: inv.unit.type
+                },
+                resident: inv.resident ? {
+                    name: inv.resident.name,
+                    phone: inv.resident.phone
+                } : null,
                 amount: inv.amount,
                 maintenance: inv.maintenance,
                 utilities: inv.utilities,
@@ -41,7 +47,8 @@ class InvoiceController {
                 dueDate: inv.dueDate.toISOString().split('T')[0],
                 status: inv.status.toLowerCase(),
                 paidDate: inv.paidDate ? inv.paidDate.toISOString().split('T')[0] : null,
-                paymentMode: inv.paymentMode
+                paymentMode: inv.paymentMode,
+                description: inv.description
             })));
         } catch (error) {
             console.error('List Invoices Error:', error);
@@ -109,7 +116,7 @@ class InvoiceController {
                 return res.status(404).json({ error: 'Unit not found' });
             }
 
-            const invoiceNo = `INV-${Date.now().toString().slice(-6)}`;
+            const invoiceNo = `INV-${Date.now().toString().slice(-8)}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
 
             const invoice = await prisma.invoice.create({
                 data: {
