@@ -5,12 +5,12 @@ class AmenityBookingController {
     try {
       const where = {};
       if (req.user.role !== 'SUPER_ADMIN') {
-         // If generic check needed, we'd need to join society through user or amenity, 
-         // but booking has no direct societyId. Usually linked via amenity.
-         // For now, returning all for simplicty or could filter by user's society via logic.
-         // Let's rely on amenity link if strict needed.
+        where.amenity = {
+          societyId: req.user.societyId
+        };
       }
       const bookings = await prisma.amenityBooking.findMany({
+        where,
         include: { amenity: true, user: true },
         orderBy: { startTime: 'desc' }
       });

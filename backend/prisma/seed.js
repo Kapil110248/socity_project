@@ -247,6 +247,205 @@ async function main() {
     });
   }
 
+  // Create Vehicles
+  await prisma.unitVehicle.createMany({
+    data: [
+      {
+        societyId: society.id,
+        unitId: (await prisma.unit.findFirst({ where: { societyId: society.id } })).id,
+        type: 'Car',
+        number: 'KA-01-AB-1234',
+        make: 'Honda City',
+        color: 'Silver',
+        ownerName: 'John Doe',
+        parkingSlot: 'P-A-101',
+        status: 'verified'
+      },
+      {
+        societyId: society.id,
+        unitId: (await prisma.unit.findFirst({ where: { societyId: society.id } })).id,
+        type: 'Two Wheeler',
+        number: 'KA-01-XY-9876',
+        make: 'Activa 6G',
+        color: 'White',
+        ownerName: 'John Doe',
+        parkingSlot: 'P-A-101-B',
+        status: 'verified'
+      }
+    ],
+    skipDuplicates: true
+  });
+
+  // Create Visitors
+  await prisma.visitor.createMany({
+    data: [
+      {
+        name: 'Michael Scott',
+        phone: '9988776655',
+        purpose: 'Delivery',
+        vehicleNo: 'KA-05-ZZ-1111',
+        status: 'CHECKED_OUT',
+        entryTime: new Date(new Date().setHours(10, 0, 0, 0)),
+        exitTime: new Date(new Date().setHours(10, 15, 0, 0)),
+        societyId: society.id,
+        visitingUnitId: (await prisma.unit.findFirst({ where: { societyId: society.id } })).id,
+        residentId: resident1.id
+      },
+      {
+        name: 'Dwight Schrute',
+        phone: '9988776644',
+        purpose: 'Guest',
+        status: 'CHECKED_IN',
+        entryTime: new Date(),
+        societyId: society.id,
+        visitingUnitId: (await prisma.unit.findFirst({ where: { societyId: society.id } })).id,
+        residentId: resident1.id
+      }
+    ],
+    skipDuplicates: true
+  });
+
+  // Create Complaints
+  await prisma.complaint.createMany({
+    data: [
+      {
+        title: 'Street Light Not Working',
+        description: 'The street light near Block A entrance is flickering.',
+        category: 'electrical',
+        priority: 'MEDIUM',
+        status: 'OPEN',
+        societyId: society.id,
+        reportedById: resident1.id
+      },
+      {
+        title: 'Water Leakage in Basement',
+        description: 'Heavy leakage observed near pillar B4.',
+        category: 'plumbing',
+        priority: 'HIGH',
+        status: 'IN_PROGRESS',
+        societyId: society.id,
+        reportedById: resident1.id,
+        assignedToId: (await prisma.user.findFirst({ where: { role: 'GUARD' } })).id
+      }
+    ],
+    skipDuplicates: true
+  });
+
+  // Create Notices
+  await prisma.notice.createMany({
+    data: [
+      {
+        title: 'Annual General Meeting',
+        content: 'The AGM will be held on 25th of this month at the Clubhouse. All members are requested to attend.',
+        audience: 'ALL',
+        societyId: society.id,
+        expiresAt: new Date(new Date().setDate(new Date().getDate() + 10))
+      },
+      {
+        title: 'Pool Maintenance',
+        content: 'Swimming pool will be closed for maintenance on Monday.',
+        audience: 'ALL',
+        societyId: society.id,
+        expiresAt: new Date(new Date().setDate(new Date().getDate() + 2))
+      }
+    ],
+    skipDuplicates: true
+  });
+
+  // Create Events
+  await prisma.event.createMany({
+    data: [
+      {
+        title: 'Diwali Celebration',
+        description: 'Grand celebration with fireworks and dinner.',
+        date: new Date(new Date().setDate(new Date().getDate() + 30)),
+        location: 'Central Park',
+        status: 'UPCOMING',
+        societyId: society.id
+      }
+    ],
+    skipDuplicates: true
+  });
+
+  // Create Parcels
+  await prisma.parcel.createMany({
+    data: [
+      {
+        courierName: 'Amazon',
+        trackingNumber: 'AMZ123456789',
+        status: 'PENDING',
+        unitId: (await prisma.unit.findFirst({ where: { societyId: society.id } })).id,
+        societyId: society.id
+      }
+    ],
+    skipDuplicates: true
+  });
+
+  // Create Vendors (Model)
+  await prisma.vendor.createMany({
+    data: [
+      {
+        name: 'CleanMax Services',
+        serviceType: 'Housekeeping',
+        contact: '9876543210',
+        email: 'contact@cleanmax.com',
+        status: 'ACTIVE',
+        societyId: society.id
+      },
+      {
+        name: 'SecureGuard Pvt Ltd',
+        serviceType: 'Security',
+        contact: '9876543211',
+        email: 'info@secureguard.com',
+        status: 'ACTIVE',
+        societyId: society.id
+      }
+    ],
+    skipDuplicates: true
+  });
+
+  // Create Community Buzz
+  await prisma.communityBuzz.createMany({
+    data: [
+      {
+        type: 'POST',
+        title: 'Lost Keys Found',
+        content: 'Found a set of keys near the main gate. Please collect from security.',
+        authorId: resident1.id,
+        societyId: society.id
+      }
+    ],
+    skipDuplicates: true
+  });
+
+  // Assets
+  await prisma.asset.createMany({
+    data: [
+      {
+        name: 'Generator 500kVA',
+        category: 'Electrical',
+        value: 500000,
+        purchaseDate: new Date('2023-01-01'),
+        status: 'ACTIVE',
+        societyId: society.id
+      }
+    ],
+    skipDuplicates: true
+  });
+  
+  // Documents
+  await prisma.document.createMany({
+      data: [
+          {
+              title: 'Society By-Laws',
+              category: 'Legal',
+              fileUrl: '#',
+              societyId: society.id
+          }
+      ],
+      skipDuplicates: true
+  });
+
   console.log('Seeding completed');
 }
 

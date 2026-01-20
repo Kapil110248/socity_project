@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   ShoppingCart,
@@ -19,6 +19,8 @@ import {
   Building,
   FileText,
   Send,
+  Loader2,
+  Trash2,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -45,102 +47,153 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog'
-
-const purchaseOrders = [
-  {
-    id: 'PO-2025-001',
-    prReference: 'PR-2025-001',
-    date: '2025-12-19',
-    vendor: {
-      name: 'Green Gardens Supplies',
-      contact: '+91 98765 12345',
-      email: 'sales@greengardens.com',
-    },
-    description: 'Garden maintenance tools and equipment',
-    items: [
-      { name: 'Garden Shears', qty: 5, unitPrice: 450, total: 2250 },
-      { name: 'Lawn Mower', qty: 1, unitPrice: 14500, total: 14500 },
-      { name: 'Fertilizer (50kg)', qty: 10, unitPrice: 750, total: 7500 },
-    ],
-    subtotal: 24250,
-    gst: 4365,
-    total: 28615,
-    status: 'sent',
-    deliveryDate: '2025-12-25',
-    paymentTerms: 'Net 30',
-  },
-  {
-    id: 'PO-2025-002',
-    prReference: 'PR-2025-003',
-    date: '2025-12-18',
-    vendor: {
-      name: 'CleanPro Solutions',
-      contact: '+91 98765 67890',
-      email: 'orders@cleanpro.in',
-    },
-    description: 'Monthly cleaning supplies',
-    items: [
-      { name: 'Floor Cleaner (5L)', qty: 20, unitPrice: 220, total: 4400 },
-      { name: 'Mops', qty: 10, unitPrice: 140, total: 1400 },
-      { name: 'Garbage Bags (Roll)', qty: 50, unitPrice: 70, total: 3500 },
-    ],
-    subtotal: 9300,
-    gst: 1674,
-    total: 10974,
-    status: 'delivered',
-    deliveryDate: '2025-12-19',
-    paymentTerms: 'Immediate',
-  },
-  {
-    id: 'PO-2025-003',
-    prReference: null,
-    date: '2025-12-17',
-    vendor: {
-      name: 'SecureTech Systems',
-      contact: '+91 98765 11111',
-      email: 'sales@securetech.com',
-    },
-    description: 'Annual maintenance contract - Fire safety equipment',
-    items: [
-      { name: 'Fire Extinguisher Service', qty: 20, unitPrice: 500, total: 10000 },
-      { name: 'Smoke Detector Battery', qty: 50, unitPrice: 150, total: 7500 },
-      { name: 'Fire Hose Inspection', qty: 10, unitPrice: 300, total: 3000 },
-    ],
-    subtotal: 20500,
-    gst: 3690,
-    total: 24190,
-    status: 'partially_received',
-    deliveryDate: '2025-12-20',
-    paymentTerms: 'Net 15',
-  },
-  {
-    id: 'PO-2025-004',
-    prReference: null,
-    date: '2025-12-15',
-    vendor: {
-      name: 'Office Essentials',
-      contact: '+91 98765 22222',
-      email: 'info@officeessentials.in',
-    },
-    description: 'Office stationery and supplies',
-    items: [
-      { name: 'Printer Paper (Ream)', qty: 50, unitPrice: 280, total: 14000 },
-      { name: 'Ink Cartridge', qty: 10, unitPrice: 1200, total: 12000 },
-      { name: 'File Folders', qty: 100, unitPrice: 25, total: 2500 },
-    ],
-    subtotal: 28500,
-    gst: 5130,
-    total: 33630,
-    status: 'draft',
-    deliveryDate: null,
-    paymentTerms: 'Net 30',
-  },
-]
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { PurchaseOrderService } from '@/services/purchaseOrderService'
+import { VendorService } from '@/services/vendor.service'
+import { toast } from 'react-hot-toast'
 
 export default function PurchaseOrdersPage() {
+  const [data, setData] = useState<any[]>([])
+  const [statsData, setStatsData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedPO, setSelectedPO] = useState<typeof purchaseOrders[0] | null>(null)
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [periodFilter, setPeriodFilter] = useState('current')
+  
+  const [selectedPO, setSelectedPO] = useState<any | null>(null)
+  const [isNewOrderOpen, setIsNewOrderOpen] = useState(false)
+  const [vendors, setVendors] = useState<any[]>([])
+
+  // New Order Form State
+  const [formData, setFormData] = useState({
+    vendorId: '',
+    description: '',
+    paymentTerms: 'Net 30',
+    items: [{ name: '', qty: 1, unitPrice: 0, total: 0 }],
+    subtotal: 0,
+    taxPercentage: 18,
+    taxAmount: 0,
+    totalAmount: 0,
+  })
+
+  // Fetch Data
+  const fetchData = async () => {
+    try {
+      setLoading(true)
+      const [list, stats] = await Promise.all([
+        PurchaseOrderService.getAll(statusFilter, periodFilter, searchQuery),
+        PurchaseOrderService.getStats()
+      ])
+      setData(list)
+      setStatsData(stats)
+    } catch (error) {
+       console.error(error)
+       toast.error('Failed to load purchase orders')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Fetch Vendors for Dropdown
+  const fetchVendors = async () => {
+    try {
+      const vendorList = await VendorService.getAll();
+      setVendors(vendorList);
+    } catch (error) {
+      console.error('Failed to fetch vendors', error);
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+  }, [statusFilter, periodFilter, searchQuery])
+
+  useEffect(() => {
+    if (isNewOrderOpen) fetchVendors();
+  }, [isNewOrderOpen])
+
+  // Recalculate totals when items change
+  useEffect(() => {
+    const subtotal = formData.items.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0);
+    const taxAmount = (subtotal * formData.taxPercentage) / 100;
+    const totalAmount = subtotal + taxAmount;
+    
+    setFormData(prev => ({
+       ...prev,
+       subtotal,
+       taxAmount,
+       totalAmount
+    }));
+  }, [formData.items, formData.taxPercentage])
+
+  const handleCreate = async () => {
+    if (!formData.vendorId) {
+        toast.error('Please select a vendor');
+        return;
+    }
+    try {
+      // Calculate item totals properly
+      const itemsWithTotals = formData.items.map(item => ({
+          ...item,
+          total: item.qty * item.unitPrice
+      }));
+
+      await PurchaseOrderService.create({
+        ...formData,
+        items: itemsWithTotals
+      })
+      toast.success('Purchase Order created successfully')
+      setIsNewOrderOpen(false)
+      fetchData()
+      // Reset Form
+      setFormData({
+        vendorId: '',
+        description: '',
+        paymentTerms: 'Net 30',
+        items: [{ name: '', qty: 1, unitPrice: 0, total: 0 }],
+        subtotal: 0,
+        taxPercentage: 18,
+        taxAmount: 0,
+        totalAmount: 0,
+      })
+    } catch (error: any) {
+       console.error('Create Order Error:', error);
+       const errorMessage = error.response?.data?.error || error.message || 'Failed to create order';
+       toast.error(errorMessage);
+    }
+  }
+
+  const handleStatusUpdate = async (id: number, status: string) => {
+    try {
+      await PurchaseOrderService.updateStatus(id, status)
+      toast.success(`Order status updated to ${status}`)
+      if (selectedPO?.id === id) {
+          setSelectedPO({ ...selectedPO, status }); // Optimistic update for dialog
+      }
+      fetchData()
+    } catch (error) {
+      toast.error('Failed to update status')
+    }
+  }
+
+  const addItemSlot = () => {
+    setFormData({ ...formData, items: [...formData.items, { name: '', qty: 1, unitPrice: 0, total: 0 }] })
+  }
+
+  const updateItem = (index: number, field: string, value: any) => {
+    const newItems = [...formData.items]
+    newItems[index] = { ...newItems[index], [field]: value }
+    setFormData({ ...formData, items: newItems })
+  }
+  
+  const removeItem = (index: number) => {
+      if(formData.items.length === 1) return;
+      const newItems = formData.items.filter((_, i) => i !== index);
+      setFormData({ ...formData, items: newItems });
+  }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -152,17 +205,17 @@ export default function PurchaseOrdersPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'draft':
+      case 'DRAFT':
         return <Badge variant="secondary"><Edit className="h-3 w-3 mr-1" /> Draft</Badge>
-      case 'sent':
+      case 'SENT':
         return <Badge className="bg-blue-100 text-blue-800"><Send className="h-3 w-3 mr-1" /> Sent to Vendor</Badge>
-      case 'confirmed':
+      case 'CONFIRMED':
         return <Badge className="bg-purple-100 text-purple-800"><CheckCircle className="h-3 w-3 mr-1" /> Confirmed</Badge>
-      case 'partially_received':
+      case 'PARTIALLY_RECEIVED':
         return <Badge className="bg-yellow-100 text-yellow-800"><Package className="h-3 w-3 mr-1" /> Partially Received</Badge>
-      case 'delivered':
+      case 'DELIVERED':
         return <Badge className="bg-green-100 text-green-800"><Truck className="h-3 w-3 mr-1" /> Delivered</Badge>
-      case 'cancelled':
+      case 'CANCELLED':
         return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" /> Cancelled</Badge>
       default:
         return <Badge variant="outline">{status}</Badge>
@@ -170,13 +223,11 @@ export default function PurchaseOrdersPage() {
   }
 
   const stats = [
-    { label: 'Total Orders', value: purchaseOrders.length, icon: ShoppingCart, color: 'bg-blue-500' },
-    { label: 'Pending Delivery', value: purchaseOrders.filter(p => p.status === 'sent' || p.status === 'confirmed').length, icon: Clock, color: 'bg-yellow-500' },
-    { label: 'Delivered', value: purchaseOrders.filter(p => p.status === 'delivered').length, icon: Truck, color: 'bg-green-500' },
-    { label: 'Draft', value: purchaseOrders.filter(p => p.status === 'draft').length, icon: FileText, color: 'bg-gray-500' },
+    { label: 'Total Orders', value: statsData?.total || 0, icon: ShoppingCart, color: 'bg-blue-500' },
+    { label: 'Pending Delivery', value: statsData?.pendingDelivery || 0, icon: Clock, color: 'bg-yellow-500' },
+    { label: 'Delivered', value: statsData?.delivered || 0, icon: Truck, color: 'bg-green-500' },
+    { label: 'Draft', value: statsData?.draft || 0, icon: FileText, color: 'bg-gray-500' },
   ]
-
-  const totalOrderValue = purchaseOrders.reduce((sum, po) => sum + po.total, 0)
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
@@ -194,10 +245,102 @@ export default function PurchaseOrdersPage() {
             <Download className="h-4 w-4" />
             Export
           </Button>
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            New Order
-          </Button>
+          <Dialog open={isNewOrderOpen} onOpenChange={setIsNewOrderOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                New Order
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+               <DialogHeader>
+                  <DialogTitle>Create Purchase Order</DialogTitle>
+               </DialogHeader>
+               <div className="grid grid-cols-2 gap-4 py-4">
+                  <div className="space-y-2">
+                     <Label>Vendor</Label>
+                     <Select value={formData.vendorId} onValueChange={v => setFormData({...formData, vendorId: v})}>
+                        <SelectTrigger><SelectValue placeholder="Select Vendor" /></SelectTrigger>
+                        <SelectContent>
+                           {vendors.map(vendor => (
+                               <SelectItem key={vendor.id} value={vendor.id.toString()}>{vendor.name}</SelectItem>
+                           ))}
+                        </SelectContent>
+                     </Select>
+                  </div>
+                  <div className="space-y-2">
+                     <Label>Payment Terms</Label>
+                     <Input value={formData.paymentTerms} onChange={e => setFormData({...formData, paymentTerms: e.target.value})} />
+                  </div>
+                  <div className="col-span-2 space-y-2">
+                     <Label>Description</Label>
+                     <Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Order description..." />
+                  </div>
+               </div>
+
+               <div className="border p-4 rounded-md bg-gray-50 mb-4">
+                  <div className="flex justify-between items-center mb-2">
+                     <h4 className="font-semibold">Items</h4>
+                     <Button variant="outline" size="sm" onClick={addItemSlot}>+ Add Item</Button>
+                  </div>
+                  <div className="space-y-2">
+                      <div className="grid grid-cols-12 gap-2 text-sm font-medium text-gray-500">
+                          <div className="col-span-5">Item Name</div>
+                          <div className="col-span-2 text-center">Qty</div>
+                          <div className="col-span-2 text-right">Unit Price</div>
+                          <div className="col-span-2 text-right">Total</div>
+                          <div className="col-span-1"></div>
+                      </div>
+                      {formData.items.map((item, idx) => (
+                          <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                              <div className="col-span-5">
+                                  <Input value={item.name} onChange={e => updateItem(idx, 'name', e.target.value)} placeholder="Item" />
+                              </div>
+                              <div className="col-span-2">
+                                  <Input type="number" value={item.qty} onChange={e => updateItem(idx, 'qty', parseFloat(e.target.value))} className="text-center" />
+                              </div>
+                              <div className="col-span-2">
+                                  <Input type="number" value={item.unitPrice} onChange={e => updateItem(idx, 'unitPrice', parseFloat(e.target.value))} className="text-right" />
+                              </div>
+                              <div className="col-span-2 text-right font-medium">
+                                  {formatCurrency(item.qty * item.unitPrice)}
+                              </div>
+                              <div className="col-span-1 text-center">
+                                  <Button variant="ghost" size="sm" onClick={() => removeItem(idx)} className="text-red-500"><Trash2 className="h-4 w-4" /></Button>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+               </div>
+               
+               <div className="flex justify-end">
+                   <div className="w-1/3 space-y-2">
+                       <div className="flex justify-between text-sm">
+                           <span>Subtotal:</span>
+                           <span>{formatCurrency(formData.subtotal)}</span>
+                       </div>
+                       <div className="flex justify-between text-sm items-center">
+                           <span>Tax ({formData.taxPercentage}%)</span>
+                           <Input 
+                             type="number" 
+                             className="w-16 h-8 text-right" 
+                             value={formData.taxPercentage} 
+                             onChange={e => setFormData({...formData, taxPercentage: parseFloat(e.target.value)})} 
+                           />
+                       </div>
+                       <div className="flex justify-between font-bold text-lg pt-2 border-t">
+                           <span>Total:</span>
+                           <span>{formatCurrency(formData.totalAmount)}</span>
+                       </div>
+                   </div>
+               </div>
+
+               <DialogFooter className="mt-4">
+                   <Button variant="outline" onClick={() => setIsNewOrderOpen(false)}>Cancel</Button>
+                   <Button onClick={handleCreate}>Create Order</Button>
+               </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -226,7 +369,7 @@ export default function PurchaseOrdersPage() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-purple-100">Total Order Value (This Month)</p>
-            <p className="text-2xl md:text-3xl font-bold mt-1">{formatCurrency(totalOrderValue)}</p>
+            <p className="text-2xl md:text-3xl font-bold mt-1">{formatCurrency(statsData?.totalValueMonth || 0)}</p>
           </div>
           <ShoppingCart className="h-12 w-12 text-purple-200 opacity-50" />
         </div>
@@ -244,19 +387,19 @@ export default function PurchaseOrdersPage() {
               className="pl-10"
             />
           </div>
-          <Select defaultValue="all">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-full md:w-40">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="sent">Sent</SelectItem>
-              <SelectItem value="confirmed">Confirmed</SelectItem>
-              <SelectItem value="delivered">Delivered</SelectItem>
+              <SelectItem value="DRAFT">Draft</SelectItem>
+              <SelectItem value="SENT">Sent</SelectItem>
+              <SelectItem value="CONFIRMED">Confirmed</SelectItem>
+              <SelectItem value="DELIVERED">Delivered</SelectItem>
             </SelectContent>
           </Select>
-          <Select defaultValue="current">
+          <Select value={periodFilter} onValueChange={setPeriodFilter}>
             <SelectTrigger className="w-full md:w-40">
               <SelectValue placeholder="Period" />
             </SelectTrigger>
@@ -271,6 +414,11 @@ export default function PurchaseOrdersPage() {
 
       {/* Purchase Orders Table */}
       <Card className="overflow-hidden">
+        {loading ? (
+             <div className="p-8 text-center flex justify-center text-gray-500">
+               <Loader2 className="animate-spin mr-2" /> Loading Orders...
+             </div>
+        ) : (
         <Table>
           <TableHeader>
             <TableRow className="bg-gray-50">
@@ -284,10 +432,10 @@ export default function PurchaseOrdersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {purchaseOrders.map((po) => (
+            {data.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center py-6">No orders found</TableCell></TableRow> : data.map((po) => (
               <TableRow key={po.id} className="hover:bg-gray-50">
                 <TableCell>
-                  <p className="font-mono font-medium">{po.id}</p>
+                  <p className="font-mono font-medium">{po.poNumber}</p>
                   {po.prReference && (
                     <p className="text-xs text-gray-500">Ref: {po.prReference}</p>
                   )}
@@ -295,29 +443,26 @@ export default function PurchaseOrdersPage() {
                 <TableCell>
                   <div className="flex items-center gap-1 text-gray-600">
                     <Calendar className="h-3 w-3" />
-                    {new Date(po.date).toLocaleDateString('en-IN', {
-                      day: '2-digit',
-                      month: 'short',
-                    })}
+                    {new Date(po.createdAt).toLocaleDateString()}
                   </div>
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">
                     <Building className="h-3 w-3 text-gray-400" />
-                    <span className="font-medium">{po.vendor.name}</span>
+                    <span className="font-medium">{po.vendor?.name || 'Unknown'}</span>
                   </div>
                 </TableCell>
                 <TableCell>
                   <p className="max-w-xs truncate">{po.description}</p>
-                  <p className="text-xs text-gray-500">{po.items.length} items</p>
+                  <p className="text-xs text-gray-500">{Array.isArray(po.items) ? po.items.length : 0} items</p>
                 </TableCell>
                 <TableCell>{getStatusBadge(po.status)}</TableCell>
                 <TableCell className="text-right font-bold">
-                  {formatCurrency(po.total)}
+                  {formatCurrency(po.totalAmount)}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
-                    <Dialog>
+                    <Dialog open={selectedPO?.id === po.id} onOpenChange={(open) => !open && setSelectedPO(null)}>
                       <DialogTrigger asChild>
                         <Button
                           variant="ghost"
@@ -327,11 +472,12 @@ export default function PurchaseOrdersPage() {
                           <Eye className="h-4 w-4" />
                         </Button>
                       </DialogTrigger>
+                      {selectedPO && (
                       <DialogContent className="max-w-2xl">
                         <DialogHeader>
                           <DialogTitle className="flex items-center justify-between">
-                            <span>Purchase Order - {po.id}</span>
-                            {getStatusBadge(po.status)}
+                            <span>Purchase Order - {selectedPO.poNumber}</span>
+                            {getStatusBadge(selectedPO.status)}
                           </DialogTitle>
                         </DialogHeader>
                         <div className="space-y-4">
@@ -341,15 +487,15 @@ export default function PurchaseOrdersPage() {
                             <div className="grid grid-cols-2 gap-2 text-sm">
                               <div>
                                 <span className="text-gray-600">Name:</span>
-                                <p className="font-medium">{po.vendor.name}</p>
+                                <p className="font-medium">{selectedPO.vendor?.name}</p>
                               </div>
                               <div>
                                 <span className="text-gray-600">Contact:</span>
-                                <p>{po.vendor.contact}</p>
+                                <p>{selectedPO.vendor?.contact}</p>
                               </div>
                               <div className="col-span-2">
                                 <span className="text-gray-600">Email:</span>
-                                <p>{po.vendor.email}</p>
+                                <p>{selectedPO.vendor?.email}</p>
                               </div>
                             </div>
                           </div>
@@ -358,15 +504,15 @@ export default function PurchaseOrdersPage() {
                           <div className="grid grid-cols-3 gap-4 text-sm">
                             <div>
                               <span className="text-gray-600">Order Date:</span>
-                              <p className="font-medium">{new Date(po.date).toLocaleDateString('en-IN')}</p>
+                              <p className="font-medium">{new Date(selectedPO.date).toLocaleDateString()}</p>
                             </div>
                             <div>
                               <span className="text-gray-600">Delivery Date:</span>
-                              <p className="font-medium">{po.deliveryDate ? new Date(po.deliveryDate).toLocaleDateString('en-IN') : 'TBD'}</p>
+                              <p className="font-medium">{selectedPO.deliveryDate ? new Date(selectedPO.deliveryDate).toLocaleDateString() : 'TBD'}</p>
                             </div>
                             <div>
                               <span className="text-gray-600">Payment Terms:</span>
-                              <p className="font-medium">{po.paymentTerms}</p>
+                              <p className="font-medium">{selectedPO.paymentTerms}</p>
                             </div>
                           </div>
 
@@ -383,7 +529,7 @@ export default function PurchaseOrdersPage() {
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
-                                {po.items.map((item, idx) => (
+                                {Array.isArray(selectedPO.items) && selectedPO.items.map((item: any, idx: number) => (
                                   <TableRow key={idx}>
                                     <TableCell>{item.name}</TableCell>
                                     <TableCell className="text-center">{item.qty}</TableCell>
@@ -393,15 +539,15 @@ export default function PurchaseOrdersPage() {
                                 ))}
                                 <TableRow>
                                   <TableCell colSpan={3} className="text-right font-medium">Subtotal</TableCell>
-                                  <TableCell className="text-right">{formatCurrency(po.subtotal)}</TableCell>
+                                  <TableCell className="text-right">{formatCurrency(selectedPO.subtotal)}</TableCell>
                                 </TableRow>
                                 <TableRow>
-                                  <TableCell colSpan={3} className="text-right font-medium">GST (18%)</TableCell>
-                                  <TableCell className="text-right">{formatCurrency(po.gst)}</TableCell>
+                                  <TableCell colSpan={3} className="text-right font-medium">GST / Tax ({formatCurrency(selectedPO.taxAmount)})</TableCell>
+                                  <TableCell className="text-right">{formatCurrency(selectedPO.taxAmount)}</TableCell>
                                 </TableRow>
                                 <TableRow className="font-bold bg-gray-50">
                                   <TableCell colSpan={3} className="text-right">Grand Total</TableCell>
-                                  <TableCell className="text-right text-lg">{formatCurrency(po.total)}</TableCell>
+                                  <TableCell className="text-right text-lg">{formatCurrency(selectedPO.totalAmount)}</TableCell>
                                 </TableRow>
                               </TableBody>
                             </Table>
@@ -412,34 +558,36 @@ export default function PurchaseOrdersPage() {
                             <Button variant="outline" className="gap-2">
                               <Printer className="h-4 w-4" /> Print
                             </Button>
-                            {po.status === 'draft' && (
-                              <Button className="gap-2">
+                            {selectedPO.status === 'DRAFT' && (
+                              <Button className="gap-2" onClick={() => handleStatusUpdate(selectedPO.id, 'SENT')}>
                                 <Send className="h-4 w-4" /> Send to Vendor
                               </Button>
                             )}
-                            {(po.status === 'sent' || po.status === 'confirmed') && (
-                              <Button className="gap-2">
-                                <Package className="h-4 w-4" /> Record Receipt
+                            {selectedPO.status === 'SENT' && (
+                              <Button className="gap-2 bg-purple-600 hover:bg-purple-700" onClick={() => handleStatusUpdate(selectedPO.id, 'CONFIRMED')}>
+                                <CheckCircle className="h-4 w-4" /> Confirm Order
+                              </Button>
+                            )}
+                            {(selectedPO.status === 'SENT' || selectedPO.status === 'CONFIRMED') && (
+                              <Button className="gap-2 bg-green-600 hover:bg-green-700" onClick={() => handleStatusUpdate(selectedPO.id, 'DELIVERED')}>
+                                <Package className="h-4 w-4" /> Goods Received
                               </Button>
                             )}
                           </div>
                         </div>
                       </DialogContent>
+                      )}
                     </Dialog>
                     <Button variant="ghost" size="sm">
                       <Printer className="h-4 w-4" />
                     </Button>
-                    {po.status === 'draft' && (
-                      <Button variant="ghost" size="sm">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    )}
                   </div>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
+        )}
       </Card>
     </div>
   )

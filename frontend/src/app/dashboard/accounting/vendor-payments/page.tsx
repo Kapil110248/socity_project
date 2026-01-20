@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { RoleGuard } from '@/components/auth/role-guard'
 import {
@@ -13,15 +13,11 @@ import {
   Clock,
   AlertCircle,
   Eye,
-  Edit,
   CheckCircle2,
-  Send,
-  IndianRupee,
-  FileText,
   Building2,
   CreditCard,
-  Calendar,
   Trash2,
+  FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -46,201 +42,199 @@ import {
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { toast } from 'react-hot-toast'
 
-const stats = [
-  {
-    title: 'Total Pending',
-    value: '\u20B945K',
-    change: '5 invoices',
-    icon: Clock,
-    color: 'orange',
-  },
-  {
-    title: 'Paid This Month',
-    value: '\u20B93.2L',
-    change: '12 payments',
-    icon: CheckCircle,
-    color: 'green',
-  },
-  {
-    title: 'Due This Week',
-    value: '\u20B935K',
-    change: '3 invoices',
-    icon: AlertCircle,
-    color: 'red',
-  },
-  {
-    title: 'Total Vendors',
-    value: '28',
-    change: '24 active',
-    icon: Building2,
-    color: 'blue',
-  },
-]
-
-const vendorPayments = [
-  {
-    id: 'VP-001',
-    vendorId: 'VEN-001',
-    vendorName: 'PestFree Services',
-    category: 'Pest Control',
-    invoiceNumber: 'PF-2024-089',
-    invoiceDate: '2024-12-01',
-    dueDate: '2024-12-15',
-    amount: 15000,
-    gstAmount: 2700,
-    totalAmount: 17700,
-    description: 'Monthly Pest Control - All Blocks',
-    status: 'pending',
-    paymentDate: null,
-    paymentMethod: null,
-  },
-  {
-    id: 'VP-002',
-    vendorId: 'VEN-002',
-    vendorName: 'SecureGuard Services',
-    category: 'Security',
-    invoiceNumber: 'SG-2024-012',
-    invoiceDate: '2024-11-30',
-    dueDate: '2024-12-10',
-    amount: 180000,
-    gstAmount: 32400,
-    totalAmount: 212400,
-    description: 'Security Guard Salaries - December',
-    status: 'paid',
-    paymentDate: '2024-12-05',
-    paymentMethod: 'online',
-  },
-  {
-    id: 'VP-003',
-    vendorId: 'VEN-003',
-    vendorName: 'CleanPro Solutions',
-    category: 'Housekeeping',
-    invoiceNumber: 'CP-2024-156',
-    invoiceDate: '2024-12-01',
-    dueDate: '2024-12-15',
-    amount: 65000,
-    gstAmount: 11700,
-    totalAmount: 76700,
-    description: 'Housekeeping Services - December',
-    status: 'approved',
-    paymentDate: null,
-    paymentMethod: null,
-  },
-  {
-    id: 'VP-004',
-    vendorId: 'VEN-004',
-    vendorName: 'Kone Elevators',
-    category: 'Maintenance',
-    invoiceNumber: 'KONE-2024-Q4',
-    invoiceDate: '2024-11-25',
-    dueDate: '2024-12-20',
-    amount: 35000,
-    gstAmount: 6300,
-    totalAmount: 41300,
-    description: 'Elevator AMC - Q4 2024',
-    status: 'pending',
-    paymentDate: null,
-    paymentMethod: null,
-  },
-  {
-    id: 'VP-005',
-    vendorId: 'VEN-005',
-    vendorName: 'Green Gardens',
-    category: 'Landscaping',
-    invoiceNumber: 'GG-2024-078',
-    invoiceDate: '2024-12-02',
-    dueDate: '2024-12-17',
-    amount: 25000,
-    gstAmount: 4500,
-    totalAmount: 29500,
-    description: 'Garden Maintenance - December',
-    status: 'pending',
-    paymentDate: null,
-    paymentMethod: null,
-  },
-  {
-    id: 'VP-006',
-    vendorId: 'VEN-006',
-    vendorName: 'WaterPure Systems',
-    category: 'Water Treatment',
-    invoiceNumber: 'WP-2024-045',
-    invoiceDate: '2024-11-28',
-    dueDate: '2024-12-12',
-    amount: 12000,
-    gstAmount: 2160,
-    totalAmount: 14160,
-    description: 'Water Tank Cleaning - Quarterly',
-    status: 'paid',
-    paymentDate: '2024-12-03',
-    paymentMethod: 'upi',
-  },
-]
-
-const vendors = [
-  { id: 'VEN-001', name: 'PestFree Services', category: 'Pest Control' },
-  { id: 'VEN-002', name: 'SecureGuard Services', category: 'Security' },
-  { id: 'VEN-003', name: 'CleanPro Solutions', category: 'Housekeeping' },
-  { id: 'VEN-004', name: 'Kone Elevators', category: 'Maintenance' },
-  { id: 'VEN-005', name: 'Green Gardens', category: 'Landscaping' },
-  { id: 'VEN-006', name: 'WaterPure Systems', category: 'Water Treatment' },
-  { id: 'VEN-007', name: 'MSEB', category: 'Electricity' },
-  { id: 'VEN-008', name: 'Local Plumber', category: 'Plumbing' },
-]
+import vendorInvoiceService from '@/services/vendorInvoiceService'
+import { VendorService } from '@/services/vendor.service'
+import bankService from '@/services/bankService'
 
 export default function VendorPaymentsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
+  
+  const [invoices, setInvoices] = useState<any[]>([])
+  const [vendors, setVendors] = useState<any[]>([])
+  const [banks, setBanks] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
   const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false)
   const [isMakePaymentOpen, setIsMakePaymentOpen] = useState(false)
   const [showSuccess, setShowSuccess] = useState<string | null>(null)
-  const [selectedPayment, setSelectedPayment] = useState<typeof vendorPayments[0] | null>(null)
-  const [viewingPayment, setViewingPayment] = useState<typeof vendorPayments[0] | null>(null)
+  
+  const [selectedPayment, setSelectedPayment] = useState<any | null>(null)
+  const [viewingPayment, setViewingPayment] = useState<any | null>(null)
 
-  const showNotification = (message: string) => {
-    setShowSuccess(message)
-    setTimeout(() => setShowSuccess(null), 3000)
+  // Form States
+  const [newInvoice, setNewInvoice] = useState({
+      vendorId: '',
+      category: '',
+      invoiceNumber: '',
+      invoiceDate: new Date().toISOString().split('T')[0],
+      dueDate: '',
+      description: '',
+      amount: '',
+      gstAmount: '', // Optional
+      remarks: ''
+  })
+
+  const [paymentForm, setPaymentForm] = useState({
+      bankAccountId: '',
+      paymentMethod: 'online',
+      paymentDate: new Date().toISOString().split('T')[0],
+      transactionRef: '',
+      remarks: ''
+  })
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const loadData = async () => {
+    try {
+        setLoading(true)
+        const [invoiceData, vendorData, bankData] = await Promise.all([
+            vendorInvoiceService.getInvoices(),
+            VendorService.getAll(),
+            bankService.getBanks()
+        ])
+        setInvoices(invoiceData)
+        setVendors(vendorData)
+        setBanks(bankData)
+    } catch (error) {
+        console.error(error)
+        toast.error('Failed to load data')
+    } finally {
+        setLoading(false)
+    }
   }
 
-  const handleAddPayment = () => {
-    setIsAddPaymentOpen(false)
-    showNotification('Vendor invoice added successfully!')
+  const handleAddInvoice = async () => {
+      try {
+          if (!newInvoice.vendorId || !newInvoice.amount || !newInvoice.dueDate || !newInvoice.invoiceNumber) {
+              toast.error('Please fill required fields')
+              return
+          }
+
+          await vendorInvoiceService.createInvoice(newInvoice)
+          toast.success('Invoice created successfully')
+          setIsAddPaymentOpen(false)
+          setNewInvoice({ 
+             vendorId: '', category: '', invoiceNumber: '', 
+             invoiceDate: new Date().toISOString().split('T')[0], 
+             dueDate: '', description: '', amount: '', gstAmount: '', remarks: '' 
+          })
+          loadData()
+      } catch (error: any) {
+          toast.error(error.response?.data?.error || 'Failed to create invoice')
+      }
   }
 
-  const handleMakePayment = () => {
-    setIsMakePaymentOpen(false)
-    setSelectedPayment(null)
-    showNotification('Payment processed successfully!')
+  const handleApprove = async (payment: any) => {
+      try {
+          await vendorInvoiceService.approveInvoice(payment.id)
+          toast.success(`Invoice ${payment.invoiceNumber} approved!`)
+          loadData()
+      } catch (error: any) {
+          toast.error('Failed to approve invoice')
+      }
   }
 
-  const handleApprove = (payment: typeof vendorPayments[0]) => {
-    showNotification(`Invoice ${payment.invoiceNumber} approved for payment!`)
+  const handleMakePayment = async () => {
+      try {
+          if (!selectedPayment) return
+          if (!paymentForm.bankAccountId) {
+              toast.error('Please select a Bank Account')
+              return
+          }
+
+          await vendorInvoiceService.payInvoice(selectedPayment.id, paymentForm)
+          toast.success('Payment processed successfully!')
+          setIsMakePaymentOpen(false)
+          setSelectedPayment(null)
+          loadData() // Refresh list and bank balances (if we were showing them)
+      } catch (error: any) {
+           toast.error(error.response?.data?.error || 'Failed to process payment')
+      }
   }
 
   const handleExport = () => {
-    showNotification('Payment data exported successfully!')
+    // Basic CSV export
+    const headers = ['Invoice No', 'Vendor', 'Category', 'Description', 'Amount', 'Status', 'Due Date']
+    const csvContent = [
+        headers.join(','),
+        ...filteredPayments.map(p => [
+            p.invoiceNumber,
+            p.vendor.name,
+            p.category,
+            `"${p.description}"`,
+            p.totalAmount,
+            p.status,
+            new Date(p.dueDate).toLocaleDateString()
+        ].join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `vendor_payments_${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    toast.success('Exported successfully')
   }
 
-  const totalPending = vendorPayments
-    .filter(p => p.status === 'pending' || p.status === 'approved')
+  // --- Derived State ---
+  const totalPending = invoices
+    .filter(p => p.status === 'PENDING' || p.status === 'APPROVED')
     .reduce((sum, p) => sum + p.totalAmount, 0)
 
-  const totalPaid = vendorPayments
-    .filter(p => p.status === 'paid')
+  const totalPaid = invoices
+    .filter(p => p.status === 'PAID')
     .reduce((sum, p) => sum + p.totalAmount, 0)
-
-  const filteredPayments = vendorPayments.filter((payment) => {
+    
+  const filteredPayments = invoices.filter((payment) => {
     const matchesSearch =
-      payment.vendorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      payment.vendor?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       payment.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
       payment.description.toLowerCase().includes(searchQuery.toLowerCase())
 
-    const matchesStatus = statusFilter === 'all' || payment.status === statusFilter
+    const matchesStatus = statusFilter === 'all' || payment.status === statusFilter.toUpperCase() // API returns uppercase
     const matchesCategory = categoryFilter === 'all' || payment.category === categoryFilter
 
     return matchesSearch && matchesStatus && matchesCategory
   })
+
+  // Stats Array
+  const stats = [
+    {
+      title: 'Total Pending',
+      value: `\u20B9${(totalPending / 1000).toFixed(1)}K`, // Simple formatting
+      change: `${invoices.filter(p => p.status !== 'PAID').length} invoices`,
+      icon: Clock,
+      color: 'orange',
+    },
+    {
+      title: 'Paid This Month', // Using totalPaid for now (not filtered by month for simplicity in display)
+      value: `\u20B9${(totalPaid / 100000).toFixed(2)}L`,
+      change: `${invoices.filter(p => p.status === 'PAID').length} payments`,
+      icon: CheckCircle,
+      color: 'green',
+    },
+    {
+        title: 'Total Invoices',
+        value: invoices.length.toString(),
+        change: 'All time',
+        icon: FileText,
+        color: 'blue'
+    },
+    {
+      title: 'Total Vendors',
+      value: vendors.length.toString(),
+      change: 'Active vendors',
+      icon: Building2,
+      color: 'blue',
+    },
+  ]
 
   return (
     <RoleGuard allowedRoles={['admin']}>
@@ -280,7 +274,7 @@ export default function VendorPaymentsPage() {
                   <span>Add Invoice</span>
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-2xl overflow-y-auto max-h-[90vh]">
                 <DialogHeader>
                   <DialogTitle>Add Vendor Invoice</DialogTitle>
                   <DialogDescription>
@@ -291,14 +285,17 @@ export default function VendorPaymentsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Select Vendor *</Label>
-                      <Select>
+                      <Select 
+                        value={newInvoice.vendorId} 
+                        onValueChange={(v) => setNewInvoice({...newInvoice, vendorId: v})}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Choose vendor" />
                         </SelectTrigger>
                         <SelectContent>
                           {vendors.map(vendor => (
-                            <SelectItem key={vendor.id} value={vendor.id}>
-                              {vendor.name} ({vendor.category})
+                            <SelectItem key={vendor.id} value={vendor.id.toString()}>
+                              {vendor.name} ({vendor.serviceType || vendor.category})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -306,18 +303,21 @@ export default function VendorPaymentsPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Category *</Label>
-                      <Select>
+                      <Select 
+                        value={newInvoice.category}
+                        onValueChange={(v) => setNewInvoice({...newInvoice, category: v})}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select category" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="pest_control">Pest Control</SelectItem>
-                          <SelectItem value="security">Security</SelectItem>
-                          <SelectItem value="housekeeping">Housekeeping</SelectItem>
-                          <SelectItem value="maintenance">Maintenance</SelectItem>
-                          <SelectItem value="landscaping">Landscaping</SelectItem>
-                          <SelectItem value="utilities">Utilities</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
+                          <SelectItem value="Pest Control">Pest Control</SelectItem>
+                          <SelectItem value="Security">Security</SelectItem>
+                          <SelectItem value="Housekeeping">Housekeeping</SelectItem>
+                          <SelectItem value="Maintenance">Maintenance</SelectItem>
+                          <SelectItem value="Landscaping">Landscaping</SelectItem>
+                          <SelectItem value="Utilities">Utilities</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -325,40 +325,71 @@ export default function VendorPaymentsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Invoice Number *</Label>
-                      <Input placeholder="PF-2024-089" />
+                      <Input 
+                        placeholder="PF-2024-089" 
+                        value={newInvoice.invoiceNumber}
+                        onChange={(e) => setNewInvoice({...newInvoice, invoiceNumber: e.target.value})}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Invoice Date *</Label>
-                      <Input type="date" />
+                      <Input 
+                        type="date" 
+                        value={newInvoice.invoiceDate}
+                        onChange={(e) => setNewInvoice({...newInvoice, invoiceDate: e.target.value})}
+                      />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label>Description *</Label>
-                    <Input placeholder="Monthly Pest Control - All Blocks" />
+                    <Input 
+                        placeholder="Monthly Pest Control - All Blocks" 
+                        value={newInvoice.description}
+                        onChange={(e) => setNewInvoice({...newInvoice, description: e.target.value})}
+                    />
                   </div>
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label>Amount (\u20B9) *</Label>
-                      <Input type="number" placeholder="15000" />
+                      <Input 
+                        type="number" 
+                        placeholder="15000" 
+                        value={newInvoice.amount}
+                        onChange={(e) => setNewInvoice({...newInvoice, amount: e.target.value})}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>GST Amount (\u20B9)</Label>
-                      <Input type="number" placeholder="2700" />
+                      <Input 
+                        type="number" 
+                        placeholder="2700" 
+                        value={newInvoice.gstAmount}
+                        onChange={(e) => setNewInvoice({...newInvoice, gstAmount: e.target.value})}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Due Date *</Label>
-                      <Input type="date" />
+                      <Input 
+                        type="date" 
+                        value={newInvoice.dueDate}
+                        onChange={(e) => setNewInvoice({...newInvoice, dueDate: e.target.value})}
+                      />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label>Remarks</Label>
-                    <Textarea placeholder="Any additional notes..." rows={2} />
+                    <Textarea 
+                        placeholder="Any additional notes..." 
+                        rows={2} 
+                        value={newInvoice.remarks}
+                        onChange={(e) => setNewInvoice({...newInvoice, remarks: e.target.value})}
+                    />
                   </div>
                   <div className="flex justify-end space-x-2 pt-4">
                     <Button variant="outline" onClick={() => setIsAddPaymentOpen(false)}>
                       Cancel
                     </Button>
-                    <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleAddPayment}>
+                    <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleAddInvoice}>
                       Add Invoice
                     </Button>
                   </div>
@@ -421,43 +452,7 @@ export default function VendorPaymentsPage() {
             )
           })}
         </div>
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="p-6 bg-gradient-to-br from-orange-50 to-amber-50 border-orange-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-orange-700">Total Pending Payments</p>
-                <h3 className="text-3xl font-bold text-orange-800 mt-1">
-                  \u20B9{totalPending.toLocaleString()}
-                </h3>
-                <p className="text-sm text-orange-600 mt-1">
-                  {vendorPayments.filter(p => p.status !== 'paid').length} invoices pending
-                </p>
-              </div>
-              <div className="p-4 bg-orange-100 rounded-full">
-                <Clock className="h-8 w-8 text-orange-600" />
-              </div>
-            </div>
-          </Card>
-          <Card className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-green-700">Paid This Month</p>
-                <h3 className="text-3xl font-bold text-green-800 mt-1">
-                  \u20B9{totalPaid.toLocaleString()}
-                </h3>
-                <p className="text-sm text-green-600 mt-1">
-                  {vendorPayments.filter(p => p.status === 'paid').length} payments processed
-                </p>
-              </div>
-              <div className="p-4 bg-green-100 rounded-full">
-                <CheckCircle className="h-8 w-8 text-green-600" />
-              </div>
-            </div>
-          </Card>
-        </div>
-
+        
         {/* Filters */}
         <Card className="p-4">
           <div className="flex flex-wrap items-center gap-4">
@@ -490,15 +485,10 @@ export default function VendorPaymentsPage() {
                 <SelectItem value="all">All Categories</SelectItem>
                 <SelectItem value="Pest Control">Pest Control</SelectItem>
                 <SelectItem value="Security">Security</SelectItem>
-                <SelectItem value="Housekeeping">Housekeeping</SelectItem>
                 <SelectItem value="Maintenance">Maintenance</SelectItem>
-                <SelectItem value="Landscaping">Landscaping</SelectItem>
+                <SelectItem value="Other">Other</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" className="gap-2">
-              <Filter className="h-4 w-4" />
-              <span>More Filters</span>
-            </Button>
           </div>
         </Card>
 
@@ -512,48 +502,51 @@ export default function VendorPaymentsPage() {
                   <TableHead>Vendor</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Amount</TableHead>
-                  <TableHead>GST</TableHead>
-                  <TableHead>Total</TableHead>
                   <TableHead>Due Date</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredPayments.map((payment) => (
+                {filteredPayments.length === 0 ? (
+                    <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                           No invoices found. Add one to get started.
+                        </TableCell>
+                    </TableRow>
+                ) : filteredPayments.map((payment) => (
                   <TableRow key={payment.id}>
                     <TableCell className="font-medium">{payment.invoiceNumber}</TableCell>
                     <TableCell>
                       <div>
-                        <p className="font-semibold">{payment.vendorName}</p>
+                        <p className="font-semibold">{payment.vendor?.name}</p>
                         <p className="text-xs text-gray-500">{payment.category}</p>
                       </div>
                     </TableCell>
                     <TableCell className="max-w-[200px] truncate text-sm">
                       {payment.description}
                     </TableCell>
-                    <TableCell>\u20B9{payment.amount.toLocaleString()}</TableCell>
-                    <TableCell className="text-sm text-gray-600">
-                      \u20B9{payment.gstAmount.toLocaleString()}
+                    <TableCell>
+                        <div className="flex flex-col">
+                            <span>\u20B9{payment.totalAmount.toLocaleString()}</span>
+                            {payment.gstAmount > 0 && <span className="text-xs text-gray-400">+ GST \u20B9{payment.gstAmount}</span>}
+                        </div>
                     </TableCell>
-                    <TableCell className="font-semibold">
-                      \u20B9{payment.totalAmount.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-sm">{payment.dueDate}</TableCell>
+                    <TableCell className="text-sm">{new Date(payment.dueDate).toLocaleDateString()}</TableCell>
                     <TableCell>
                       <Badge
                         className={
-                          payment.status === 'paid'
+                          payment.status === 'PAID'
                             ? 'bg-green-100 text-green-700 hover:bg-green-100'
-                            : payment.status === 'approved'
+                            : payment.status === 'APPROVED'
                             ? 'bg-blue-100 text-blue-700 hover:bg-blue-100'
                             : 'bg-orange-100 text-orange-700 hover:bg-orange-100'
                         }
                       >
-                        {payment.status === 'paid' && <CheckCircle className="h-3 w-3 mr-1" />}
-                        {payment.status === 'approved' && <Clock className="h-3 w-3 mr-1" />}
-                        {payment.status === 'pending' && <AlertCircle className="h-3 w-3 mr-1" />}
-                        {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
+                        {payment.status === 'PAID' && <CheckCircle className="h-3 w-3 mr-1" />}
+                        {payment.status === 'APPROVED' && <Clock className="h-3 w-3 mr-1" />}
+                        {payment.status === 'PENDING' && <AlertCircle className="h-3 w-3 mr-1" />}
+                        {payment.status}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -561,7 +554,7 @@ export default function VendorPaymentsPage() {
                         <Button variant="ghost" size="icon" title="View Details" onClick={() => setViewingPayment(payment)}>
                           <Eye className="h-4 w-4" />
                         </Button>
-                        {payment.status === 'pending' && (
+                        {payment.status === 'PENDING' && (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -571,7 +564,7 @@ export default function VendorPaymentsPage() {
                             <CheckCircle className="h-4 w-4 text-blue-500" />
                           </Button>
                         )}
-                        {(payment.status === 'pending' || payment.status === 'approved') && (
+                        {(payment.status === 'PENDING' || payment.status === 'APPROVED') && (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -584,7 +577,7 @@ export default function VendorPaymentsPage() {
                             <CreditCard className="h-4 w-4 text-green-500" />
                           </Button>
                         )}
-                        {payment.status === 'paid' && (
+                        {payment.status === 'PAID' && (
                           <Button variant="ghost" size="icon" title="View Receipt">
                             <Receipt className="h-4 w-4 text-gray-500" />
                           </Button>
@@ -604,7 +597,7 @@ export default function VendorPaymentsPage() {
             <DialogHeader>
               <DialogTitle>Make Payment</DialogTitle>
               <DialogDescription>
-                Process payment for {selectedPayment?.vendorName}
+                Process payment for {selectedPayment?.vendor?.name}
               </DialogDescription>
             </DialogHeader>
             {selectedPayment && (
@@ -617,11 +610,7 @@ export default function VendorPaymentsPage() {
                     </div>
                     <div>
                       <p className="text-gray-500">Vendor</p>
-                      <p className="font-medium">{selectedPayment.vendorName}</p>
-                    </div>
-                    <div className="col-span-2">
-                      <p className="text-gray-500">Description</p>
-                      <p className="font-medium">{selectedPayment.description}</p>
+                      <p className="font-medium">{selectedPayment.vendor?.name}</p>
                     </div>
                     <div>
                       <p className="text-gray-500">Amount</p>
@@ -631,13 +620,34 @@ export default function VendorPaymentsPage() {
                     </div>
                     <div>
                       <p className="text-gray-500">Due Date</p>
-                      <p className="font-medium">{selectedPayment.dueDate}</p>
+                      <p className="font-medium">{new Date(selectedPayment.dueDate).toLocaleDateString()}</p>
                     </div>
                   </div>
                 </Card>
                 <div className="space-y-2">
+                    <Label>Pay From (Bank Account) *</Label>
+                    <Select 
+                        value={paymentForm.bankAccountId}
+                        onValueChange={(v) => setPaymentForm({...paymentForm, bankAccountId: v})}
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select Bank Account" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {banks.map(bank => (
+                                <SelectItem key={bank.id} value={bank.id.toString()}>
+                                    {bank.name} - \u20B9{bank.balance.toLocaleString()}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
                   <Label>Payment Method *</Label>
-                  <Select>
+                  <Select 
+                    value={paymentForm.paymentMethod}
+                    onValueChange={(v) => setPaymentForm({...paymentForm, paymentMethod: v})}
+                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select payment method" />
                     </SelectTrigger>
@@ -651,15 +661,27 @@ export default function VendorPaymentsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Payment Date *</Label>
-                  <Input type="date" defaultValue={new Date().toISOString().split('T')[0]} />
+                  <Input 
+                    type="date" 
+                    value={paymentForm.paymentDate}
+                    onChange={(e) => setPaymentForm({...paymentForm, paymentDate: e.target.value})}    
+                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Transaction/Reference ID</Label>
-                  <Input placeholder="Enter transaction ID" />
+                  <Input 
+                    placeholder="Enter transaction ID" 
+                    value={paymentForm.transactionRef}
+                    onChange={(e) => setPaymentForm({...paymentForm, transactionRef: e.target.value})}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Remarks</Label>
-                  <Textarea placeholder="Any payment notes..." rows={2} />
+                  <Textarea 
+                    placeholder="Any payment notes..." rows={2} 
+                    value={paymentForm.remarks}
+                    onChange={(e) => setPaymentForm({...paymentForm, remarks: e.target.value})}
+                  />
                 </div>
                 <div className="flex justify-end space-x-2 pt-4">
                   <Button variant="outline" onClick={() => setIsMakePaymentOpen(false)}>
@@ -691,8 +713,8 @@ export default function VendorPaymentsPage() {
                   <div>
                     <Label className="text-muted-foreground text-xs">Status</Label>
                     <Badge className={
-                      viewingPayment.status === 'paid' ? 'bg-green-100 text-green-700' :
-                      viewingPayment.status === 'approved' ? 'bg-blue-100 text-blue-700' :
+                      viewingPayment.status === 'PAID' ? 'bg-green-100 text-green-700' :
+                      viewingPayment.status === 'APPROVED' ? 'bg-blue-100 text-blue-700' :
                       'bg-orange-100 text-orange-700'
                     }>
                       {viewingPayment.status}
@@ -700,7 +722,7 @@ export default function VendorPaymentsPage() {
                   </div>
                   <div>
                     <Label className="text-muted-foreground text-xs">Vendor</Label>
-                    <p className="font-medium">{viewingPayment.vendorName}</p>
+                    <p className="font-medium">{viewingPayment.vendor?.name}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground text-xs">Category</Label>
@@ -712,18 +734,18 @@ export default function VendorPaymentsPage() {
                   </div>
                   <div>
                     <Label className="text-muted-foreground text-xs">Invoice Date</Label>
-                    <p className="font-medium">{viewingPayment.invoiceDate}</p>
+                    <p className="font-medium">{new Date(viewingPayment.invoiceDate).toLocaleDateString()}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground text-xs">Due Date</Label>
-                    <p className="font-medium">{viewingPayment.dueDate}</p>
+                    <p className="font-medium">{new Date(viewingPayment.dueDate).toLocaleDateString()}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground text-xs">Base Amount</Label>
                     <p className="font-medium">\u20B9{viewingPayment.amount.toLocaleString()}</p>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground text-xs">GST (18%)</Label>
+                    <Label className="text-muted-foreground text-xs">GST</Label>
                     <p className="font-medium">\u20B9{viewingPayment.gstAmount.toLocaleString()}</p>
                   </div>
                   <div className="col-span-2">
@@ -734,7 +756,7 @@ export default function VendorPaymentsPage() {
                     <>
                       <div>
                         <Label className="text-muted-foreground text-xs">Payment Date</Label>
-                        <p className="font-medium">{viewingPayment.paymentDate}</p>
+                        <p className="font-medium">{new Date(viewingPayment.paymentDate).toLocaleDateString()}</p>
                       </div>
                       <div>
                         <Label className="text-muted-foreground text-xs">Payment Method</Label>

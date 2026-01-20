@@ -22,7 +22,7 @@ class TransactionController {
   static async recordIncome(req, res) {
     try {
       console.log('Recording Income:', req.body);
-      const { category, amount, date, receivedFrom, paymentMethod, description, invoiceNo } = req.body;
+      const { category, amount, date, receivedFrom, paymentMethod, description, invoiceNo, bankAccountId } = req.body;
       
       if (!req.user || !req.user.societyId) {
           console.error('User missing societyId:', req.user);
@@ -32,6 +32,14 @@ class TransactionController {
       const parsedAmount = parseFloat(amount);
       if (isNaN(parsedAmount)) {
           return res.status(400).json({ error: 'Invalid amount' });
+      }
+
+            // Verify bank if provided
+      if (bankAccountId) {
+        const bank = await prisma.ledgerAccount.findUnique({ where: { id: parseInt(bankAccountId) } });
+        if (!bank || bank.societyId !== req.user.societyId) {
+            return res.status(400).json({ error: 'Invalid Bank Account' });
+        }
       }
 
       const transaction = await prisma.transaction.create({
@@ -45,7 +53,8 @@ class TransactionController {
           description,
           invoiceNo: invoiceNo || null, 
           status: 'PAID',
-          societyId: req.user.societyId
+          societyId: req.user.societyId,
+          bankAccountId: bankAccountId ? parseInt(bankAccountId) : null
         }
       });
       console.log('Income Recorded:', transaction);
@@ -58,7 +67,16 @@ class TransactionController {
 
   static async recordExpense(req, res) {
     try {
-      const { category, amount, date, paidTo, paymentMethod, description, invoiceNo } = req.body;
+      const { category, amount, date, paidTo, paymentMethod, description, invoiceNo, bankAccountId } = req.body;
+      
+      // Verify bank if provided
+      if (bankAccountId) {
+        const bank = await prisma.ledgerAccount.findUnique({ where: { id: parseInt(bankAccountId) } });
+        if (!bank || bank.societyId !== req.user.societyId) {
+            return res.status(400).json({ error: 'Invalid Bank Account' });
+        }
+      }
+
       const transaction = await prisma.transaction.create({
         data: {
           type: 'EXPENSE',
@@ -70,7 +88,8 @@ class TransactionController {
           invoiceNo,
           description,
           status: 'PAID',
-          societyId: req.user.societyId
+          societyId: req.user.societyId,
+          bankAccountId: bankAccountId ? parseInt(bankAccountId) : null
         }
       });
       res.status(201).json(transaction);

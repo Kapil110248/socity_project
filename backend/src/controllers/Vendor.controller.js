@@ -3,11 +3,19 @@ const prisma = require('../lib/prisma');
 class VendorController {
   static async listSocietalVendors(req, res) {
     try {
+      console.log('Listing vendors for user:', req.user.id, 'Role:', req.user.role, 'Society:', req.user.societyId);
       const vendors = await prisma.vendor.findMany({
-        where: { societyId: req.user.societyId }
+        where: {
+          OR: [
+            { societyId: req.user.societyId },
+            { societyId: null }
+          ]
+        }
       });
+      console.log('Found vendors:', vendors.length);
       res.json(vendors);
     } catch (error) {
+      console.error('List Vendors Error:', error);
       res.status(500).json({ error: error.message });
     }
   }

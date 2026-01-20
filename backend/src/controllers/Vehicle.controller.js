@@ -5,20 +5,39 @@ const prisma = new PrismaClient();
 const getAll = async (req, res) => {
   try {
     const societyId = req.user.societyId;
-    
-    // Get all parking slots with vehicle info
-    const vehicles = await prisma.parkingSlot.findMany({
-      where: { 
-        societyId,
-        vehicleNumber: { not: null }
-      },
+    const { type, status, search } = req.query;
+
+    const where = { societyId };
+
+    if (type && type !== 'all') {
+      where.type = type;
+    }
+
+    if (status && status !== 'all') {
+      where.status = status;
+    }
+
+    if (search) {
+      where.OR = [
+        { number: { contains: search } },
+        { ownerName: { contains: search } },
+        { make: { contains: search } },
+        { unit: { number: { contains: search } } },
+        { unit: { block: { contains: search } } }
+      ];
+    }
+
+    const vehicles = await prisma.unitVehicle.findMany({
+      where,
       include: {
         unit: true
       },
       orderBy: { createdAt: 'desc' }
     });
+
     res.json({ success: true, data: vehicles });
   } catch (error) {
+    console.error('Get Vehicles Error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -26,36 +45,47 @@ const getAll = async (req, res) => {
 // Register vehicle
 const register = async (req, res) => {
   try {
-    const { slotId, vehicleNumber, vehicleType, ownerName } = req.body;
-    
-    const vehicle = await prisma.parkingSlot.update({
-      where: { id: parseInt(slotId) },
+    const { vehicleNumber, vehicleType, make, color, unitId, parkingSlot, ownerName } = req.body;
+    const societyId = req.user.societyId;
+
+    // Check if vehicle number already exists in this society
+    const existing = await prisma.unitVehicle.findFirst({
+        where: { number: vehicleNumber, societyId }
+    });
+
+    if (existing) {
+        return res.status(400).json({ success: false, message: 'Vehicle number already registered' });
+    }
+
+    const vehicle = await prisma.unitVehicle.create({
       data: {
-        vehicleNumber,
+        societyId,
+        number: vehicleNumber,
         type: vehicleType,
-        status: 'ALLOCATED'
+        make,
+        color,
+        unitId: parseInt(unitId), // Ensure Int
+        parkingSlot,
+        ownerName,
+        status: 'verified' // Default to verified for admin
       }
     });
+
     res.json({ success: true, data: vehicle });
   } catch (error) {
+    console.error('Register Vehicle Error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Remove vehicle from slot
+// Remove vehicle
 const remove = async (req, res) => {
   try {
     const { id } = req.params;
-    
-    const vehicle = await prisma.parkingSlot.update({
-      where: { id: parseInt(id) },
-      data: {
-        vehicleNumber: null,
-        status: 'VACANT',
-        allocatedToUnitId: null
-      }
+    await prisma.unitVehicle.delete({
+      where: { id: parseInt(id) }
     });
-    res.json({ success: true, message: 'Vehicle removed from slot' });
+    res.json({ success: true, message: 'Vehicle removed' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -66,24 +96,20 @@ const getStats = async (req, res) => {
   try {
     const societyId = req.user.societyId;
     
-    const [total, twoWheeler, fourWheeler] = await Promise.all([
-      prisma.parkingSlot.count({ 
-        where: { societyId, vehicleNumber: { not: null } } 
-      }),
-      prisma.parkingSlot.count({ 
-        where: { societyId, type: '2-Wheeler', vehicleNumber: { not: null } } 
-      }),
-      prisma.parkingSlot.count({ 
-        where: { societyId, type: '4-Wheeler', vehicleNumber: { not: null } } 
-      })
+    const [total, cars, twoWheelers, verified] = await Promise.all([
+      prisma.unitVehicle.count({ where: { societyId } }),
+      prisma.unitVehicle.count({ where: { societyId, type: 'Car' } }),
+      prisma.unitVehicle.count({ where: { societyId, type: 'Two Wheeler' } }),
+      prisma.unitVehicle.count({ where: { societyId, status: 'verified' } })
     ]);
     
     res.json({
       success: true,
       data: {
         total,
-        twoWheeler,
-        fourWheeler
+        cars,
+        twoWheelers,
+        verified
       }
     });
   } catch (error) {
@@ -91,4 +117,21 @@ const getStats = async (req, res) => {
   }
 };
 
-module.exports = { getAll, register, remove, getStats };
+// Update vehicle status
+const updateStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body; // 'verified' or 'pending' (or others like 'inactive')
+    
+    const vehicle = await prisma.unitVehicle.update({
+      where: { id: parseInt(id) },
+      data: { status }
+    });
+    
+    res.json({ success: true, data: vehicle });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { getAll, register, remove, getStats, updateStatus };

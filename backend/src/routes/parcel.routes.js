@@ -8,6 +8,9 @@ router.use(authenticate);
 // List all parcels
 router.get('/', ParcelController.getAll);
 
+// Get stats
+router.get('/stats', ParcelController.getStats);
+
 // Get single parcel
 router.get('/:id', ParcelController.getById);
 

@@ -29,6 +29,8 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table'
+import { useQuery } from '@tanstack/react-query'
+import SecurityService from '@/services/securityService'
 
 // Mock Data for Incidents
 const incidentLogs = [
@@ -95,6 +97,18 @@ const patrollingLogs = [
 export default function SecurityLogsPage() {
     const [activeTab, setActiveTab] = useState('incidents')
     const [searchQuery, setSearchQuery] = useState('')
+
+    // Fetch Incidents
+    const { data: incidentLogs = [], isLoading: isIncidentsLoading } = useQuery({
+        queryKey: ['incidents', searchQuery],
+        queryFn: () => SecurityService.getAllIncidents({ search: searchQuery }),
+    })
+
+    // Fetch Patrol Logs
+    const { data: patrollingLogs = [], isLoading: isPatrolsLoading } = useQuery({
+        queryKey: ['patrolLogs'],
+        queryFn: () => SecurityService.getAllPatrolLogs(),
+    })
 
     const getSeverityColor = (severity: string) => {
         switch (severity) {
@@ -173,19 +187,24 @@ export default function SecurityLogsPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {incidentLogs.map((log) => (
+                                    {isIncidentsLoading ? (
+                                        <TableRow><TableCell colSpan={6} className="text-center py-8">Loading...</TableCell></TableRow>
+                                    ) : incidentLogs.length === 0 ? (
+                                        <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No incidents found</TableCell></TableRow>
+                                    ) : (
+                                        incidentLogs.map((log: any) => (
                                         <TableRow key={log.id}>
-                                            <TableCell className="font-mono text-xs font-semibold">{log.id}</TableCell>
+                                            <TableCell className="font-mono text-xs font-semibold">#INC-{log.id}</TableCell>
                                             <TableCell>
                                                 <div>
                                                     <p className="font-bold text-gray-900">{log.title}</p>
                                                     <p className="text-xs text-muted-foreground line-clamp-1">{log.description}</p>
                                                     <div className="flex items-center gap-2 mt-1">
                                                         <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                                                            <MapPin className="h-3 w-3" /> {log.location}
+                                                            <MapPin className="h-3 w-3" /> {log.location || 'N/A'}
                                                         </span>
                                                         <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                                                            <Clock className="h-3 w-3" /> {log.timestamp}
+                                                            <Clock className="h-3 w-3" /> {new Date(log.createdAt).toLocaleString()}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -198,13 +217,16 @@ export default function SecurityLogsPage() {
                                             <TableCell>
                                                 <div className="flex items-center gap-2">
                                                     <div className="h-7 w-7 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-700">
-                                                        {log.guard.split(' ')[0][0]}{log.guard.split(' ')[1]?.[0] || ''}
+                                                        {log.reportedBy?.name?.charAt(0) || 'U'}
                                                     </div>
-                                                    <span className="text-xs">{log.guard}</span>
+                                                    <span className="text-xs">{log.reportedBy?.name || 'Unknown'}</span>
                                                 </div>
                                             </TableCell>
                                             <TableCell>
-                                                <Badge variant={log.status === 'resolved' ? 'secondary' : 'default'} className="bg-green-50 text-green-700 border-green-100 uppercase text-[10px]">
+                                                <Badge
+                                                    variant={log.status === 'resolved' ? 'secondary' : 'default'}
+                                                    className={`uppercase text-[10px] ${log.status === 'resolved' ? 'bg-green-50 text-green-700 border-green-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}
+                                                >
                                                     {log.status}
                                                 </Badge>
                                             </TableCell>
@@ -212,7 +234,7 @@ export default function SecurityLogsPage() {
                                                 <Button variant="ghost" size="sm">View</Button>
                                             </TableCell>
                                         </TableRow>
-                                    ))}
+                                    )))}
                                 </TableBody>
                             </Table>
                         </Card>
@@ -232,18 +254,23 @@ export default function SecurityLogsPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {patrollingLogs.map((log) => (
+                                    {isPatrolsLoading ? (
+                                        <TableRow><TableCell colSpan={6} className="text-center py-8">Loading...</TableCell></TableRow>
+                                    ) : patrollingLogs.length === 0 ? (
+                                        <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No patrol logs found</TableCell></TableRow>
+                                    ) : (
+                                        patrollingLogs.map((log: any) => (
                                         <TableRow key={log.id}>
-                                            <TableCell className="font-mono text-xs font-semibold">{log.id}</TableCell>
+                                            <TableCell className="font-mono text-xs font-semibold">#PAT-{log.id}</TableCell>
                                             <TableCell>
                                                 <div className="flex items-center gap-2">
                                                     <User className="h-4 w-4 text-blue-500" />
-                                                    <span className="text-sm">{log.guard}</span>
+                                                    <span className="text-sm">{log.guard?.name || 'Unknown'}</span>
                                                 </div>
                                             </TableCell>
                                             <TableCell className="text-sm font-medium">{log.area}</TableCell>
-                                            <TableCell className="text-sm text-muted-foreground">{log.time}</TableCell>
-                                            <TableCell className="text-sm max-w-xs truncate">{log.notes}</TableCell>
+                                            <TableCell className="text-sm text-muted-foreground">{new Date(log.startTime).toLocaleString()}</TableCell>
+                                            <TableCell className="text-sm max-w-xs truncate">{log.notes || '-'}</TableCell>
                                             <TableCell>
                                                 <Badge className="bg-green-50 text-green-700 border-green-100 shadow-none uppercase text-[10px]">
                                                     <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -251,7 +278,7 @@ export default function SecurityLogsPage() {
                                                 </Badge>
                                             </TableCell>
                                         </TableRow>
-                                    ))}
+                                    )))}
                                 </TableBody>
                             </Table>
                         </Card>

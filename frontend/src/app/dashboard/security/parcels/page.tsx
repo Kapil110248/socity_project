@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Eye,
   Truck,
+  Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,122 +38,146 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import ParcelService from '@/services/parcelService'
+import api from '@/lib/api'
+import toast from 'react-hot-toast'
 
-const stats = [
-  {
-    title: 'Total Parcels',
-    value: '856',
-    change: '+45',
-    icon: Package,
-    color: 'blue',
-  },
-  {
-    title: 'Pending Pickup',
-    value: '124',
-    change: '+12',
-    icon: Clock,
-    color: 'orange',
-  },
-  {
-    title: 'Delivered',
-    value: '705',
-    change: '+32',
-    icon: CheckCircle,
-    color: 'green',
-  },
-  {
-    title: 'Overdue',
-    value: '27',
-    change: '+3',
-    icon: AlertCircle,
-    color: 'red',
-  },
-]
-
-const parcels = [
-  {
-    id: 'PCL-001',
-    trackingNumber: 'AMZ123456789',
-    unit: 'A-101',
-    resident: 'Rajesh Kumar',
-    courier: 'Amazon',
-    receivedDate: '2025-01-02',
-    receivedTime: '10:30 AM',
-    status: 'collected',
-    collectedDate: '2025-01-02',
-    collectedTime: '06:45 PM',
-    description: 'Large box',
-  },
-  {
-    id: 'PCL-002',
-    trackingNumber: 'FLIP987654321',
-    unit: 'B-205',
-    resident: 'Priya Sharma',
-    courier: 'Flipkart',
-    receivedDate: '2025-01-03',
-    receivedTime: '02:15 PM',
-    status: 'pending',
-    collectedDate: null,
-    collectedTime: null,
-    description: 'Medium package',
-  },
-  {
-    id: 'PCL-003',
-    trackingNumber: 'DTDC456789123',
-    unit: 'C-304',
-    resident: 'Amit Patel',
-    courier: 'DTDC',
-    receivedDate: '2025-01-03',
-    receivedTime: '11:00 AM',
-    status: 'pending',
-    collectedDate: null,
-    collectedTime: null,
-    description: 'Small envelope',
-  },
-  {
-    id: 'PCL-004',
-    trackingNumber: 'BDT741852963',
-    unit: 'A-502',
-    resident: 'Neha Gupta',
-    courier: 'BlueDart',
-    receivedDate: '2024-12-28',
-    receivedTime: '09:00 AM',
-    status: 'overdue',
-    collectedDate: null,
-    collectedTime: null,
-    description: 'Large package',
-  },
-  {
-    id: 'PCL-005',
-    trackingNumber: 'FED159753468',
-    unit: 'D-108',
-    resident: 'Vikram Singh',
-    courier: 'FedEx',
-    receivedDate: '2025-01-04',
-    receivedTime: '03:30 PM',
-    status: 'collected',
-    collectedDate: '2025-01-04',
-    collectedTime: '07:00 PM',
-    description: 'Medium box',
-  },
-]
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 export default function ParcelsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [viewParcel, setViewParcel] = useState<any>(null)
+  const [markCollectedId, setMarkCollectedId] = useState<number | null>(null)
+  const queryClient = useQueryClient()
 
-  const filteredParcels = parcels.filter((parcel) => {
-    const matchesSearch =
-      parcel.trackingNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      parcel.unit.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      parcel.resident.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      parcel.courier.toLowerCase().includes(searchQuery.toLowerCase())
-
-    const matchesStatus = statusFilter === 'all' || parcel.status === statusFilter
-
-    return matchesSearch && matchesStatus
+  // Form State
+  const [formData, setFormData] = useState({
+    trackingNumber: '',
+    unitId: '',
+    courierName: '',
+    description: '',
+    remarks: '',
+    receivedBy: 'Gate Keeper', // Default or from user context
   })
+
+  // Fetch Stats
+  const { data: statsData } = useQuery({
+    queryKey: ['parcelStats'],
+    queryFn: ParcelService.getStats
+  })
+
+  // Fetch Parcels
+  const { data: parcels = [], isLoading } = useQuery({
+    queryKey: ['parcels', statusFilter, searchQuery],
+    queryFn: () => ParcelService.getAll({ 
+        status: statusFilter,
+        search: searchQuery
+    })
+  })
+
+  // Fetch Units for dropdown
+  const { data: units = [] } = useQuery({
+    queryKey: ['units'],
+    queryFn: async () => {
+         const res = await api.get('/units') 
+         return res.data
+    }
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (data: any) => ParcelService.create({
+        ...data,
+        unitId: parseInt(data.unitId)
+    }),
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['parcels'] })
+        queryClient.invalidateQueries({ queryKey: ['parcelStats'] })
+        setIsAddDialogOpen(false)
+        setFormData({
+            trackingNumber: '',
+            unitId: '',
+            courierName: '',
+            description: '',
+            remarks: '',
+            receivedBy: 'Gate Keeper'
+        })
+        toast.success('Parcel added successfully')
+    },
+    onError: (error: any) => {
+        toast.error(error.response?.data?.message || 'Failed to add parcel')
+    }
+  })
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) => 
+      ParcelService.updateStatus(id, status, 'Gate Keeper'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parcels'] })
+      queryClient.invalidateQueries({ queryKey: ['parcelStats'] })
+      setMarkCollectedId(null)
+      toast.success('Parcel status updated')
+    },
+    onError: (error: any) => {
+      toast.error('Failed to update status')
+    }
+  })
+
+  const handleAddParcel = () => {
+    if(!formData.trackingNumber || !formData.unitId || !formData.courierName) {
+        toast.error('Please fill required fields')
+        return
+    }
+    createMutation.mutate(formData)
+  }
+
+  const handleMarkCollected = () => {
+    if(markCollectedId) {
+        statusMutation.mutate({ id: markCollectedId, status: 'COLLECTED' })
+    }
+  }
+
+  const stats = [
+    {
+      title: 'Total Parcels',
+      value: statsData?.total || 0,
+    //   change: '+45',
+      icon: Package,
+      color: 'blue',
+    },
+    {
+      title: 'Pending Pickup',
+      value: statsData?.pending || 0,
+    //   change: '+12',
+      icon: Clock,
+      color: 'orange',
+    },
+    {
+      title: 'Delivered',
+      value: statsData?.delivered || 0,
+    //   change: '+32',
+      icon: CheckCircle,
+      color: 'green',
+    },
+    {
+      title: 'Overdue',
+      value: statsData?.overdue || 0,
+    //   change: '+3',
+      icon: AlertCircle,
+      color: 'red',
+    },
+  ]
 
   return (
     <RoleGuard allowedRoles={['admin', 'guard']}>
@@ -189,18 +214,29 @@ export default function ParcelsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Tracking Number</Label>
-                    <Input placeholder="AMZ123456789" />
+                    <Input 
+                        placeholder="AMZ123456789" 
+                        value={formData.trackingNumber}
+                        onChange={(e) => setFormData({...formData, trackingNumber: e.target.value})}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Unit Number</Label>
-                    <Select>
+                    <Select 
+                        value={formData.unitId} 
+                        onValueChange={(val) => setFormData({...formData, unitId: val})}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select unit" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="a-101">A-101</SelectItem>
-                        <SelectItem value="a-102">A-102</SelectItem>
-                        <SelectItem value="b-201">B-201</SelectItem>
+                        {units.length > 0 ? units.map((unit: any) => (
+                            <SelectItem key={unit.id} value={unit.id.toString()}>
+                                {unit.block}-{unit.number}
+                            </SelectItem>
+                        )) : (
+                            <SelectItem value="no-units" disabled>No units found</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -208,39 +244,52 @@ export default function ParcelsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Courier Service</Label>
-                    <Select>
+                    <Select 
+                        value={formData.courierName} 
+                        onValueChange={(val) => setFormData({...formData, courierName: val})}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select courier" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="amazon">Amazon</SelectItem>
-                        <SelectItem value="flipkart">Flipkart</SelectItem>
-                        <SelectItem value="bluedart">BlueDart</SelectItem>
-                        <SelectItem value="dtdc">DTDC</SelectItem>
-                        <SelectItem value="fedex">FedEx</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
+                        <SelectItem value="Amazon">Amazon</SelectItem>
+                        <SelectItem value="Flipkart">Flipkart</SelectItem>
+                        <SelectItem value="BlueDart">BlueDart</SelectItem>
+                        <SelectItem value="DTDC">DTDC</SelectItem>
+                        <SelectItem value="FedEx">FedEx</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Received Time</Label>
-                    <Input type="time" />
+                    <Input type="time" disabled defaultValue={new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })} />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Description</Label>
-                  <Input placeholder="Package size and type" />
+                  <Input 
+                        placeholder="Package size and type" 
+                        value={formData.description}
+                        onChange={(e) => setFormData({...formData, description: e.target.value})}
+                    />
                 </div>
+                {/* 
                 <div className="space-y-2">
                   <Label>Remarks</Label>
                   <Input placeholder="Optional notes" />
-                </div>
+                </div> 
+                */}
                 <div className="flex justify-end space-x-2 pt-4">
                   <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button className="bg-blue-600 hover:bg-blue-700">
-                    Add Parcel
+                  <Button 
+                    className="bg-blue-600 hover:bg-blue-700"
+                    onClick={handleAddParcel}
+                    disabled={createMutation.isPending}
+                  >
+                    {createMutation.isPending ? 'Adding...' : 'Add Parcel'}
                   </Button>
                 </div>
               </div>
@@ -269,9 +318,6 @@ export default function ParcelsPage() {
                     <h3 className="text-2xl font-bold text-gray-900 mt-2">
                       {stat.value}
                     </h3>
-                    <p className={`text-sm mt-1 ${stat.color === 'red' ? 'text-red-600' : 'text-green-600'}`}>
-                      {stat.change}
-                    </p>
                   </div>
                   <div
                     className={`p-3 rounded-xl ${
@@ -322,9 +368,9 @@ export default function ParcelsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="collected">Collected</SelectItem>
-              <SelectItem value="overdue">Overdue</SelectItem>
+              <SelectItem value="PENDING">Pending</SelectItem>
+              <SelectItem value="COLLECTED">Collected</SelectItem>
+              <SelectItem value="OVERDUE">Overdue</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" className="space-x-2">
@@ -351,47 +397,56 @@ export default function ParcelsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredParcels.map((parcel) => (
+            {isLoading ? (
+                <TableRow><TableCell colSpan={9} className="text-center py-8"><Loader2 className="animate-spin h-8 w-8 mx-auto"/></TableCell></TableRow>
+            ) : parcels.length === 0 ? (
+                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No parcels found</TableCell></TableRow>
+            ) : (
+                parcels.map((parcel: any) => (
               <TableRow key={parcel.id}>
-                <TableCell className="font-medium">{parcel.id}</TableCell>
+                <TableCell className="font-medium">#PCL-{parcel.id}</TableCell>
                 <TableCell className="font-mono text-sm">{parcel.trackingNumber}</TableCell>
-                <TableCell>{parcel.unit}</TableCell>
-                <TableCell>{parcel.resident}</TableCell>
+                <TableCell>
+                    <Badge variant="outline">
+                        {parcel.unit ? `${parcel.unit.block}-${parcel.unit.number}` : 'N/A'}
+                    </Badge>
+                </TableCell>
+                <TableCell>{parcel.unit?.tenant?.name || parcel.unit?.owner?.name || 'Unknown'}</TableCell>
                 <TableCell>
                   <div className="flex items-center space-x-2">
                     <Truck className="h-4 w-4 text-gray-400" />
-                    <span>{parcel.courier}</span>
+                    <span>{parcel.courierName}</span>
                   </div>
                 </TableCell>
                 <TableCell>
                   <div className="text-sm">
-                    <div className="font-medium">{parcel.receivedDate}</div>
-                    <div className="text-gray-500">{parcel.receivedTime}</div>
+                    <div className="font-medium">{new Date(parcel.createdAt).toLocaleDateString()}</div>
+                    <div className="text-gray-500">{new Date(parcel.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                   </div>
                 </TableCell>
                 <TableCell>{parcel.description}</TableCell>
                 <TableCell>
                   <Badge
                     variant={
-                      parcel.status === 'collected'
+                      parcel.status === 'COLLECTED'
                         ? 'default'
-                        : parcel.status === 'overdue'
+                        : parcel.status === 'OVERDUE'
                         ? 'destructive'
                         : 'secondary'
                     }
                     className={
-                      parcel.status === 'collected'
+                      parcel.status === 'COLLECTED'
                         ? 'bg-green-100 text-green-700 hover:bg-green-100'
-                        : parcel.status === 'overdue'
+                        : parcel.status === 'OVERDUE'
                         ? 'bg-red-100 text-red-700 hover:bg-red-100'
                         : 'bg-orange-100 text-orange-700 hover:bg-orange-100'
                     }
                   >
-                    {parcel.status === 'collected' && (
+                    {parcel.status === 'COLLECTED' && (
                       <CheckCircle className="h-3 w-3 mr-1" />
                     )}
-                    {parcel.status === 'overdue' && <AlertCircle className="h-3 w-3 mr-1" />}
-                    {parcel.status === 'pending' && <Clock className="h-3 w-3 mr-1" />}
+                    {parcel.status === 'OVERDUE' && <AlertCircle className="h-3 w-3 mr-1" />}
+                    {parcel.status === 'PENDING' && <Clock className="h-3 w-3 mr-1" />}
                     {parcel.status}
                   </Badge>
                 </TableCell>
@@ -401,16 +456,16 @@ export default function ParcelsPage() {
                       variant="ghost"
                       size="icon"
                       title="View Details"
-                      onClick={() => alert(`Parcel Details:\n\nID: ${parcel.id}\nTracking: ${parcel.trackingNumber}\nUnit: ${parcel.unit}\nResident: ${parcel.resident}\nCourier: ${parcel.courier}\nReceived: ${parcel.receivedDate} ${parcel.receivedTime}\nDescription: ${parcel.description}\nStatus: ${parcel.status}${parcel.collectedDate ? `\nCollected: ${parcel.collectedDate} ${parcel.collectedTime}` : ''}`)}
+                      onClick={() => setViewParcel(parcel)}
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
-                    {parcel.status === 'pending' && (
+                    {parcel.status === 'PENDING' && (
                       <Button
                         variant="ghost"
                         size="sm"
                         className="text-green-600 hover:text-green-700"
-                        onClick={() => alert(`Parcel ${parcel.id} marked as collected!\n\nResident ${parcel.resident} from ${parcel.unit} will be notified.`)}
+                        onClick={() => setMarkCollectedId(parcel.id)}
                       >
                         Mark Collected
                       </Button>
@@ -418,10 +473,99 @@ export default function ParcelsPage() {
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+            )))}
           </TableBody>
         </Table>
       </Card>
+
+      {/* View Details Dialog */}
+      <Dialog open={!!viewParcel} onOpenChange={(open) => !open && setViewParcel(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Parcel Details</DialogTitle>
+            <DialogDescription>
+                Detailed information for Parcel #{viewParcel?.id}
+            </DialogDescription>
+          </DialogHeader>
+          {viewParcel && (
+            <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <p className="text-muted-foreground">Tracking Number</p>
+                        <p className="font-medium font-mono">{viewParcel.trackingNumber}</p>
+                    </div>
+                    <div>
+                        <p className="text-muted-foreground">Status</p>
+                        <Badge variant="outline" className={viewParcel.status === 'COLLECTED' ? 'text-green-600 border-green-200 bg-green-50' : viewParcel.status === 'OVERDUE' ? 'text-red-600 border-red-200 bg-red-50' : 'text-orange-600 border-orange-200 bg-orange-50'}>
+                            {viewParcel.status}
+                        </Badge>
+                    </div>
+                    <div>
+                        <p className="text-muted-foreground">Unit</p>
+                        <p className="font-medium">{viewParcel.unit?.block}-{viewParcel.unit?.number}</p>
+                    </div>
+                    <div>
+                        <p className="text-muted-foreground">Resident</p>
+                        <p className="font-medium">{viewParcel.unit?.tenant?.name || viewParcel.unit?.owner?.name || 'Unknown'}</p>
+                    </div>
+                    <div>
+                        <p className="text-muted-foreground">Courier</p>
+                        <p className="font-medium">{viewParcel.courierName}</p>
+                    </div>
+                    <div>
+                        <p className="text-muted-foreground">Description</p>
+                        <p className="font-medium">{viewParcel.description}</p>
+                    </div>
+                    <div>
+                        <p className="text-muted-foreground">Received At</p>
+                        <p className="font-medium">{new Date(viewParcel.createdAt).toLocaleString()}</p>
+                    </div>
+                     <div>
+                        <p className="text-muted-foreground">Received By</p>
+                        <p className="font-medium">{viewParcel.receivedBy}</p>
+                    </div>
+                    {viewParcel.collectedAt && (
+                         <>
+                            <div>
+                                <p className="text-muted-foreground">Collected At</p>
+                                <p className="font-medium">{new Date(viewParcel.collectedAt).toLocaleString()}</p>
+                            </div>
+                             <div>
+                                <p className="text-muted-foreground">Collected By</p>
+                                <p className="font-medium">{viewParcel.collectedBy}</p>
+                            </div>
+                        </>
+                    )}
+                </div>
+                <div className="flex justify-end pt-4">
+                     <Button variant="outline" onClick={() => setViewParcel(null)}>Close</Button>
+                </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Mark Collected Alert Dialog */}
+      <AlertDialog open={!!markCollectedId} onOpenChange={(open) => !open && setMarkCollectedId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark Parcel as Collected?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action will update the status of the parcel to "COLLECTED" and record the current time. This cannot be undone clearly.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+                className="bg-green-600 hover:bg-green-700"
+                onClick={handleMarkCollected}
+            >
+                Confirm Collection
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
     </RoleGuard>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   PackageCheck,
@@ -18,6 +18,7 @@ import {
   Truck,
   Package,
   ClipboardCheck,
+  Loader2,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -44,116 +45,133 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog'
-
-const goodsReceipts = [
-  {
-    id: 'GR-2025-001',
-    poReference: 'PO-2025-002',
-    date: '2025-12-19',
-    vendor: 'CleanPro Solutions',
-    description: 'Monthly cleaning supplies',
-    type: 'goods',
-    items: [
-      { name: 'Floor Cleaner (5L)', ordered: 20, received: 20, rejected: 0, status: 'complete' },
-      { name: 'Mops', ordered: 10, received: 10, rejected: 0, status: 'complete' },
-      { name: 'Garbage Bags (Roll)', ordered: 50, received: 50, rejected: 0, status: 'complete' },
-    ],
-    status: 'completed',
-    receivedBy: 'Store Keeper',
-    qualityChecked: true,
-    invoiceNo: 'INV-CP-2025-456',
-  },
-  {
-    id: 'GR-2025-002',
-    poReference: 'PO-2025-003',
-    date: '2025-12-18',
-    vendor: 'SecureTech Systems',
-    description: 'Fire safety equipment service',
-    type: 'service',
-    items: [
-      { name: 'Fire Extinguisher Service', ordered: 20, received: 15, rejected: 0, status: 'partial' },
-      { name: 'Smoke Detector Battery', ordered: 50, received: 50, rejected: 2, status: 'complete' },
-      { name: 'Fire Hose Inspection', ordered: 10, received: 0, rejected: 0, status: 'pending' },
-    ],
-    status: 'partial',
-    receivedBy: 'Security Supervisor',
-    qualityChecked: true,
-    invoiceNo: null,
-  },
-  {
-    id: 'GR-2025-003',
-    poReference: 'PO-2025-001',
-    date: '2025-12-17',
-    vendor: 'Green Gardens Supplies',
-    description: 'Garden maintenance equipment',
-    type: 'goods',
-    items: [
-      { name: 'Garden Shears', ordered: 5, received: 5, rejected: 1, status: 'complete' },
-      { name: 'Lawn Mower', ordered: 1, received: 1, rejected: 0, status: 'complete' },
-      { name: 'Fertilizer (50kg)', ordered: 10, received: 8, rejected: 0, status: 'partial' },
-    ],
-    status: 'partial',
-    receivedBy: 'Garden Supervisor',
-    qualityChecked: true,
-    invoiceNo: 'INV-GG-2025-123',
-  },
-  {
-    id: 'SR-2025-001',
-    poReference: null,
-    date: '2025-12-16',
-    vendor: 'TechFix Services',
-    description: 'Elevator maintenance - Annual service',
-    type: 'service',
-    items: [
-      { name: 'Elevator A - Service', ordered: 1, received: 1, rejected: 0, status: 'complete' },
-      { name: 'Elevator B - Service', ordered: 1, received: 1, rejected: 0, status: 'complete' },
-      { name: 'Elevator C - Service', ordered: 1, received: 1, rejected: 0, status: 'complete' },
-    ],
-    status: 'completed',
-    receivedBy: 'Admin Manager',
-    qualityChecked: true,
-    invoiceNo: 'TF-SVC-2025-089',
-  },
-]
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { ReceiptService } from '@/services/receiptService'
+import { VendorService } from '@/services/vendor.service'
+import { PurchaseOrderService } from '@/services/purchaseOrderService'
+import { toast } from 'react-hot-toast'
 
 export default function GoodsReceiptsPage() {
+  const [data, setData] = useState<any[]>([])
+  const [statsData, setStatsData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedGR, setSelectedGR] = useState<typeof goodsReceipts[0] | null>(null)
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  
+  const [selectedGR, setSelectedGR] = useState<any | null>(null)
+  const [isNewOpen, setIsNewOpen] = useState(false)
+  const [vendors, setVendors] = useState<any[]>([])
+  const [purchaseOrders, setPurchaseOrders] = useState<any[]>([])
+
+  // Form State
+  const [formData, setFormData] = useState({
+     vendorId: '',
+     poId: '',
+     type: 'GOODS',
+     description: '',
+     invoiceNumber: '',
+     receivedBy: '',
+     items: [{ name: '', ordered: 0, received: 0, rejected: 0, status: 'complete' }]
+  })
+
+  const fetchData = async () => {
+    try {
+      setLoading(true)
+      const [list, stats] = await Promise.all([
+        ReceiptService.getAll(typeFilter, statusFilter, searchQuery),
+        ReceiptService.getStats()
+      ])
+      setData(list)
+      setStatsData(stats)
+    } catch (error) {
+       console.error(error)
+       toast.error('Failed to load receipts')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+     fetchData()
+  }, [typeFilter, statusFilter, searchQuery])
+
+  useEffect(() => {
+     if(isNewOpen) {
+         VendorService.getAll().then(setVendors)
+         PurchaseOrderService.getAll('SENT', 'current').then(setPurchaseOrders) // Get SENT POs
+     }
+  }, [isNewOpen])
+
+  const handleCreate = async () => {
+     if(!formData.vendorId) {
+         toast.error('Vendor is required');
+         return;
+     }
+
+     try {
+         await ReceiptService.create(formData);
+         toast.success('Receipt created successfully');
+         setIsNewOpen(false);
+         fetchData();
+         setFormData({
+            vendorId: '',
+            poId: '',
+            type: 'GOODS',
+            description: '',
+            invoiceNumber: '',
+            receivedBy: '',
+            items: [{ name: '', ordered: 0, received: 0, rejected: 0, status: 'complete' }]
+         });
+     } catch(error: any) {
+         toast.error(error.response?.data?.error || 'Failed to create receipt');
+     }
+  }
+
+  const handleQC = async (id: number, status: string) => {
+      try {
+          await ReceiptService.updateQC(id, status);
+          toast.success('QC status updated');
+          if(selectedGR?.id === id) {
+              setSelectedGR({...selectedGR, qualityCheckStatus: status});
+          }
+          fetchData();
+      } catch(error) {
+          toast.error('Failed to update QC');
+      }
+  }
+  
+  const addItem = () => {
+      setFormData({...formData, items: [...formData.items, { name: '', ordered: 0, received: 0, rejected: 0, status: 'complete' }]});
+  }
+  
+  const updateItem = (index: number, field: string, value: any) => {
+      const items = [...formData.items];
+      items[index] = { ...items[index], [field]: value };
+      setFormData({...formData, items});
+  }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'completed':
+      case 'COMPLETED':
         return <Badge className="bg-green-100 text-green-800"><CheckCircle className="h-3 w-3 mr-1" /> Completed</Badge>
-      case 'partial':
+      case 'PARTIAL':
         return <Badge className="bg-yellow-100 text-yellow-800"><Clock className="h-3 w-3 mr-1" /> Partial</Badge>
-      case 'pending':
+      case 'PENDING':
         return <Badge variant="secondary"><Package className="h-3 w-3 mr-1" /> Pending</Badge>
-      case 'rejected':
-        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" /> Rejected</Badge>
       default:
         return <Badge variant="outline">{status}</Badge>
     }
   }
 
-  const getItemStatusBadge = (status: string) => {
-    switch (status) {
-      case 'complete':
-        return <Badge className="bg-green-100 text-green-800 text-xs">Complete</Badge>
-      case 'partial':
-        return <Badge className="bg-yellow-100 text-yellow-800 text-xs">Partial</Badge>
-      case 'pending':
-        return <Badge variant="secondary" className="text-xs">Pending</Badge>
-      default:
-        return <Badge variant="outline" className="text-xs">{status}</Badge>
-    }
-  }
-
   const stats = [
-    { label: 'Total Receipts', value: goodsReceipts.length, icon: PackageCheck, color: 'bg-blue-500' },
-    { label: 'Completed', value: goodsReceipts.filter(g => g.status === 'completed').length, icon: CheckCircle, color: 'bg-green-500' },
-    { label: 'Partial', value: goodsReceipts.filter(g => g.status === 'partial').length, icon: Clock, color: 'bg-yellow-500' },
-    { label: 'Pending QC', value: goodsReceipts.filter(g => !g.qualityChecked).length, icon: ClipboardCheck, color: 'bg-orange-500' },
+    { label: 'Total Receipts', value: statsData?.total || 0, icon: PackageCheck, color: 'bg-blue-500' },
+    { label: 'Completed', value: statsData?.completed || 0, icon: CheckCircle, color: 'bg-green-500' },
+    { label: 'Partial', value: statsData?.partial || 0, icon: Clock, color: 'bg-yellow-500' },
+    { label: 'Pending QC', value: statsData?.pendingQC || 0, icon: ClipboardCheck, color: 'bg-orange-500' },
   ]
 
   return (
@@ -172,10 +190,90 @@ export default function GoodsReceiptsPage() {
             <Download className="h-4 w-4" />
             Export
           </Button>
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            New Receipt
-          </Button>
+          <Dialog open={isNewOpen} onOpenChange={setIsNewOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                New Receipt
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader><DialogTitle>Create New Receipt</DialogTitle></DialogHeader>
+                <div className="grid grid-cols-2 gap-4 py-4">
+                    <div className="space-y-2">
+                        <Label>Type</Label>
+                        <Select value={formData.type} onValueChange={(v) => setFormData({...formData, type: v})}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="GOODS">Goods Receipt</SelectItem>
+                                <SelectItem value="SERVICE">Service Receipt</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Vendor</Label>
+                        <Select value={formData.vendorId} onValueChange={(v) => setFormData({...formData, vendorId: v})}>
+                            <SelectTrigger><SelectValue placeholder="Select Vendor" /></SelectTrigger>
+                            <SelectContent>
+                                {vendors.map(v => <SelectItem key={v.id} value={v.id.toString()}>{v.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Link Purchase Order (Optional)</Label>
+                        <Select value={formData.poId} onValueChange={(v) => setFormData({...formData, poId: v === 'none' ? '' : v})}>
+                            <SelectTrigger><SelectValue placeholder="Select PO" /></SelectTrigger>
+                             <SelectContent>
+                                <SelectItem value="none">None</SelectItem>
+                                {purchaseOrders.map(po => <SelectItem key={po.id} value={po.id.toString()}>{po.poNumber} ({po.status})</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                     <div className="space-y-2">
+                        <Label>Received By</Label>
+                        <Input value={formData.receivedBy} onChange={e => setFormData({...formData, receivedBy: e.target.value})} placeholder="Person Name" />
+                    </div>
+                     <div className="space-y-2">
+                        <Label>Invoice Number (Optional)</Label>
+                        <Input value={formData.invoiceNumber} onChange={e => setFormData({...formData, invoiceNumber: e.target.value})} />
+                    </div>
+                    <div className="col-span-2 space-y-2">
+                        <Label>Description</Label>
+                        <Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
+                    </div>
+                </div>
+                
+                 <div className="border p-4 rounded-md bg-gray-50 mb-4">
+                    <div className="flex justify-between items-center mb-2">
+                        <h4 className="font-semibold">Items</h4>
+                        <Button variant="outline" size="sm" onClick={addItem}>+ Add Item</Button>
+                    </div>
+                    {formData.items.map((item, idx) => (
+                        <div key={idx} className="grid grid-cols-12 gap-2 items-center mb-2">
+                             <div className="col-span-4"><Input placeholder="Item Name" value={item.name} onChange={e => updateItem(idx, 'name', e.target.value)} /></div>
+                             <div className="col-span-2"><Input type="number" placeholder="Ord" value={item.ordered} onChange={e => updateItem(idx, 'ordered', parseInt(e.target.value))} /></div>
+                             <div className="col-span-2"><Input type="number" placeholder="Rec" value={item.received} onChange={e => updateItem(idx, 'received', parseInt(e.target.value))} /></div>
+                             <div className="col-span-2"><Input type="number" placeholder="Rej" value={item.rejected} onChange={e => updateItem(idx, 'rejected', parseInt(e.target.value))} /></div>
+                             <div className="col-span-2">
+                                <Select value={item.status} onValueChange={v => updateItem(idx, 'status', v)}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="complete">Complete</SelectItem>
+                                        <SelectItem value="partial">Partial</SelectItem>
+                                        <SelectItem value="pending">Pending</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                             </div>
+                        </div>
+                    ))}
+                </div>
+
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsNewOpen(false)}>Cancel</Button>
+                    <Button onClick={handleCreate}>Create Receipt</Button>
+                </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -199,8 +297,8 @@ export default function GoodsReceiptsPage() {
         ))}
       </div>
 
-      {/* Filters */}
-      <Card className="p-4 mb-6">
+      {/* Filters- Same as before but wired to state */}
+       <Card className="p-4 mb-6">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -211,25 +309,25 @@ export default function GoodsReceiptsPage() {
               className="pl-10"
             />
           </div>
-          <Select defaultValue="all">
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className="w-full md:w-40">
               <SelectValue placeholder="Type" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="goods">Goods Receipt</SelectItem>
-              <SelectItem value="service">Service Receipt</SelectItem>
+              <SelectItem value="GOODS">Goods Receipt</SelectItem>
+              <SelectItem value="SERVICE">Service Receipt</SelectItem>
             </SelectContent>
           </Select>
-          <Select defaultValue="all">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-full md:w-40">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-              <SelectItem value="partial">Partial</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="COMPLETED">Completed</SelectItem>
+              <SelectItem value="PARTIAL">Partial</SelectItem>
+              <SelectItem value="PENDING">Pending</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -237,6 +335,11 @@ export default function GoodsReceiptsPage() {
 
       {/* Receipts Table */}
       <Card className="overflow-hidden">
+        {loading ? (
+             <div className="p-8 text-center flex justify-center text-gray-500">
+               <Loader2 className="animate-spin mr-2" /> Loading Receipts...
+             </div>
+        ) : (
         <Table>
           <TableHeader>
             <TableRow className="bg-gray-50">
@@ -251,36 +354,33 @@ export default function GoodsReceiptsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {goodsReceipts.map((gr) => (
+            {data.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center py-6">No receipts found</TableCell></TableRow> : data.map((gr) => (
               <TableRow key={gr.id} className="hover:bg-gray-50">
                 <TableCell>
-                  <p className="font-mono font-medium">{gr.id}</p>
-                  {gr.poReference && (
-                    <p className="text-xs text-gray-500">PO: {gr.poReference}</p>
+                  <p className="font-mono font-medium">{gr.grNumber}</p>
+                  {gr.purchaseOrder?.poNumber && (
+                    <p className="text-xs text-gray-500">PO: {gr.purchaseOrder.poNumber}</p>
                   )}
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1 text-gray-600">
                     <Calendar className="h-3 w-3" />
-                    {new Date(gr.date).toLocaleDateString('en-IN', {
-                      day: '2-digit',
-                      month: 'short',
-                    })}
+                    {new Date(gr.date).toLocaleDateString()}
                   </div>
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">
                     <Building className="h-3 w-3 text-gray-400" />
-                    <span>{gr.vendor}</span>
+                    <span>{gr.vendor?.name}</span>
                   </div>
                 </TableCell>
                 <TableCell>
                   <p className="max-w-xs truncate">{gr.description}</p>
-                  <p className="text-xs text-gray-500">{gr.items.length} items</p>
+                  <p className="text-xs text-gray-500">{Array.isArray(gr.items) ? gr.items.length : 0} items</p>
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline" className="text-xs">
-                    {gr.type === 'goods' ? (
+                    {gr.type === 'GOODS' ? (
                       <><Package className="h-3 w-3 mr-1" /> Goods</>
                     ) : (
                       <><FileText className="h-3 w-3 mr-1" /> Service</>
@@ -289,14 +389,16 @@ export default function GoodsReceiptsPage() {
                 </TableCell>
                 <TableCell>{getStatusBadge(gr.status)}</TableCell>
                 <TableCell>
-                  {gr.qualityChecked ? (
+                  {gr.qualityCheckStatus === 'PASSED' ? (
                     <CheckCircle className="h-4 w-4 text-green-500" />
+                  ) : gr.qualityCheckStatus === 'FAILED' ? (
+                    <XCircle className="h-4 w-4 text-red-500" />
                   ) : (
                     <AlertTriangle className="h-4 w-4 text-yellow-500" />
                   )}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Dialog>
+                  <Dialog open={selectedGR?.id === gr.id} onOpenChange={(o) => !o && setSelectedGR(null)}>
                     <DialogTrigger asChild>
                       <Button
                         variant="ghost"
@@ -306,11 +408,12 @@ export default function GoodsReceiptsPage() {
                         <Eye className="h-4 w-4" />
                       </Button>
                     </DialogTrigger>
+                    {selectedGR && (
                     <DialogContent className="max-w-2xl">
                       <DialogHeader>
                         <DialogTitle className="flex items-center justify-between">
-                          <span>{gr.type === 'goods' ? 'Goods' : 'Service'} Receipt - {gr.id}</span>
-                          {getStatusBadge(gr.status)}
+                          <span>{selectedGR.type === 'GOODS' ? 'Goods' : 'Service'} Receipt - {selectedGR.grNumber}</span>
+                          {getStatusBadge(selectedGR.status)}
                         </DialogTitle>
                       </DialogHeader>
                       <div className="space-y-4">
@@ -318,48 +421,22 @@ export default function GoodsReceiptsPage() {
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                           <div>
                             <span className="text-gray-600">Date:</span>
-                            <p className="font-medium">{new Date(gr.date).toLocaleDateString('en-IN')}</p>
+                            <p className="font-medium">{new Date(selectedGR.date).toLocaleDateString()}</p>
                           </div>
                           <div>
                             <span className="text-gray-600">Vendor:</span>
-                            <p className="font-medium">{gr.vendor}</p>
+                            <p className="font-medium">{selectedGR.vendor?.name}</p>
                           </div>
                           <div>
                             <span className="text-gray-600">Received By:</span>
-                            <p className="font-medium">{gr.receivedBy}</p>
-                          </div>
-                          {gr.poReference && (
-                            <div>
-                              <span className="text-gray-600">PO Reference:</span>
-                              <p className="font-medium">{gr.poReference}</p>
-                            </div>
-                          )}
-                          {gr.invoiceNo && (
-                            <div>
-                              <span className="text-gray-600">Invoice No:</span>
-                              <p className="font-medium">{gr.invoiceNo}</p>
-                            </div>
-                          )}
-                          <div>
-                            <span className="text-gray-600">Quality Check:</span>
-                            <p className="font-medium">
-                              {gr.qualityChecked ? (
-                                <span className="text-green-600 flex items-center gap-1">
-                                  <CheckCircle className="h-3 w-3" /> Passed
-                                </span>
-                              ) : (
-                                <span className="text-yellow-600 flex items-center gap-1">
-                                  <Clock className="h-3 w-3" /> Pending
-                                </span>
-                              )}
-                            </p>
+                            <p className="font-medium">{selectedGR.receivedBy}</p>
                           </div>
                         </div>
 
                         {/* Description */}
                         <div>
                           <span className="text-sm text-gray-600">Description:</span>
-                          <p className="text-sm">{gr.description}</p>
+                          <p className="text-sm">{selectedGR.description}</p>
                         </div>
 
                         {/* Items */}
@@ -376,7 +453,7 @@ export default function GoodsReceiptsPage() {
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {gr.items.map((item, idx) => (
+                              {Array.isArray(selectedGR.items) && selectedGR.items.map((item: any, idx: number) => (
                                 <TableRow key={idx}>
                                   <TableCell>{item.name}</TableCell>
                                   <TableCell className="text-center">{item.ordered}</TableCell>
@@ -387,37 +464,35 @@ export default function GoodsReceiptsPage() {
                                     ) : '-'}
                                   </TableCell>
                                   <TableCell className="text-center">
-                                    {getItemStatusBadge(item.status)}
+                                    {item.status}
                                   </TableCell>
                                 </TableRow>
                               ))}
                             </TableBody>
                           </Table>
                         </div>
+                        
+                        {/* QC Action */}
+                        {selectedGR.qualityCheckStatus === 'PENDING' && (
+                            <div className="flex gap-2 justify-end">
+                                <Button className="bg-red-500 hover:bg-red-600 text-white" onClick={() => handleQC(selectedGR.id, 'FAILED')}>Mark QC Failed</Button>
+                                <Button className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleQC(selectedGR.id, 'PASSED')}>Mark QC Passed</Button>
+                            </div>
+                        )}
+                        {selectedGR.qualityCheckStatus !== 'PENDING' && (
+                             <div className="text-right text-sm font-medium">QC Status: {selectedGR.qualityCheckStatus}</div>
+                        )}
 
-                        {/* Actions */}
-                        {gr.status === 'partial' && (
-                          <div className="flex gap-2 pt-4">
-                            <Button className="gap-2">
-                              <Package className="h-4 w-4" /> Record Additional Receipt
-                            </Button>
-                          </div>
-                        )}
-                        {!gr.invoiceNo && gr.status === 'completed' && (
-                          <div className="flex gap-2 pt-4">
-                            <Button variant="outline" className="gap-2">
-                              <FileText className="h-4 w-4" /> Link Invoice
-                            </Button>
-                          </div>
-                        )}
                       </div>
                     </DialogContent>
+                    )}
                   </Dialog>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
+        )}
       </Card>
     </div>
   )

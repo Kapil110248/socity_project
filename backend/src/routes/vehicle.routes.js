@@ -17,4 +17,7 @@ router.post('/register', authorize(['ADMIN', 'SUPER_ADMIN']), VehicleController.
 // Remove vehicle from slot
 router.delete('/:id', authorize(['ADMIN', 'SUPER_ADMIN']), VehicleController.remove);
 
+// Update status
+router.patch('/:id/status', authorize(['ADMIN', 'SUPER_ADMIN']), VehicleController.updateStatus);
+
 module.exports = router;

@@ -108,6 +108,8 @@ model Society {
   assets      Asset[]
   documents   Document[]
   parcels     Parcel[]
+  incidents   Incident[]
+  patrolLogs  PatrolLog[]
   events      Event[]
   purchaseRequests PurchaseRequest[]
   emergencyAlerts  EmergencyAlert[]
@@ -119,8 +121,13 @@ model Society {
   guidelines   CommunityGuideline[]
   sosAlerts   SOSAlert[]
   invoices    Invoice[]
+  vendorInvoices VendorInvoice[]
+  purchaseOrders PurchaseOrder[]
+  goodsReceipts GoodsReceipt[]
   ledgerAccounts LedgerAccount[]
+
   journalEntries JournalEntry[]
+  unitVehicles UnitVehicle[]
 }
 
 model User {
@@ -169,6 +176,12 @@ model User {
   updatedAt   DateTime @updatedAt
   
   buzzLikes   BuzzLike[]
+  visitors    Visitor[]
+  
+  // Security Relations
+  reportedIncidents Incident[] @relation("ReportedIncidents")
+  assignedIncidents Incident[] @relation("AssignedIncidents")
+  patrolLogs        PatrolLog[] @relation("GuardPatrols")
 }
 
 model RoleModel {
@@ -299,28 +312,31 @@ model ComplaintComment {
 }
 
 model Visitor {
-  id          Int      @id @default(autoincrement())
-  name        String
-  phone       String
-  vehicleNo   String?
-  purpose     String
-  photo       String?
+  id             Int      @id @default(autoincrement())
+  name           String
+  phone          String
+  vehicleNo      String?
+  purpose        String?
+  photo          String?
   
-  status      VisitorStatus @default(PENDING)
-  entryTime   DateTime?
-  exitTime    DateTime?
+  status         String   @default("PENDING") // PENDING, APPROVED, CHECKED_IN, CHECKED_OUT, REJECTED
+  entryTime      DateTime?
+  exitTime       DateTime?
   
-  societyId   Int
-  society     Society  @relation(fields: [societyId], references: [id])
+  societyId      Int
+  society        Society  @relation(fields: [societyId], references: [id])
   
   visitingUnitId Int
-  unit           Unit    @relation(fields: [visitingUnitId], references: [id])
+  unit           Unit     @relation(fields: [visitingUnitId], references: [id])
   
-  idType      String?  // Aadhar, DL
-  idNumber    String?
+  residentId     Int?
+  resident       User?    @relation(fields: [residentId], references: [id])
   
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  idType         String?  // Aadhar, DL
+  idNumber       String?
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model Transaction {
@@ -343,6 +359,9 @@ model Transaction {
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  
+  bankAccountId Int?
+  bankAccount   LedgerAccount? @relation(fields: [bankAccountId], references: [id])
 }
 
 model Invoice {
@@ -383,8 +402,47 @@ model Vendor {
   societyId   Int?
   society     Society?  @relation(fields: [societyId], references: [id])
   
-  payouts     VendorPayout[]
+  payouts     VendorPayout[] // Older model? keeping for safety
+  invoices    VendorInvoice[]
+  purchaseOrders PurchaseOrder[]
+  goodsReceipts GoodsReceipt[]
   createdAt   DateTime @default(now())
+}
+
+
+model VendorInvoice {
+  id            Int      @id @default(autoincrement())
+  invoiceNumber String
+  
+  vendorId      Int
+  vendor        Vendor   @relation(fields: [vendorId], references: [id])
+  societyId     Int
+  society       Society  @relation(fields: [societyId], references: [id])
+  
+  description   String
+  category      String
+  
+  amount        Float
+  gstAmount     Float    @default(0)
+  totalAmount   Float
+  
+  invoiceDate   DateTime
+  dueDate       DateTime
+  
+  status        String   @default("PENDING") // PENDING, APPROVED, PAID, REJECTED
+  
+  // Payment Details
+  paymentDate   DateTime?
+  paymentMethod String?
+  transactionRef String?
+  bankAccountId Int?     // If paid via bank
+  
+  remarks       String?  @db.Text
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([societyId, invoiceNumber, vendorId])
 }
 
 model VendorPayout {
@@ -464,8 +522,10 @@ model EmergencyContact {
   resident     User?    @relation(fields: [residentId], references: [id])
   
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @default(now()) @updatedAt
+  updatedAt    DateTime @updatedAt
 }
+
+
 
 model Notice {
   id          Int      @id @default(autoincrement())
@@ -612,14 +672,25 @@ model UnitMember {
 
 model UnitVehicle {
   id        Int      @id @default(autoincrement())
+  
+  societyId Int      // Added for society-level filtering
+  society   Society  @relation(fields: [societyId], references: [id])
+
   unitId    Int
   unit      Unit     @relation(fields: [unitId], references: [id])
-  name      String   // e.g. "BMW X5"
-  number    String
-  type      String   // 4-WHEELER, 2-WHEELER
+  
+  type      String   // Car, Two Wheeler, SUV, Other
+  number    String   // Vehicle Number (e.g., DL-01-AB-1234)
+  make      String   // Make & Model (e.g., Honda City)
   color     String?
-  parkingSlot String?
+  
+  ownerName String?  // Name of the owner (resident name)
+  parkingSlot String? // e.g., P-A-12
+  
+  status    String   @default("pending") // verified, pending
+  
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model UnitPet {
@@ -753,16 +824,36 @@ model Event {
 }
 model PurchaseRequest {
   id           Int      @id @default(autoincrement())
+  prNumber     String   // PR-2025-001
   title        String
-  description  String?
-  amount       Float
-  status       String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  description  String?  @db.Text
+  items        Json?    // Array of { name, quantity, estimatedPrice }
+  
   societyId    Int
   society      Society  @relation(fields: [societyId], references: [id])
+  
   requestedById Int
   requestedBy  User     @relation(fields: [requestedById], references: [id])
+  department   String?  // e.g. "Admin Office", "Security Dept"
+  
+  priority     String   @default("MEDIUM") // LOW, MEDIUM, HIGH
+  status       String   @default("PENDING_CM") 
+  // Status flow: DRAFT -> PENDING_CM -> PENDING_FINANCE -> APPROVED -> CONVERTED_PO
+  // Alternate: REJECTED
+  
+  estimatedAmount Float
+  
+  // Approval Tracking
+  cmActionBy      Int?
+  cmActionDate    DateTime?
+  financeActionBy Int?
+  financeActionDate DateTime?
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([societyId, prNumber])
+  purchaseOrder PurchaseOrder?
 }
 model Conversation {
   id          Int      @id @default(autoincrement())
@@ -860,6 +951,9 @@ model LedgerAccount {
 
   @@unique([societyId, code])
   journalLines JournalLine[]
+  transactions Transaction[]
+  
+  bankDetails Json?    // { ifsc, accountNo, branch }
 }
 
 model JournalEntry {
@@ -892,4 +986,118 @@ model JournalLine {
   
   debit          Float         @default(0)
   credit         Float         @default(0)
+}
+
+model PurchaseOrder {
+  id        Int      @id @default(autoincrement())
+  poNumber  String   // e.g. PO-2025-001
+  
+  description String?
+  
+  items     Json     // Array of { name, qty, unitPrice, total }
+  
+  subtotal  Float    @default(0)
+  taxAmount Float    @default(0) // GST
+  totalAmount Float  @default(0)
+  
+  status    String   @default("DRAFT") // DRAFT, SENT, CONFIRMED, PARTIALLY_RECEIVED, DELIVERED, CANCELLED
+  
+  date            DateTime @default(now()) // Order Date
+  expectedDeliveryDate DateTime?
+  deliveryDate    DateTime? // Actual Delivery Date
+  
+  paymentTerms    String?   // e.g. "Net 30", "Immediate"
+  
+  // Relations
+  societyId Int
+  society   Society  @relation(fields: [societyId], references: [id])
+  
+  vendorId  Int
+  vendor    Vendor   @relation(fields: [vendorId], references: [id])
+  
+  prId      Int?     @unique
+  purchaseRequest PurchaseRequest? @relation(fields: [prId], references: [id])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([societyId, poNumber])
+  goodsReceipts GoodsReceipt[]
+}
+
+model GoodsReceipt {
+  id        Int      @id @default(autoincrement())
+  grNumber  String   // GR-2025-001
+  
+  type      String   // GOODS, SERVICE
+  
+  date      DateTime @default(now())
+  
+  description String?
+  
+  items     Json     // Array of { name, ordered, received, rejected, status }
+  
+  status    String   @default("COMPLETED") // COMPLETED, PARTIAL, PENDING
+  
+  receivedBy String?
+  qualityCheckStatus String @default("PENDING") // PENDING, PASSED, FAILED
+  
+  invoiceNumber String?
+  
+  // Relations
+  societyId Int
+  society   Society  @relation(fields: [societyId], references: [id])
+  
+  vendorId  Int
+  vendor    Vendor   @relation(fields: [vendorId], references: [id])
+  
+  poId      Int?
+  purchaseOrder PurchaseOrder? @relation(fields: [poId], references: [id])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([societyId, grNumber])
+}
+
+model Incident {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?  @db.Text
+  location    String?
+  severity    String   @default("medium") // low, medium, high, critical
+  status      String   @default("open")   // open, in-progress, resolved, closed
+  
+  societyId   Int
+  society     Society  @relation(fields: [societyId], references: [id])
+  
+  reportedById Int?
+  reportedBy   User?    @relation("ReportedIncidents", fields: [reportedById], references: [id])
+  
+  assignedToId Int?
+  assignedTo   User?    @relation("AssignedIncidents", fields: [assignedToId], references: [id])
+  
+  images      Json?    // Array of image URLs
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PatrolLog {
+  id          Int      @id @default(autoincrement())
+  area        String
+  notes       String?  @db.Text
+  status      String   @default("completed") // completed, skipped, issue-found
+  
+  societyId   Int
+  society     Society  @relation(fields: [societyId], references: [id])
+  
+  guardId     Int
+  guard       User     @relation("GuardPatrols", fields: [guardId], references: [id])
+  
+  startTime   DateTime @default(now())
+  endTime     DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

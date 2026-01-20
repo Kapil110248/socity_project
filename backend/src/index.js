@@ -46,7 +46,6 @@ initSocket(server);
 app.use(cors());
 app.use(express.json());
 
-const purchaseRequestRoutes = require('./routes/purchase-request.routes');
 const chatRoutes = require('./routes/chat.routes');
 
 // Routes
@@ -56,6 +55,9 @@ app.use('/api/visitors', visitorRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/society', societyRoutes);
 app.use('/api/vendors', vendorRoutes);
+app.use('/api/purchase-requests', require('./routes/purchaseRequest.routes'));
+app.use('/api/purchase-orders', require('./routes/purchaseOrder.routes'));
+app.use('/api/receipts', require('./routes/receipt.routes'));
 app.use('/api/parking', parkingRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/services', serviceRoutes);
@@ -66,10 +68,11 @@ app.use('/api/platform-invoices', platformInvoiceRoutes);
 app.use('/api/vendor-payouts', vendorPayoutRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/sessions', sessionRoutes);
-app.use('/api/purchase-requests', purchaseRequestRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/ledger', require('./routes/ledger.routes'));
 app.use('/api/journal', require('./routes/journal.routes'));
+app.use('/api/banks', require('./routes/bank.routes'));
+app.use('/api/vendor-invoices', require('./routes/vendorInvoice.routes'));
 
 // New Admin routes
 app.use('/api/meetings', meetingRoutes);
@@ -84,6 +87,8 @@ app.use('/api/notices', noticeRoutes);
 app.use('/api/units', unitRoutes);
 app.use('/api/resident', residentRoutes);
 app.use('/api/invoices', invoiceRoutes);
+app.use('/api/incidents', require('./routes/incident.routes'));
+app.use('/api/patrolling', require('./routes/patrolling.routes'));
 
 const PORT = process.env.PORT || 9000;
 

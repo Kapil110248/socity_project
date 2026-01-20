@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   FileQuestion,
@@ -19,6 +19,7 @@ import {
   User,
   Package,
   ArrowRight,
+  Loader2,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -45,100 +46,99 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog'
-
-const purchaseRequests = [
-  {
-    id: 'PR-2025-001',
-    date: '2025-12-18',
-    requestedBy: 'Admin Office',
-    category: 'Maintenance',
-    description: 'Garden maintenance tools and equipment',
-    items: [
-      { name: 'Garden Shears', qty: 5, estPrice: 500 },
-      { name: 'Lawn Mower', qty: 1, estPrice: 15000 },
-      { name: 'Fertilizer (50kg)', qty: 10, estPrice: 800 },
-    ],
-    totalEstimate: 25500,
-    priority: 'medium',
-    status: 'approved',
-    approvedBy: 'Manager',
-    approvedDate: '2025-12-19',
-  },
-  {
-    id: 'PR-2025-002',
-    date: '2025-12-17',
-    requestedBy: 'Security Dept',
-    category: 'Security',
-    description: 'CCTV camera replacement and new installations',
-    items: [
-      { name: 'HD CCTV Camera', qty: 4, estPrice: 8000 },
-      { name: 'DVR System', qty: 1, estPrice: 25000 },
-      { name: 'Cables & Accessories', qty: 1, estPrice: 5000 },
-    ],
-    totalEstimate: 62000,
-    priority: 'high',
-    status: 'waiting_manager',
-    approvedBy: null,
-    approvedDate: null,
-  },
-  {
-    id: 'PR-2025-003',
-    date: '2025-12-16',
-    requestedBy: 'Housekeeping',
-    category: 'Cleaning',
-    description: 'Monthly cleaning supplies replenishment',
-    items: [
-      { name: 'Floor Cleaner (5L)', qty: 20, estPrice: 250 },
-      { name: 'Mops', qty: 10, estPrice: 150 },
-      { name: 'Garbage Bags (Roll)', qty: 50, estPrice: 80 },
-    ],
-    totalEstimate: 10500,
-    priority: 'low',
-    status: 'converted',
-    approvedBy: 'Manager',
-    approvedDate: '2025-12-17',
-  },
-  {
-    id: 'PR-2025-004',
-    date: '2025-12-15',
-    requestedBy: 'Admin Office',
-    category: 'Electrical',
-    description: 'Emergency generator maintenance parts',
-    items: [
-      { name: 'Generator Oil', qty: 10, estPrice: 500 },
-      { name: 'Air Filter', qty: 2, estPrice: 2500 },
-      { name: 'Spark Plugs', qty: 4, estPrice: 800 },
-    ],
-    totalEstimate: 13200,
-    priority: 'high',
-    status: 'rejected',
-    approvedBy: 'Manager',
-    approvedDate: '2025-12-16',
-    rejectionReason: 'Existing contract covers maintenance parts',
-  },
-  {
-    id: 'PR-2025-005',
-    date: '2025-12-14',
-    requestedBy: 'Clubhouse',
-    category: 'Furniture',
-    description: 'Pool side furniture replacement',
-    items: [
-      { name: 'Poolside Lounger', qty: 6, estPrice: 5000 },
-      { name: 'Umbrella Stand', qty: 4, estPrice: 3000 },
-      { name: 'Side Tables', qty: 6, estPrice: 2000 },
-    ],
-    totalEstimate: 54000,
-    priority: 'medium',
-    status: 'draft',
-    approvedBy: null,
-    approvedDate: null,
-  },
-]
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { PurchaseRequestService } from '@/services/purchaseRequestService'
+import { toast } from 'react-hot-toast'
 
 export default function PurchaseRequestsPage() {
+  const [data, setData] = useState<any[]>([])
+  const [statsData, setStatsData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedPR, setSelectedPR] = useState<typeof purchaseRequests[0] | null>(null)
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [priorityFilter, setPriorityFilter] = useState('all')
+  
+  const [selectedPR, setSelectedPR] = useState<any | null>(null)
+  const [isNewRequestOpen, setIsNewRequestOpen] = useState(false)
+  const [isViewOpen, setIsViewOpen] = useState(false)
+
+  // New Request Form State
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    department: 'Admin Office',
+    priority: 'MEDIUM',
+    estimatedAmount: '',
+    items: [{ name: '', qty: 1, estPrice: 0 }],
+  })
+
+  // Fetch Data
+  const fetchData = async () => {
+    try {
+      setLoading(true)
+      const [list, stats] = await Promise.all([
+        PurchaseRequestService.getAll(statusFilter, priorityFilter, searchQuery),
+        PurchaseRequestService.getStats()
+      ])
+      setData(list)
+      setStatsData(stats)
+    } catch (error) {
+      console.error(error)
+      toast.error('Failed to load purchase requests')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+  }, [statusFilter, priorityFilter, searchQuery]) // Add debouncing for search in real app
+
+  const handleCreate = async () => {
+    try {
+      await PurchaseRequestService.create({
+        ...formData,
+        estimatedAmount: parseFloat(formData.estimatedAmount) || 0,
+      })
+      toast.success('Purchase Request created successfully')
+      setIsNewRequestOpen(false)
+      fetchData()
+      setFormData({
+        title: '',
+        description: '',
+        department: 'Admin Office',
+        priority: 'MEDIUM',
+        estimatedAmount: '',
+        items: [{ name: '', qty: 1, estPrice: 0 }],
+      })
+    } catch (error) {
+       toast.error('Failed to create request')
+    }
+  }
+
+  const handleStatusUpdate = async (id: number, status: string) => {
+    try {
+      await PurchaseRequestService.updateStatus(id, status)
+      toast.success(`Request marked as ${status}`)
+      setIsViewOpen(false)
+      fetchData()
+    } catch (error) {
+      toast.error('Failed to update status')
+    }
+  }
+
+  const addItemSlot = () => {
+    setFormData({ ...formData, items: [...formData.items, { name: '', qty: 1, estPrice: 0 }] })
+  }
+
+  const updateItem = (index: number, field: string, value: any) => {
+    const newItems = [...formData.items]
+    newItems[index] = { ...newItems[index], [field]: value }
+    setFormData({ ...formData, items: newItems })
+  }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -150,42 +150,27 @@ export default function PurchaseRequestsPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'approved':
+      case 'APPROVED':
         return <Badge className="bg-green-100 text-green-800"><CheckCircle className="h-3 w-3 mr-1" /> Approved</Badge>
-      case 'waiting_manager':
-        return <Badge className="bg-blue-100 text-blue-800"><Clock className="h-3 w-3 mr-1" /> Pending CM Approval</Badge>
-      case 'pending':
+      case 'PENDING_CM':
+        return <Badge className="bg-blue-100 text-blue-800"><Clock className="h-3 w-3 mr-1" /> Pending CM</Badge>
+      case 'PENDING_FINANCE':
         return <Badge className="bg-yellow-100 text-yellow-800"><Clock className="h-3 w-3 mr-1" /> Pending Finance</Badge>
-      case 'rejected':
+      case 'REJECTED':
         return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" /> Rejected</Badge>
-      case 'converted':
-        return <Badge className="bg-blue-100 text-blue-800"><ArrowRight className="h-3 w-3 mr-1" /> Converted to PO</Badge>
-      case 'draft':
-        return <Badge variant="secondary"><Edit className="h-3 w-3 mr-1" /> Draft</Badge>
+      case 'CONVERTED_PO':
+        return <Badge className="bg-purple-100 text-purple-800"><ArrowRight className="h-3 w-3 mr-1" /> Converted to PO</Badge>
       default:
-        return <Badge variant="outline">{status}</Badge>
-    }
-  }
-
-  const getPriorityBadge = (priority: string) => {
-    switch (priority) {
-      case 'high':
-        return <Badge variant="destructive" className="text-xs">High</Badge>
-      case 'medium':
-        return <Badge className="bg-yellow-100 text-yellow-800 text-xs">Medium</Badge>
-      case 'low':
-        return <Badge variant="secondary" className="text-xs">Low</Badge>
-      default:
-        return <Badge variant="outline" className="text-xs">{priority}</Badge>
+        return <Badge variant="secondary">{status}</Badge>
     }
   }
 
   const stats = [
-    { label: 'Total Requests', value: purchaseRequests.length, icon: FileQuestion, color: 'bg-blue-500' },
-    { label: 'Pending CM', value: purchaseRequests.filter(p => p.status === 'waiting_manager').length, icon: Clock, color: 'bg-blue-400' },
-    { label: 'Pending Finance', value: purchaseRequests.filter(p => p.status === 'pending').length, icon: Clock, color: 'bg-yellow-500' },
-    { label: 'Approved', value: purchaseRequests.filter(p => p.status === 'approved').length, icon: CheckCircle, color: 'bg-green-500' },
-    { label: 'Converted to PO', value: purchaseRequests.filter(p => p.status === 'converted').length, icon: ArrowRight, color: 'bg-purple-500' },
+    { label: 'Total Requests', value: statsData?.total || 0, icon: FileQuestion, color: 'bg-blue-500' },
+    { label: 'Pending CM', value: statsData?.pendingCM || 0, icon: Clock, color: 'bg-blue-400' },
+    { label: 'Pending Finance', value: statsData?.pendingFinance || 0, icon: Clock, color: 'bg-yellow-500' },
+    { label: 'Approved', value: statsData?.approved || 0, icon: CheckCircle, color: 'bg-green-500' },
+    { label: 'Converted to PO', value: statsData?.convertedPO || 0, icon: ArrowRight, color: 'bg-purple-500' },
   ]
 
   return (
@@ -204,15 +189,91 @@ export default function PurchaseRequestsPage() {
             <Download className="h-4 w-4" />
             Export
           </Button>
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            New Request
-          </Button>
+          <Dialog open={isNewRequestOpen} onOpenChange={setIsNewRequestOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                New Request
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Create New Purchase Request</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                       <Label>Title</Label>
+                       <Input value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="e.g. Garden Tools" />
+                    </div>
+                    <div className="space-y-2">
+                       <Label>Department</Label>
+                       <Select value={formData.department} onValueChange={v => setFormData({...formData, department: v})}>
+                         <SelectTrigger>
+                            <SelectValue />
+                         </SelectTrigger>
+                         <SelectContent>
+                            <SelectItem value="Admin Office">Admin Office</SelectItem>
+                            <SelectItem value="Security Dept">Security Dept</SelectItem>
+                            <SelectItem value="Housekeeping">Housekeeping</SelectItem>
+                            <SelectItem value="Clubhouse">Clubhouse</SelectItem>
+                         </SelectContent>
+                       </Select>
+                    </div>
+                 </div>
+                 <div className="space-y-2">
+                    <Label>Description</Label>
+                    <Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Describe requirement..." />
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                       <Label>Priority</Label>
+                       <Select value={formData.priority} onValueChange={v => setFormData({...formData, priority: v})}>
+                         <SelectTrigger><SelectValue /></SelectTrigger>
+                         <SelectContent>
+                            <SelectItem value="LOW">Low</SelectItem>
+                            <SelectItem value="MEDIUM">Medium</SelectItem>
+                            <SelectItem value="HIGH">High</SelectItem>
+                         </SelectContent>
+                       </Select>
+                    </div>
+                    <div className="space-y-2">
+                       <Label>Estimated Total Amount</Label>
+                       <Input type="number" value={formData.estimatedAmount} onChange={e => setFormData({...formData, estimatedAmount: e.target.value})} />
+                    </div>
+                 </div>
+
+                 <div className="border p-3 rounded-md bg-gray-50">
+                    <div className="flex justify-between items-center mb-2">
+                       <Label>Items List</Label>
+                       <Button variant="outline" size="sm" onClick={addItemSlot}>+ Add Item</Button>
+                    </div>
+                    {formData.items.map((item, idx) => (
+                       <div key={idx} className="grid grid-cols-12 gap-2 mb-2">
+                          <div className="col-span-6">
+                            <Input placeholder="Item Name" value={item.name} onChange={e => updateItem(idx, 'name', e.target.value)} />
+                          </div>
+                          <div className="col-span-2">
+                            <Input type="number" placeholder="Qty" value={item.qty} onChange={e => updateItem(idx, 'qty', parseInt(e.target.value))} />
+                          </div>
+                          <div className="col-span-4">
+                            <Input type="number" placeholder="Est. Price" value={item.estPrice} onChange={e => updateItem(idx, 'estPrice', parseFloat(e.target.value))} />
+                          </div>
+                       </div>
+                    ))}
+                 </div>
+              </div>
+              <DialogFooter>
+                 <Button variant="outline" onClick={() => setIsNewRequestOpen(false)}>Cancel</Button>
+                 <Button onClick={handleCreate}>Submit Request</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         {stats.map((stat, index) => (
           <motion.div
             key={stat.label}
@@ -243,29 +304,27 @@ export default function PurchaseRequestsPage() {
               className="pl-10"
             />
           </div>
-          <Select defaultValue="all">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-full md:w-40">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="waiting_manager">Pending CM</SelectItem>
-              <SelectItem value="pending">Pending Finance</SelectItem>
-              <SelectItem value="approved">Approved</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
-              <SelectItem value="converted">Converted</SelectItem>
+              <SelectItem value="PENDING_CM">Pending CM</SelectItem>
+              <SelectItem value="PENDING_FINANCE">Pending Finance</SelectItem>
+              <SelectItem value="APPROVED">Approved</SelectItem>
+              <SelectItem value="REJECTED">Rejected</SelectItem>
             </SelectContent>
           </Select>
-          <Select defaultValue="all">
+           <Select value={priorityFilter} onValueChange={setPriorityFilter}>
             <SelectTrigger className="w-full md:w-40">
               <SelectValue placeholder="Priority" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Priority</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="HIGH">High</SelectItem>
+              <SelectItem value="MEDIUM">Medium</SelectItem>
+              <SelectItem value="LOW">Low</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -273,6 +332,11 @@ export default function PurchaseRequestsPage() {
 
       {/* Purchase Requests Table */}
       <Card className="overflow-hidden">
+        {loading ? (
+             <div className="p-8 text-center flex justify-center text-gray-500">
+               <Loader2 className="animate-spin mr-2" /> Loading Requests...
+             </div>
+        ) : (
         <Table>
           <TableHeader>
             <TableRow className="bg-gray-50">
@@ -287,131 +351,128 @@ export default function PurchaseRequestsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {purchaseRequests.map((pr) => (
+            {data.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center py-6">No requests found</TableCell></TableRow> : data.map((pr) => (
               <TableRow key={pr.id} className="hover:bg-gray-50">
-                <TableCell className="font-mono font-medium">{pr.id}</TableCell>
+                <TableCell className="font-mono font-medium">{pr.prNumber}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1 text-gray-600">
                     <Calendar className="h-3 w-3" />
-                    {new Date(pr.date).toLocaleDateString('en-IN', {
-                      day: '2-digit',
-                      month: 'short',
-                    })}
+                     {new Date(pr.createdAt).toLocaleDateString()}
                   </div>
                 </TableCell>
                 <TableCell>
-                  <p className="max-w-xs truncate font-medium">{pr.description}</p>
-                  <p className="text-xs text-gray-500">{pr.items.length} items</p>
+                  <p className="max-w-xs truncate font-medium">{pr.title}</p>
+                   <p className="text-xs text-gray-500 truncate max-w-[200px]">{pr.description}</p>
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1 text-gray-600">
                     <User className="h-3 w-3" />
-                    {pr.requestedBy}
+                    {pr.requestedBy?.name || 'Unknown'}
                   </div>
+                  <span className="text-[10px] text-gray-400">{pr.department}</span>
                 </TableCell>
-                <TableCell>{getPriorityBadge(pr.priority)}</TableCell>
+                <TableCell><Badge variant={pr.priority === 'HIGH' ? 'destructive' : 'secondary'}>{pr.priority}</Badge></TableCell>
                 <TableCell>{getStatusBadge(pr.status)}</TableCell>
                 <TableCell className="text-right font-medium">
-                  {formatCurrency(pr.totalEstimate)}
+                  {formatCurrency(pr.estimatedAmount)}
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSelectedPR(pr)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-lg">
-                        <DialogHeader>
-                          <DialogTitle>Purchase Request - {pr.id}</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                          <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div>
-                              <span className="text-gray-600">Date:</span>
-                              <p>{new Date(pr.date).toLocaleDateString('en-IN')}</p>
-                            </div>
-                            <div>
-                              <span className="text-gray-600">Status:</span>
-                              <p>{getStatusBadge(pr.status)}</p>
-                            </div>
-                            <div>
-                              <span className="text-gray-600">Requested By:</span>
-                              <p>{pr.requestedBy}</p>
-                            </div>
-                            <div>
-                              <span className="text-gray-600">Category:</span>
-                              <p>{pr.category}</p>
-                            </div>
+                  <Dialog open={isViewOpen && selectedPR?.id === pr.id} onOpenChange={(open) => {
+                     setIsViewOpen(open);
+                     if(open) setSelectedPR(pr);
+                     else setSelectedPR(null);
+                  }}>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                         onClick={() => setSelectedPR(pr)}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </DialogTrigger>
+                    {selectedPR && (
+                    <DialogContent className="max-w-lg">
+                      <DialogHeader>
+                        <DialogTitle>Purchase Request - {selectedPR.prNumber}</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-gray-600">Date:</span>
+                            <p>{new Date(selectedPR.createdAt).toLocaleDateString()}</p>
                           </div>
                           <div>
-                            <p className="text-sm text-gray-600 mb-1">Description:</p>
-                            <p className="text-sm">{pr.description}</p>
+                            <span className="text-gray-600">Status:</span>
+                            <p>{getStatusBadge(selectedPR.status)}</p>
                           </div>
                           <div>
-                            <p className="text-sm text-gray-600 mb-2">Items:</p>
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Item</TableHead>
-                                  <TableHead className="text-center">Qty</TableHead>
-                                  <TableHead className="text-right">Est. Price</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {pr.items.map((item, idx) => (
-                                  <TableRow key={idx}>
-                                    <TableCell>{item.name}</TableCell>
-                                    <TableCell className="text-center">{item.qty}</TableCell>
-                                    <TableCell className="text-right">{formatCurrency(item.estPrice * item.qty)}</TableCell>
-                                  </TableRow>
-                                ))}
-                                <TableRow className="font-bold">
-                                  <TableCell colSpan={2}>Total</TableCell>
-                                  <TableCell className="text-right">{formatCurrency(pr.totalEstimate)}</TableCell>
-                                </TableRow>
-                              </TableBody>
-                            </Table>
+                            <span className="text-gray-600">Requested By:</span>
+                            <p>{selectedPR.requestedBy?.name}</p>
                           </div>
-                          {pr.status === 'waiting_manager' && (
-                            <div className="flex gap-2 pt-4">
-                              <Button className="flex-1 bg-blue-600 hover:bg-blue-700">Approve (CM)</Button>
-                              <Button variant="destructive" className="flex-1">Reject</Button>
-                            </div>
-                          )}
-                          {pr.status === 'pending' && (
-                            <div className="flex gap-2 pt-4">
-                              <Button className="flex-1 bg-green-600 hover:bg-green-700">Approve (Finance)</Button>
-                              <Button variant="destructive" className="flex-1">Reject</Button>
-                            </div>
-                          )}
-                          {pr.status === 'approved' && (
-                            <Button className="w-full">Convert to Purchase Order</Button>
-                          )}
+                          <div>
+                            <span className="text-gray-600">Department:</span>
+                            <p>{selectedPR.department}</p>
+                          </div>
                         </div>
-                      </DialogContent>
-                    </Dialog>
-                    {(pr.status === 'draft' || pr.status === 'pending') && (
-                      <>
-                        <Button variant="ghost" size="sm">
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm" className="text-red-600">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </>
+                        <div>
+                          <p className="text-sm text-gray-600 mb-1">Description:</p>
+                          <p className="text-sm">{selectedPR.description}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-600 mb-2">Items:</p>
+                          {selectedPR.items && Array.isArray(selectedPR.items) ? (
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Item</TableHead>
+                                <TableHead className="text-center">Qty</TableHead>
+                                <TableHead className="text-right">Est. Price</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {selectedPR.items.map((item: any, idx: number) => (
+                                <TableRow key={idx}>
+                                  <TableCell>{item.name}</TableCell>
+                                  <TableCell className="text-center">{item.qty}</TableCell>
+                                  <TableCell className="text-right">{formatCurrency(item.estPrice * item.qty)}</TableCell>
+                                </TableRow>
+                              ))}
+                              <TableRow className="font-bold">
+                                <TableCell colSpan={2}>Total</TableCell>
+                                <TableCell className="text-right">{formatCurrency(selectedPR.estimatedAmount)}</TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                          ) : <p className="text-sm text-gray-400">No items listed</p>}
+                        </div>
+                        
+                        {/* Action Buttons */}
+                        {selectedPR.status === 'PENDING_CM' && (
+                          <div className="flex gap-2 pt-4">
+                            <Button className="flex-1 bg-blue-600 hover:bg-blue-700" onClick={() => handleStatusUpdate(selectedPR.id, 'PENDING_FINANCE')}>Approve (CM)</Button>
+                            <Button variant="destructive" className="flex-1" onClick={() => handleStatusUpdate(selectedPR.id, 'REJECTED')}>Reject</Button>
+                          </div>
+                        )}
+                        {selectedPR.status === 'PENDING_FINANCE' && (
+                          <div className="flex gap-2 pt-4">
+                            <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={() => handleStatusUpdate(selectedPR.id, 'APPROVED')}>Approve (Finance)</Button>
+                            <Button variant="destructive" className="flex-1" onClick={() => handleStatusUpdate(selectedPR.id, 'REJECTED')}>Reject</Button>
+                          </div>
+                        )}
+                        {selectedPR.status === 'APPROVED' && (
+                          <Button className="w-full" onClick={() => handleStatusUpdate(selectedPR.id, 'CONVERTED_PO')}>Convert to Purchase Order</Button>
+                        )}
+                      </div>
+                    </DialogContent>
                     )}
-                  </div>
+                  </Dialog>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
+        )}
       </Card>
     </div>
   )
