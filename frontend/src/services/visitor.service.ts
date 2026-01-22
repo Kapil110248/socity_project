@@ -2,8 +2,11 @@ import api from '@/lib/api';
 import { API_CONFIG } from '@/config/api.config';
 
 export const VisitorService = {
-  getAll: async () => {
-    const response = await api.get(API_CONFIG.VISITOR.LIST);
+  getAll: async (params?: { search?: string }) => {
+    const url = params?.search
+      ? `${API_CONFIG.VISITOR.LIST}?search=${params.search}`
+      : API_CONFIG.VISITOR.LIST;
+    const response = await api.get(url);
     return response.data;
   },
 

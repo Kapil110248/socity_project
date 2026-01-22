@@ -14,8 +14,13 @@ export const AmenityService = {
 
   create: async (data: {
     name: string;
+    type: string;
     description?: string;
-    chargesPerHour?: number;
+    capacity: number;
+    chargesPerHour: number;
+    availableDays: string[];
+    timings: { start: string; end: string };
+    status: string;
   }) => {
     const response = await api.post(API_CONFIG.AMENITY.CREATE, data);
     return response.data;

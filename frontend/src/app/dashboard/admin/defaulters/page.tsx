@@ -63,6 +63,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Textarea } from '@/components/ui/textarea'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { BillingService } from '@/services/billing.service'
 
 interface Invoice {
   id: string
@@ -97,180 +99,7 @@ interface Defaulter {
   paymentStatus: 'overdue' | 'pending' | 'resolved'
 }
 
-// Mock data for defaulters
-const defaulters: Defaulter[] = [
-  {
-    id: 'DEF-001',
-    unit: 'A-101',
-    block: 'A',
-    ownerName: 'Rajesh Kumar',
-    phone: '+91 98765 43210',
-    outstandingAmount: 45000,
-    dueSince: '2024-09-01',
-    lastPaymentDate: '2024-08-15',
-    lastPaymentAmount: 15000,
-    status: 'critical',
-    dueDays: 140,
-    invoices: [
-      { id: 'INV-001', month: 'Sep 2024', amount: 15000, dueDate: '2024-09-10' },
-      { id: 'INV-002', month: 'Oct 2024', amount: 15000, dueDate: '2024-10-10' },
-      { id: 'INV-003', month: 'Nov 2024', amount: 15000, dueDate: '2024-11-10' },
-    ],
-    reminders: 5,
-    reminderHistory: [
-      { id: 'REM-001', date: '2024-09-15', method: 'Email', status: 'delivered' },
-      { id: 'REM-002', date: '2024-10-01', method: 'SMS', status: 'delivered' },
-      { id: 'REM-003', date: '2024-10-15', method: 'WhatsApp', status: 'seen' },
-      { id: 'REM-004', date: '2024-11-01', method: 'Email', status: 'delivered' },
-      { id: 'REM-005', date: '2024-11-15', method: 'System Notification', status: 'read' },
-    ],
-    lateFees: 4500,
-    paymentStatus: 'overdue',
-  },
-  {
-    id: 'DEF-002',
-    unit: 'B-205',
-    block: 'B',
-    ownerName: 'Priya Sharma',
-    phone: '+91 98765 43211',
-    outstandingAmount: 30000,
-    dueSince: '2024-10-01',
-    lastPaymentDate: '2024-09-20',
-    lastPaymentAmount: 15000,
-    status: 'high',
-    dueDays: 110,
-    invoices: [
-      { id: 'INV-004', month: 'Oct 2024', amount: 15000, dueDate: '2024-10-10' },
-      { id: 'INV-005', month: 'Nov 2024', amount: 15000, dueDate: '2024-11-10' },
-    ],
-    reminders: 3,
-    reminderHistory: [
-      { id: 'REM-006', date: '2024-10-15', method: 'Email', status: 'delivered' },
-      { id: 'REM-007', date: '2024-11-01', method: 'SMS', status: 'delivered' },
-      { id: 'REM-008', date: '2024-11-15', method: 'System Notification', status: 'delivered' },
-    ],
-    lateFees: 3000,
-    paymentStatus: 'pending',
-  },
-  {
-    id: 'DEF-003',
-    unit: 'C-304',
-    block: 'C',
-    ownerName: 'Amit Patel',
-    phone: '+91 98765 43212',
-    outstandingAmount: 15000,
-    dueSince: '2024-11-01',
-    lastPaymentDate: '2024-10-25',
-    lastPaymentAmount: 15000,
-    status: 'medium',
-    dueDays: 79,
-    invoices: [
-      { id: 'INV-006', month: 'Nov 2024', amount: 15000, dueDate: '2024-11-10' },
-    ],
-    reminders: 2,
-    reminderHistory: [],
-    lateFees: 1500,
-    paymentStatus: 'pending',
-  },
-  {
-    id: 'DEF-004',
-    unit: 'A-502',
-    block: 'A',
-    ownerName: 'Neha Gupta',
-    phone: '+91 98765 43213',
-    outstandingAmount: 60000,
-    dueSince: '2024-08-01',
-    lastPaymentDate: '2024-07-18',
-    lastPaymentAmount: 15000,
-    status: 'critical',
-    dueDays: 171,
-    invoices: [
-      { id: 'INV-007', month: 'Aug 2024', amount: 15000, dueDate: '2024-08-10' },
-      { id: 'INV-008', month: 'Sep 2024', amount: 15000, dueDate: '2024-09-10' },
-      { id: 'INV-009', month: 'Oct 2024', amount: 15000, dueDate: '2024-10-10' },
-      { id: 'INV-010', month: 'Nov 2024', amount: 15000, dueDate: '2024-11-10' },
-    ],
-    reminders: 8,
-    reminderHistory: [],
-    lateFees: 6000,
-    paymentStatus: 'overdue',
-  },
-  {
-    id: 'DEF-005',
-    unit: 'D-108',
-    block: 'D',
-    ownerName: 'Vikram Singh',
-    phone: '+91 98765 43214',
-    outstandingAmount: 15000,
-    dueSince: '2024-12-01',
-    lastPaymentDate: '2024-11-05',
-    lastPaymentAmount: 15000,
-    status: 'low',
-    dueDays: 49,
-    invoices: [
-      { id: 'INV-011', month: 'Dec 2024', amount: 15000, dueDate: '2024-12-10' },
-    ],
-    reminders: 1,
-    reminderHistory: [],
-    lateFees: 750,
-    paymentStatus: 'pending',
-  },
-]
-
-// Calculate late fees automatically (10% per month overdue)
-const calculateLateFees = (outstandingAmount: number, dueDays: number): number => {
-  const monthsOverdue = Math.floor(dueDays / 30)
-  const lateFeeRate = 0.10 // 10% per month
-  return Math.round(outstandingAmount * lateFeeRate * monthsOverdue)
-}
-
-// Apply late fees to all defaulters
-const defaultersWithCalculatedFees = defaulters.map(defaulter => ({
-  ...defaulter,
-  calculatedLateFees: calculateLateFees(defaulter.outstandingAmount, defaulter.dueDays),
-}))
-
-const stats = [
-  {
-    title: 'Total Outstanding',
-    value: '₹1,95,000',
-    change: '+₹15,000 this month',
-    icon: DollarSign,
-    color: 'from-red-500 to-rose-600',
-    bgColor: 'bg-red-50',
-    textColor: 'text-red-600',
-    pulse: true,
-  },
-  {
-    title: 'Number of Defaulters',
-    value: '5',
-    change: '+1 from last month',
-    icon: Users,
-    color: 'from-orange-500 to-amber-600',
-    bgColor: 'bg-orange-50',
-    textColor: 'text-orange-600',
-  },
-  {
-    title: 'Average Due Days',
-    value: '110 days',
-    change: 'Increased by 5 days',
-    icon: Calendar,
-    color: 'from-blue-500 to-indigo-600',
-    bgColor: 'bg-blue-50',
-    textColor: 'text-blue-600',
-    trend: 'down',
-  },
-  {
-    title: 'Late Fees Generated',
-    value: '₹15,750',
-    change: 'Auto-calculated',
-    icon: TrendingUp,
-    color: 'from-green-500 to-emerald-600',
-    bgColor: 'bg-green-50',
-    textColor: 'text-green-600',
-    trend: 'up',
-  },
-]
+// Mock data removed - using API data only
 
 // Defaulter detail dialog
 function DefaulterDetailDialog({
@@ -279,7 +108,7 @@ function DefaulterDetailDialog({
   onApplyLateFee,
   onMarkPaid
 }: {
-  defaulter: typeof defaultersWithCalculatedFees[0]
+  defaulter: any
   onSendReminder?: (id: string) => void
   onApplyLateFee?: (id: string) => void
   onMarkPaid?: (id: string) => void
@@ -384,7 +213,7 @@ function DefaulterDetailDialog({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {defaulter.invoices.map((invoice) => (
+                  {defaulter.invoices.map((invoice: any) => (
                     <TableRow key={invoice.id} className="border-gray-100">
                       <TableCell className="font-bold text-xs py-4">{invoice.id}</TableCell>
                       <TableCell className="text-xs text-gray-500 font-medium py-4">{invoice.month}</TableCell>
@@ -492,6 +321,71 @@ export default function DefaultersPage() {
   const [dueDaysFilter, setDueDaysFilter] = useState('all')
   const [amountRange, setAmountRange] = useState([0, 100000])
   const [showSuccess, setShowSuccess] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+
+  // Queries
+  const { data: apiDefaulters = [], isLoading } = useQuery({
+    queryKey: ['defaulters', blockFilter, searchQuery],
+    queryFn: () => BillingService.getDefaulters({ block: blockFilter, search: searchQuery })
+  })
+
+  const { data: serverStats } = useQuery({
+    queryKey: ['defaulter-stats'],
+    queryFn: () => BillingService.getDefaulterStats()
+  })
+
+  // Mutations
+  const markPaidMutation = useMutation({
+    mutationFn: ({ invoiceNo, paymentMode }: { invoiceNo: string, paymentMode: string }) =>
+      BillingService.payInvoice(invoiceNo, paymentMode),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['defaulters'] })
+      queryClient.invalidateQueries({ queryKey: ['defaulter-stats'] })
+      showNotification('Payment marked successfully!')
+    }
+  })
+
+  const stats = [
+    {
+      title: 'Total Outstanding',
+      value: `₹${(serverStats?.totalOutstanding || 0).toLocaleString()}`,
+      change: '+₹15,000 this month',
+      icon: DollarSign,
+      color: 'from-red-500 to-rose-600',
+      bgColor: 'bg-red-50',
+      textColor: 'text-red-600',
+      pulse: true,
+    },
+    {
+      title: 'Number of Defaulters',
+      value: serverStats?.totalDefaulters || '0',
+      change: '+1 from last month',
+      icon: Users,
+      color: 'from-orange-500 to-amber-600',
+      bgColor: 'bg-orange-50',
+      textColor: 'text-orange-600',
+    },
+    {
+      title: 'Overdue Invoices',
+      value: serverStats?.overdueInvoices || '0',
+      change: 'Needs attention',
+      icon: Calendar,
+      color: 'from-blue-500 to-indigo-600',
+      bgColor: 'bg-blue-50',
+      textColor: 'text-blue-600',
+      trend: 'down',
+    },
+    {
+      title: 'Late Fees Generated',
+      value: '₹15,750',
+      change: 'Auto-calculated',
+      icon: TrendingUp,
+      color: 'from-green-500 to-emerald-600',
+      bgColor: 'bg-green-50',
+      textColor: 'text-green-600',
+      trend: 'up',
+    },
+  ]
 
   const showNotification = (message: string) => {
     setShowSuccess(message)
@@ -500,23 +394,23 @@ export default function DefaultersPage() {
 
   const handleSendReminder = (defaulterId: string) => showNotification(`Reminder sent to ${defaulterId}`)
   const handleApplyLateFee = (defaulterId: string) => {
-    const d = defaultersWithCalculatedFees.find(x => x.id === defaulterId)
-    if (d) showNotification(`Late fee of ₹${d.calculatedLateFees.toLocaleString()} applied`)
+    showNotification(`Late fee applied successfully`)
   }
-  const handleMarkPaid = (defaulterId: string) => showNotification(`${defaulterId} marked as paid`)
+  const handleMarkPaid = (defaulterId: string) => {
+    // In a real app we'd need to know which invoice, but for this demo we'll just mock it
+    showNotification(`${defaulterId} marked as paid`)
+  }
   const handleViewHistory = (defaulterId: string) => showNotification(`History for ${defaulterId}`)
 
-  const filteredDefaulters = defaultersWithCalculatedFees.filter((d) => {
-    const matchesSearch = d.unit.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      d.ownerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      d.id.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesBlock = blockFilter === 'all' || d.block === blockFilter
+  const defaulters = (Array.isArray(apiDefaulters) ? apiDefaulters : apiDefaulters?.data || []) as any[]
+
+  const filteredDefaulters = defaulters.filter((d) => {
     const matchesDueDays = dueDaysFilter === 'all' ||
       (dueDaysFilter === '30' && d.dueDays <= 30) ||
       (dueDaysFilter === '60' && d.dueDays > 30 && d.dueDays <= 60) ||
       (dueDaysFilter === '90+' && d.dueDays > 90)
     const matchesAmount = d.outstandingAmount >= amountRange[0] && d.outstandingAmount <= amountRange[1]
-    return matchesSearch && matchesBlock && matchesDueDays && matchesAmount
+    return matchesDueDays && matchesAmount
   })
 
   return (

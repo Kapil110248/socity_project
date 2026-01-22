@@ -66,6 +66,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { VendorService } from '@/services/vendor.service'
 
 const stats = [
   {
@@ -315,7 +317,123 @@ export default function VendorsPage() {
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null)
   const [ratingVendor, setRatingVendor] = useState<Vendor | null>(null)
   const [renewingVendor, setRenewingVendor] = useState<Vendor | null>(null)
-  const [paymentHistoryVendor, setPaymentHistoryVendor] = useState<Vendor | null>(null)
+  const [paymentHistoryVendor, setPaymentHistoryVendor] = useState<any | null>(null)
+  const queryClient = useQueryClient()
+
+  // Add Vendor Form State
+  const [vendorForm, setVendorForm] = useState({
+    name: '',
+    company: '',
+    type: '',
+    contactPerson: '',
+    phone: '',
+    email: '',
+    address: '',
+    gst: '',
+    pan: '',
+    contractStart: '',
+    contractEnd: '',
+    contractValue: '',
+    paymentTerms: ''
+  })
+
+  // Queries
+  const { data: apiVendors = [], isLoading: isVendorsLoading } = useQuery({
+    queryKey: ['vendors', typeFilter, statusFilter],
+    queryFn: () => VendorService.getAll(typeFilter, statusFilter)
+  })
+
+  const { data: serverStats } = useQuery({
+    queryKey: ['vendor-stats'],
+    queryFn: () => VendorService.getStats()
+  })
+
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: VendorService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vendors'] })
+      queryClient.invalidateQueries({ queryKey: ['vendor-stats'] })
+      setIsAddDialogOpen(false)
+      setVendorForm({
+        name: '',
+        company: '',
+        type: '',
+        contactPerson: '',
+        phone: '',
+        email: '',
+        address: '',
+        gst: '',
+        pan: '',
+        contractStart: '',
+        contractEnd: '',
+        contractValue: '',
+        paymentTerms: ''
+      })
+      showNotification('Vendor added successfully!')
+    },
+    onError: (error: any) => {
+      showNotification(error?.message || 'Failed to add vendor')
+    }
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: VendorService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vendors'] })
+      queryClient.invalidateQueries({ queryKey: ['vendor-stats'] })
+      showNotification('Vendor deleted successfully!')
+    }
+  })
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string | number, status: string }) =>
+      VendorService.updateStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vendors'] })
+      queryClient.invalidateQueries({ queryKey: ['vendor-stats'] })
+      showNotification('Status updated successfully!')
+    }
+  })
+
+  const stats = [
+    {
+      title: 'Total Vendors',
+      value: serverStats?.totalVendors || '0',
+      change: '+5 this month',
+      icon: Users,
+      gradient: 'from-blue-500 to-blue-600',
+      bgColor: 'bg-blue-50',
+      textColor: 'text-blue-600',
+    },
+    {
+      title: 'Active Vendors',
+      value: serverStats?.activeVendors || '0',
+      change: '87.5% active rate',
+      icon: CheckCircle,
+      gradient: 'from-green-500 to-emerald-600',
+      bgColor: 'bg-green-50',
+      textColor: 'text-green-600',
+    },
+    {
+      title: 'Contracts Expiring Soon',
+      value: '5',
+      change: 'Within 30 days',
+      icon: AlertTriangle,
+      gradient: 'from-orange-500 to-amber-500',
+      bgColor: 'bg-orange-50',
+      textColor: 'text-orange-600',
+    },
+    {
+      title: 'Pending Amount',
+      value: `₹${(serverStats?.pendingPayments || 0).toLocaleString()}`,
+      change: '3 vendors',
+      icon: DollarSign,
+      gradient: 'from-red-500 to-rose-500',
+      bgColor: 'bg-red-50',
+      textColor: 'text-red-600',
+    },
+  ]
 
   const showNotification = (message: string) => {
     setShowSuccess(message)
@@ -323,51 +441,166 @@ export default function VendorsPage() {
   }
 
   const handleAddVendor = () => {
-    setIsAddDialogOpen(false)
-    showNotification('Vendor added successfully!')
+    // Validation
+    if (!vendorForm.name || !vendorForm.type || !vendorForm.contactPerson || !vendorForm.phone) {
+      showNotification('Please fill in all required fields')
+      return
+    }
+
+    // Submit to API
+    createMutation.mutate({
+      name: vendorForm.name,
+      company: vendorForm.company,
+      type: vendorForm.type,
+      contactPerson: vendorForm.contactPerson,
+      phone: vendorForm.phone,
+      email: vendorForm.email,
+      address: vendorForm.address,
+      gst: vendorForm.gst,
+      pan: vendorForm.pan,
+      contractStart: vendorForm.contractStart,
+      contractEnd: vendorForm.contractEnd,
+      contractValue: vendorForm.contractValue ? parseFloat(vendorForm.contractValue) : undefined,
+      paymentTerms: vendorForm.paymentTerms
+    })
   }
 
   const handleExport = () => {
+    // Export vendors to CSV
+    const csvData = filteredVendors.map(v => ({
+      Name: v.name,
+      Company: v.company || '',
+      Type: v.serviceType || v.type,
+      Contact: v.contact || v.phone,
+      Email: v.email || '',
+      Status: v.status,
+      Address: v.address || ''
+    }))
+
+    const headers = Object.keys(csvData[0] || {}).join(',')
+    const rows = csvData.map(row => Object.values(row).join(','))
+    const csv = [headers, ...rows].join('\n')
+
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `vendors-${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    window.URL.revokeObjectURL(url)
+
     showNotification('Vendors data exported successfully!')
   }
 
+  const handleViewDetails = (vendor: any) => {
+    setViewingVendor(vendor)
+  }
+
+  const handleEditVendor = (vendor: any) => {
+    setEditingVendor(vendor)
+  }
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string | number, data: any }) =>
+      VendorService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vendors'] })
+      queryClient.invalidateQueries({ queryKey: ['vendor-stats'] })
+      setEditingVendor(null)
+      showNotification('Vendor updated successfully!')
+    }
+  })
+
+  const renewMutation = useMutation({
+    mutationFn: VendorService.renewContract,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vendors'] })
+      setRenewingVendor(null)
+      showNotification('Contract renewed successfully!')
+    }
+  })
+
+  const rateMutation = useMutation({
+    mutationFn: ({ id, rating }: { id: string | number, rating: number }) =>
+      VendorService.rateVendor(id, rating),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vendors'] })
+      setRatingVendor(null)
+      showNotification('Rating submitted successfully!')
+    }
+  })
+
   const handleSaveEdit = () => {
-    setEditingVendor(null)
-    showNotification('Vendor updated successfully!')
+    if (editingVendor) {
+      updateMutation.mutate({ id: editingVendor.id, data: editingVendor })
+    }
   }
 
   const handleDeleteVendor = (vendorId: string) => {
     if (confirm(`Are you sure you want to delete vendor ${vendorId}?`)) {
-      showNotification(`Vendor ${vendorId} deleted successfully!`)
+      deleteMutation.mutate(vendorId)
     }
   }
 
   const handleMarkInactive = (vendorId: string) => {
     if (confirm(`Are you sure you want to mark vendor ${vendorId} as inactive?`)) {
-      showNotification(`Vendor ${vendorId} marked as inactive!`)
+      statusMutation.mutate({ id: vendorId, status: 'INACTIVE' })
     }
   }
 
   const handleRenewContract = () => {
-    setRenewingVendor(null)
-    showNotification('Contract renewed successfully!')
+    if (renewingVendor) {
+      renewMutation.mutate(renewingVendor.id)
+    }
   }
 
-  const handleRateVendor = () => {
-    setRatingVendor(null)
-    showNotification('Rating submitted successfully!')
+  const handleRateVendor = (rating: number) => {
+    if (ratingVendor) {
+      rateMutation.mutate({ id: ratingVendor.id, rating })
+    }
   }
 
-  const filteredVendors = vendors.filter((vendor) => {
+  const handleViewPaymentHistory = (vendor: any) => {
+    // Fetch payment history
+    VendorService.getPaymentHistory(vendor.id)
+      .then(data => {
+        setPaymentHistoryVendor({ ...vendor, payments: data })
+      })
+      .catch(err => {
+        showNotification('Failed to load payment history')
+      })
+  }
+
+  const enrichedVendors = (Array.isArray(apiVendors) ? apiVendors : []).map((vendor: any) => {
+    const endDate = vendor.contractEnd ? new Date(vendor.contractEnd) : null;
+    let contractStatus = 'active'; // Default
+    if (endDate && !isNaN(endDate.getTime())) {
+      const now = new Date();
+      const diffTime = endDate.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays < 0) contractStatus = 'expired';
+      else if (diffDays <= 30) contractStatus = 'expiring';
+    }
+
+    return {
+      ...vendor,
+      type: vendor.serviceType || vendor.type,
+      phone: vendor.contact || vendor.phone,
+      contractStatus,
+    };
+  });
+
+  const filteredVendors = enrichedVendors.filter((vendor) => {
     const matchesSearch =
       vendor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      vendor.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      vendor.contactPerson.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      vendor.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      vendor.phone.includes(searchQuery)
+      (vendor.company || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (vendor.contactPerson || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (vendor.type || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (vendor.phone || '').includes(searchQuery)
 
     const matchesType = typeFilter === 'all' || vendor.type === typeFilter
-    const matchesStatus = statusFilter === 'all' || vendor.status === statusFilter
+    const matchesStatus = statusFilter === 'all' || vendor.status?.toLowerCase() === statusFilter.toLowerCase()
     const matchesContract = contractFilter === 'all' || vendor.contractStatus === contractFilter
 
     return matchesSearch && matchesType && matchesStatus && matchesContract
@@ -431,18 +664,29 @@ export default function VendorsPage() {
                       <TabsContent value="basic" className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
-                            <Label>Vendor Name</Label>
-                            <Input placeholder="ABC Services" />
+                            <Label>Vendor Name *</Label>
+                            <Input
+                              placeholder="ABC Services"
+                              value={vendorForm.name}
+                              onChange={(e) => setVendorForm({ ...vendorForm, name: e.target.value })}
+                            />
                           </div>
                           <div className="space-y-2">
                             <Label>Company Name</Label>
-                            <Input placeholder="ABC Services Pvt Ltd" />
+                            <Input
+                              placeholder="ABC Services Pvt Ltd"
+                              value={vendorForm.company}
+                              onChange={(e) => setVendorForm({ ...vendorForm, company: e.target.value })}
+                            />
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
-                            <Label>Vendor Type</Label>
-                            <Select>
+                            <Label>Vendor Type *</Label>
+                            <Select
+                              value={vendorForm.type}
+                              onValueChange={(value) => setVendorForm({ ...vendorForm, type: value })}
+                            >
                               <SelectTrigger>
                                 <SelectValue placeholder="Select type" />
                               </SelectTrigger>
@@ -454,18 +698,30 @@ export default function VendorsPage() {
                             </Select>
                           </div>
                           <div className="space-y-2">
-                            <Label>Contact Person</Label>
-                            <Input placeholder="John Doe" />
+                            <Label>Contact Person *</Label>
+                            <Input
+                              placeholder="John Doe"
+                              value={vendorForm.contactPerson}
+                              onChange={(e) => setVendorForm({ ...vendorForm, contactPerson: e.target.value })}
+                            />
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label>GST Number</Label>
-                            <Input placeholder="07AAACR5055K1Z5" />
+                            <Input
+                              placeholder="07AAACR5055K1Z5"
+                              value={vendorForm.gst}
+                              onChange={(e) => setVendorForm({ ...vendorForm, gst: e.target.value })}
+                            />
                           </div>
                           <div className="space-y-2">
                             <Label>PAN Number</Label>
-                            <Input placeholder="AAACR5055K" />
+                            <Input
+                              placeholder="AAACR5055K"
+                              value={vendorForm.pan}
+                              onChange={(e) => setVendorForm({ ...vendorForm, pan: e.target.value })}
+                            />
                           </div>
                         </div>
                       </TabsContent>
@@ -473,21 +729,32 @@ export default function VendorsPage() {
                       <TabsContent value="contact" className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
-                            <Label>Phone Number</Label>
-                            <Input type="tel" placeholder="+91 98765 43210" />
+                            <Label>Phone Number *</Label>
+                            <Input
+                              type="tel"
+                              placeholder="+91 98765 43210"
+                              value={vendorForm.phone}
+                              onChange={(e) => setVendorForm({ ...vendorForm, phone: e.target.value })}
+                            />
                           </div>
                           <div className="space-y-2">
-                            <Label>Emergency Contact</Label>
-                            <Input type="tel" placeholder="+91 98765 43299" />
+                            <Label>Email Address</Label>
+                            <Input
+                              type="email"
+                              placeholder="contact@vendor.com"
+                              value={vendorForm.email}
+                              onChange={(e) => setVendorForm({ ...vendorForm, email: e.target.value })}
+                            />
                           </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Email Address</Label>
-                          <Input type="email" placeholder="contact@vendor.com" />
                         </div>
                         <div className="space-y-2">
                           <Label>Complete Address</Label>
-                          <Textarea placeholder="Street address, city, state, pincode" rows={3} />
+                          <Textarea
+                            placeholder="Street address, city, state, pincode"
+                            rows={3}
+                            value={vendorForm.address}
+                            onChange={(e) => setVendorForm({ ...vendorForm, address: e.target.value })}
+                          />
                         </div>
                       </TabsContent>
 
@@ -495,21 +762,37 @@ export default function VendorsPage() {
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label>Contract Start Date</Label>
-                            <Input type="date" />
+                            <Input
+                              type="date"
+                              value={vendorForm.contractStart}
+                              onChange={(e) => setVendorForm({ ...vendorForm, contractStart: e.target.value })}
+                            />
                           </div>
                           <div className="space-y-2">
                             <Label>Contract End Date</Label>
-                            <Input type="date" />
+                            <Input
+                              type="date"
+                              value={vendorForm.contractEnd}
+                              onChange={(e) => setVendorForm({ ...vendorForm, contractEnd: e.target.value })}
+                            />
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label>Contract Value (₹)</Label>
-                            <Input type="number" placeholder="240000" />
+                            <Input
+                              type="number"
+                              placeholder="240000"
+                              value={vendorForm.contractValue}
+                              onChange={(e) => setVendorForm({ ...vendorForm, contractValue: e.target.value })}
+                            />
                           </div>
                           <div className="space-y-2">
                             <Label>Payment Terms</Label>
-                            <Select>
+                            <Select
+                              value={vendorForm.paymentTerms}
+                              onValueChange={(value) => setVendorForm({ ...vendorForm, paymentTerms: value })}
+                            >
                               <SelectTrigger>
                                 <SelectValue placeholder="Select terms" />
                               </SelectTrigger>
@@ -732,7 +1015,7 @@ export default function VendorsPage() {
                               <RefreshCw className="h-4 w-4 mr-2" />
                               Renew Contract
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setPaymentHistoryVendor(vendor)}>
+                            <DropdownMenuItem onClick={() => handleViewPaymentHistory(vendor)}>
                               <History className="h-4 w-4 mr-2" />
                               Payment History
                             </DropdownMenuItem>
@@ -801,19 +1084,21 @@ export default function VendorsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-3 bg-gray-50 rounded-lg">
                       <Label className="text-muted-foreground text-xs">GST Number</Label>
-                      <p className="font-mono font-medium text-sm">{viewingVendor.gst}</p>
+                      <p className="font-mono font-medium text-sm">{viewingVendor.gst || 'N/A'}</p>
                     </div>
                     <div className="p-3 bg-gray-50 rounded-lg">
                       <Label className="text-muted-foreground text-xs">PAN Number</Label>
-                      <p className="font-mono font-medium text-sm">{viewingVendor.pan}</p>
+                      <p className="font-mono font-medium text-sm">{viewingVendor.pan || 'N/A'}</p>
                     </div>
                     <div className="p-3 bg-gray-50 rounded-lg">
                       <Label className="text-muted-foreground text-xs">Join Date</Label>
-                      <p className="font-medium text-sm">{new Date(viewingVendor.joinDate).toLocaleDateString()}</p>
+                      <p className="font-medium text-sm">
+                        {viewingVendor.createdAt ? new Date(viewingVendor.createdAt).toLocaleDateString() : 'N/A'}
+                      </p>
                     </div>
                     <div className="p-3 bg-gray-50 rounded-lg">
                       <Label className="text-muted-foreground text-xs">Contact Person</Label>
-                      <p className="font-medium text-sm">{viewingVendor.contactPerson}</p>
+                      <p className="font-medium text-sm">{viewingVendor.contactPerson || 'N/A'}</p>
                     </div>
                   </div>
                 </TabsContent>
@@ -891,23 +1176,23 @@ export default function VendorsPage() {
                     <div className="p-4 border rounded-lg">
                       <Label className="text-xs text-muted-foreground">Contract Value</Label>
                       <p className="text-2xl font-bold text-green-600">
-                        ₹{viewingVendor.contractValue.toLocaleString()}
+                        ₹{viewingVendor.contractValue ? viewingVendor.contractValue.toLocaleString() : '0'}
                       </p>
                     </div>
                     <div className="p-4 border rounded-lg">
                       <Label className="text-xs text-muted-foreground">Payment Terms</Label>
-                      <p className="font-semibold">{viewingVendor.paymentTerms}</p>
+                      <p className="font-semibold">{viewingVendor.paymentTerms || 'Not specified'}</p>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 border rounded-lg">
                       <Label className="text-xs text-muted-foreground">Last Payment</Label>
-                      <p className="font-medium">{new Date(viewingVendor.lastPayment).toLocaleDateString()}</p>
+                      <p className="font-medium">{viewingVendor.lastPayment ? new Date(viewingVendor.lastPayment).toLocaleDateString() : 'N/A'}</p>
                     </div>
                     <div className="p-4 border rounded-lg">
                       <Label className="text-xs text-muted-foreground">Pending Amount</Label>
-                      <p className={`text-lg font-bold ${viewingVendor.pendingAmount > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        ₹{viewingVendor.pendingAmount.toLocaleString()}
+                      <p className={`text-lg font-bold ${(viewingVendor.pendingAmount || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        ₹{(viewingVendor.pendingAmount || 0).toLocaleString()}
                       </p>
                     </div>
                   </div>
@@ -921,7 +1206,7 @@ export default function VendorsPage() {
                           <Label className="text-xs text-muted-foreground">Rating</Label>
                           <div className="flex items-center gap-1 mt-1">
                             <Star className="h-5 w-5 text-yellow-500 fill-yellow-500" />
-                            <span className="text-2xl font-bold">{viewingVendor.rating}</span>
+                            <span className="text-2xl font-bold">{viewingVendor.rating || '0'}</span>
                           </div>
                         </div>
                         <TrendingUp className="h-8 w-8 text-yellow-600" />
@@ -931,7 +1216,7 @@ export default function VendorsPage() {
                       <div className="flex items-center justify-between">
                         <div>
                           <Label className="text-xs text-muted-foreground">Total Jobs</Label>
-                          <p className="text-2xl font-bold mt-1">{viewingVendor.totalJobs}</p>
+                          <p className="text-2xl font-bold mt-1">{viewingVendor.totalJobs || 0}</p>
                         </div>
                         <FileText className="h-8 w-8 text-blue-600" />
                       </div>
@@ -940,7 +1225,7 @@ export default function VendorsPage() {
                       <div className="flex items-center justify-between">
                         <div>
                           <Label className="text-xs text-muted-foreground">Completed</Label>
-                          <p className="text-2xl font-bold mt-1">{viewingVendor.completedJobs}</p>
+                          <p className="text-2xl font-bold mt-1">{viewingVendor.completedJobs || 0}</p>
                         </div>
                         <CheckCircle className="h-8 w-8 text-green-600" />
                       </div>
@@ -1009,18 +1294,27 @@ export default function VendorsPage() {
                 <TabsContent value="basic" className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Vendor Name</Label>
-                      <Input defaultValue={editingVendor.name} />
+                      <Label>Vendor Name *</Label>
+                      <Input
+                        value={editingVendor.name || ''}
+                        onChange={(e) => setEditingVendor({ ...editingVendor, name: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Company Name</Label>
-                      <Input defaultValue={editingVendor.company} />
+                      <Input
+                        value={editingVendor.company || ''}
+                        onChange={(e) => setEditingVendor({ ...editingVendor, company: e.target.value })}
+                      />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Type</Label>
-                      <Select defaultValue={editingVendor.type}>
+                      <Label>Type *</Label>
+                      <Select
+                        value={editingVendor.type || editingVendor.serviceType}
+                        onValueChange={(value) => setEditingVendor({ ...editingVendor, type: value })}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -1033,7 +1327,10 @@ export default function VendorsPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Status</Label>
-                      <Select defaultValue={editingVendor.status}>
+                      <Select
+                        value={editingVendor.status?.toLowerCase()}
+                        onValueChange={(value) => setEditingVendor({ ...editingVendor, status: value })}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -1059,25 +1356,41 @@ export default function VendorsPage() {
                 <TabsContent value="contact" className="space-y-4">
                   <div className="space-y-2">
                     <Label>Contact Person</Label>
-                    <Input defaultValue={editingVendor.contactPerson} />
+                    <Input
+                      value={editingVendor.contactPerson || ''}
+                      onChange={(e) => setEditingVendor({ ...editingVendor, contactPerson: e.target.value })}
+                    />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Phone</Label>
-                      <Input defaultValue={editingVendor.phone} />
+                      <Input
+                        value={editingVendor.phone || editingVendor.contact || ''}
+                        onChange={(e) => setEditingVendor({ ...editingVendor, phone: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Emergency Contact</Label>
-                      <Input defaultValue={editingVendor.emergencyContact} />
+                      <Input
+                        value={editingVendor.emergencyContact || ''}
+                        onChange={(e) => setEditingVendor({ ...editingVendor, emergencyContact: e.target.value })}
+                      />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label>Email</Label>
-                    <Input defaultValue={editingVendor.email} />
+                    <Input
+                      value={editingVendor.email || ''}
+                      onChange={(e) => setEditingVendor({ ...editingVendor, email: e.target.value })}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Address</Label>
-                    <Textarea defaultValue={editingVendor.address} rows={3} />
+                    <Textarea
+                      value={editingVendor.address || ''}
+                      onChange={(e) => setEditingVendor({ ...editingVendor, address: e.target.value })}
+                      rows={3}
+                    />
                   </div>
                 </TabsContent>
 
@@ -1085,27 +1398,56 @@ export default function VendorsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Contract Start Date</Label>
-                      <Input type="date" defaultValue={editingVendor.contractStart} />
+                      <Input
+                        type="date"
+                        value={editingVendor.contractStart ? new Date(editingVendor.contractStart).toISOString().split('T')[0] : ''}
+                        onChange={(e) => setEditingVendor({ ...editingVendor, contractStart: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Contract End Date</Label>
-                      <Input type="date" defaultValue={editingVendor.contractEnd} />
+                      <Input
+                        type="date"
+                        value={editingVendor.contractEnd ? new Date(editingVendor.contractEnd).toISOString().split('T')[0] : ''}
+                        onChange={(e) => setEditingVendor({ ...editingVendor, contractEnd: e.target.value })}
+                      />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Contract Value (₹)</Label>
-                      <Input type="number" defaultValue={editingVendor.contractValue} />
+                      <Input
+                        type="number"
+                        value={editingVendor.contractValue || ''}
+                        onChange={(e) => setEditingVendor({ ...editingVendor, contractValue: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Payment Terms</Label>
-                      <Input defaultValue={editingVendor.paymentTerms} />
+                      <Select
+                        value={editingVendor.paymentTerms}
+                        onValueChange={(value) => setEditingVendor({ ...editingVendor, paymentTerms: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select terms" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="monthly-30">Monthly - 30 days</SelectItem>
+                          <SelectItem value="monthly-15">Monthly - 15 days</SelectItem>
+                          <SelectItem value="quarterly-30">Quarterly - 30 days</SelectItem>
+                          <SelectItem value="perjob-7">Per Job - 7 days</SelectItem>
+                          <SelectItem value="advance">100% Advance</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Contract Status</Label>
-                      <Select defaultValue={editingVendor.contractStatus}>
+                      <Select
+                        value={editingVendor.contractStatus}
+                        onValueChange={(value) => setEditingVendor({ ...editingVendor, contractStatus: value })}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -1118,7 +1460,11 @@ export default function VendorsPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Pending Amount (₹)</Label>
-                      <Input type="number" defaultValue={editingVendor.pendingAmount} />
+                      <Input
+                        type="number"
+                        value={editingVendor.pendingAmount || 0}
+                        onChange={(e) => setEditingVendor({ ...editingVendor, pendingAmount: parseFloat(e.target.value) })}
+                      />
                     </div>
                   </div>
                 </TabsContent>
@@ -1250,50 +1596,72 @@ export default function VendorsPage() {
                   <Card className="p-4 border-0 bg-green-50">
                     <Label className="text-xs text-muted-foreground">Total Paid</Label>
                     <p className="text-2xl font-bold text-green-600">
-                      ₹{(paymentHistoryVendor.contractValue - paymentHistoryVendor.pendingAmount).toLocaleString()}
+                      ₹{((paymentHistoryVendor.contractValue || 0) - (paymentHistoryVendor.pendingAmount || 0)).toLocaleString()}
                     </p>
                   </Card>
                   <Card className="p-4 border-0 bg-orange-50">
                     <Label className="text-xs text-muted-foreground">Pending</Label>
                     <p className="text-2xl font-bold text-orange-600">
-                      ₹{paymentHistoryVendor.pendingAmount.toLocaleString()}
+                      ₹{(paymentHistoryVendor.pendingAmount || 0).toLocaleString()}
                     </p>
                   </Card>
                   <Card className="p-4 border-0 bg-blue-50">
                     <Label className="text-xs text-muted-foreground">Last Payment</Label>
-                    <p className="font-medium text-sm">
-                      {new Date(paymentHistoryVendor.lastPayment).toLocaleDateString()}
+                    <p className="font-medium">
+                      {paymentHistoryVendor.lastPayment ? new Date(paymentHistoryVendor.lastPayment).toLocaleDateString() : 'N/A'}
                     </p>
                   </Card>
                 </div>
-                <Separator />
-                <div className="space-y-3 max-h-60 overflow-y-auto">
+
+                <div className="flex justify-between items-center mb-2">
                   <h4 className="font-semibold text-sm">Recent Transactions</h4>
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
-                          <CheckCircle className="h-5 w-5 text-green-600" />
+                </div>
+                <Separator className="mb-3" />
+                <div className="space-y-3 max-h-60 overflow-y-auto">
+                  {(paymentHistoryVendor.payments && paymentHistoryVendor.payments.length > 0) ? (
+                    paymentHistoryVendor.payments.map((payment: any, index: number) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
+                            <CheckCircle className="h-5 w-5 text-green-600" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">Payment #{payment.invoiceNumber || index + 1}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(payment.date || new Date()).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-sm">Payment #{i}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(2025, 0, 15 - i * 30).toLocaleDateString()}
-                          </p>
+                        <div className="text-right">
+                          <p className="font-bold text-green-600">₹{(payment.amount || 0).toLocaleString()}</p>
+                          <Badge className="bg-green-100 text-green-700 text-xs">{payment.status || 'Completed'}</Badge>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold text-green-600">₹20,000</p>
-                        <Badge className="bg-green-100 text-green-700 text-xs">Completed</Badge>
-                      </div>
+                    ))) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No payment history available
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setPaymentHistoryVendor(null)}>Close</Button>
-              <Button>
+              <Button onClick={() => {
+                const headers = "Date,Amount,Status,Invoice\n";
+                const rows = paymentHistoryVendor.payments?.map((p: any) =>
+                  `${new Date(p.date || new Date()).toLocaleDateString()},${p.amount},${p.status || 'Completed'},${p.invoiceNumber || ''}`
+                ).join('\n') || '';
+                const csv = headers + rows;
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `payment-history-${paymentHistoryVendor.name}.csv`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+                showNotification('Report downloaded successfully!');
+              }}>
                 <Download className="h-4 w-4 mr-2" />
                 Download Report
               </Button>

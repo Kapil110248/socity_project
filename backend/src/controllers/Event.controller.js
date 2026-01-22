@@ -7,9 +7,25 @@ const getAll = async (req, res) => {
     const societyId = req.user.societyId;
     const events = await prisma.event.findMany({
       where: { societyId },
+      include: {
+        _count: {
+          select: { rsvps: { where: { status: 'RSVP' } } }
+        },
+        rsvps: {
+          where: { userId: req.user.id },
+          select: { status: true }
+        }
+      },
       orderBy: { date: 'desc' }
     });
-    res.json({ success: true, data: events });
+
+    const formattedEvents = events.map(event => ({
+      ...event,
+      attendees: event._count.rsvps,
+      isRsvp: event.rsvps.length > 0 && event.rsvps[0].status === 'RSVP'
+    }));
+
+    res.json({ success: true, data: formattedEvents });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -20,12 +36,29 @@ const getById = async (req, res) => {
   try {
     const { id } = req.params;
     const event = await prisma.event.findUnique({
-      where: { id: parseInt(id) }
+      where: { id: parseInt(id) },
+      include: {
+        _count: {
+          select: { rsvps: { where: { status: 'RSVP' } } }
+        },
+        rsvps: {
+          where: { userId: req.user.id },
+          select: { status: true }
+        }
+      }
     });
+
     if (!event) {
       return res.status(404).json({ success: false, message: 'Event not found' });
     }
-    res.json({ success: true, data: event });
+
+    const formattedEvent = {
+      ...event,
+      attendees: event._count.rsvps,
+      isRsvp: event.rsvps.length > 0 && event.rsvps[0].status === 'RSVP'
+    };
+
+    res.json({ success: true, data: formattedEvent });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -34,9 +67,9 @@ const getById = async (req, res) => {
 // Create event
 const create = async (req, res) => {
   try {
-    const { title, description, date, time, location, category } = req.body;
+    const { title, description, date, time, location, category, maxAttendees, organizer } = req.body;
     const societyId = req.user.societyId;
-    
+
     const event = await prisma.event.create({
       data: {
         title,
@@ -45,6 +78,8 @@ const create = async (req, res) => {
         time,
         location,
         category,
+        maxAttendees: parseInt(maxAttendees || 0),
+        organizer,
         societyId
       }
     });
@@ -58,8 +93,8 @@ const create = async (req, res) => {
 const update = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, date, time, location, category, status } = req.body;
-    
+    const { title, description, date, time, location, category, status, maxAttendees, organizer } = req.body;
+
     const event = await prisma.event.update({
       where: { id: parseInt(id) },
       data: {
@@ -69,10 +104,68 @@ const update = async (req, res) => {
         time,
         location,
         category,
-        status
+        status,
+        maxAttendees: maxAttendees !== undefined ? parseInt(maxAttendees) : undefined,
+        organizer
       }
     });
     res.json({ success: true, data: event });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Get attendees for an event (Admin only preferably, or restricted info for residents)
+const getAttendees = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const attendees = await prisma.eventRsvp.findMany({
+      where: {
+        eventId: parseInt(id),
+        status: 'RSVP'
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            profileImg: true,
+            phone: true
+          }
+        }
+      }
+    });
+
+    res.json({ success: true, data: attendees.map(a => a.user) });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// RSVP for event
+const rsvp = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body; // RSVP or CANCELLED
+    const userId = req.user.id;
+
+    const eventRsvp = await prisma.eventRsvp.upsert({
+      where: {
+        eventId_userId: {
+          eventId: parseInt(id),
+          userId: userId
+        }
+      },
+      update: { status: status || 'RSVP' },
+      create: {
+        eventId: parseInt(id),
+        userId: userId,
+        status: status || 'RSVP'
+      }
+    });
+
+    res.json({ success: true, data: eventRsvp });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -91,4 +184,4 @@ const remove = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, create, update, remove };
+module.exports = { getAll, getById, create, update, remove, rsvp, getAttendees };

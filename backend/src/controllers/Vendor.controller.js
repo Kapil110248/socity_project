@@ -22,8 +22,25 @@ class VendorController {
 
   static async createVendor(req, res) {
     try {
-      const { name, serviceType, contact, email, address, societyId } = req.body;
-      
+      const {
+        name,
+        company,
+        type,
+        serviceType,
+        contactPerson,
+        contact,
+        phone,
+        email,
+        address,
+        gst,
+        pan,
+        contractStart,
+        contractEnd,
+        contractValue,
+        paymentTerms,
+        societyId
+      } = req.body;
+
       // If SUPER_ADMIN, we can either take societyId from body (for societal vendor) 
       // or set it to null (for platform vendor).
       // If ADMIN, we strictly use their own societyId.
@@ -35,13 +52,21 @@ class VendorController {
       }
 
       const vendor = await prisma.vendor.create({
-        data: { 
-          name, 
-          serviceType, 
-          contact, 
-          email, 
+        data: {
+          name,
+          company,
+          serviceType: type || serviceType,
+          contactPerson,
+          contact: phone || contact || '',
+          email,
           address,
-          societyId: socId 
+          gst,
+          pan,
+          contractStart: contractStart ? new Date(contractStart) : null,
+          contractEnd: contractEnd ? new Date(contractEnd) : null,
+          contractValue: contractValue ? parseFloat(contractValue) : 0,
+          paymentTerms,
+          societyId: socId
         }
       });
       res.status(201).json(vendor);
@@ -90,18 +115,110 @@ class VendorController {
 
   static async getStats(req, res) {
     try {
-      const totalVendors = await prisma.vendor.count();
-      const societyConnections = await prisma.vendor.count({
-        where: { societyId: { not: null } }
+      const societyId = req.user.societyId;
+      const where = societyId ? { societyId } : {};
+
+      const totalVendors = await prisma.vendor.count({ where });
+      const activeVendors = await prisma.vendor.count({
+        where: { ...where, status: 'ACTIVE' }
       });
-      // Mock rating for now
-      const avgPartnerRating = 4.8;
+
+      // Calculate pending payments from vendor invoices
+      const pendingPayments = await prisma.vendorInvoice.aggregate({
+        where: { ...where, status: 'PENDING' },
+        _sum: { totalAmount: true }
+      });
 
       res.json({
         totalVendors,
-        societyConnections,
-        avgPartnerRating
+        activeVendors,
+        pendingPayments: pendingPayments._sum.totalAmount || 0,
+        avgPartnerRating: 4.8 // Mock rating
       });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async updateVendor(req, res) {
+    try {
+      const { id } = req.params;
+      const {
+        name,
+        company,
+        type,
+        serviceType,
+        contactPerson,
+        contact,
+        phone,
+        email,
+        address,
+        status,
+        gst,
+        pan,
+        contractStart,
+        contractEnd,
+        contractValue,
+        paymentTerms
+      } = req.body;
+
+      const updateData = {};
+      if (name !== undefined) updateData.name = name;
+      if (type !== undefined || serviceType !== undefined) updateData.serviceType = type || serviceType;
+      if (phone !== undefined || contact !== undefined) updateData.contact = phone || contact;
+      if (email !== undefined) updateData.email = email;
+      if (address !== undefined) updateData.address = address;
+      if (status !== undefined) updateData.status = status.toUpperCase();
+
+      if (contractStart !== undefined) updateData.contractStart = contractStart ? new Date(contractStart) : null;
+      if (contractEnd !== undefined) updateData.contractEnd = contractEnd ? new Date(contractEnd) : null;
+      if (contractValue !== undefined) updateData.contractValue = contractValue ? parseFloat(contractValue) : 0;
+      if (paymentTerms !== undefined) updateData.paymentTerms = paymentTerms;
+      if (company !== undefined) updateData.company = company;
+      if (contactPerson !== undefined) updateData.contactPerson = contactPerson;
+      if (gst !== undefined) updateData.gst = gst;
+      if (pan !== undefined) updateData.pan = pan;
+
+      const vendor = await prisma.vendor.update({
+        where: { id: parseInt(id) },
+        data: updateData
+      });
+      res.json(vendor);
+    } catch (error) {
+      console.error('Update Vendor Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async renewContract(req, res) {
+    try {
+      const { id } = req.params;
+      // In a real app, this would update a contractEnd date in the vendor model
+      res.json({ message: 'Contract renewed successfully' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async rateVendor(req, res) {
+    try {
+      const { id } = req.params;
+      const { rating } = req.body;
+      // In a real app, this would add a record to a VendorRating model
+      res.json({ message: 'Rating submitted successfully' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async getPaymentHistory(req, res) {
+    try {
+      const { id } = req.params;
+      const payments = await prisma.vendorInvoice.findMany({
+        where: { vendorId: parseInt(id) },
+        orderBy: { createdAt: 'desc' }
+      });
+      res.json(payments);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

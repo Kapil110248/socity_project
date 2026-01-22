@@ -131,6 +131,7 @@ model Society {
   parkingPayments ParkingPayment[]
   staff       Staff[]
   moveRequests MoveRequest[]
+  facilityRequests FacilityRequest[]
 }
 
 model User {
@@ -174,6 +175,8 @@ model User {
   emergencyContacts EmergencyContact[]
   marketplaceItems MarketplaceItem[]
   invoices    Invoice[]
+  facilityRequests FacilityRequest[]
+  eventRsvps       EventRsvp[]
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -254,6 +257,17 @@ model Unit {
   invoices    Invoice[]
   moveRequests MoveRequest[]
   
+  // Lease Details
+  leaseStartDate DateTime?
+  leaseEndDate   DateTime?
+  rentAmount     Float?
+  securityDeposit Float?
+  maintenanceCharges Float?
+  parkingSlot    String?
+  vehicleNumber  String?
+  notes          String?   @db.Text
+  emergencyContact String?
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -433,11 +447,24 @@ model Invoice {
 model Vendor {
   id          Int      @id @default(autoincrement())
   name        String
+  company     String?
   serviceType String
+  contactPerson String?
   contact     String
   email       String?
   address     String?
+  gst         String?
+  pan         String?
+  
+  contractStart DateTime?
+  contractEnd   DateTime?
+  contractValue Float?
+  paymentTerms  String?
+  
   status      VendorStatus @default(ACTIVE)
+  rating      Float    @default(0)
+  totalJobs   Int      @default(0)
+  completedJobs Int    @default(0)
   
   societyId   Int?
   society     Society?  @relation(fields: [societyId], references: [id])
@@ -829,6 +856,9 @@ model Document {
   fileUrl   String
   societyId Int
   society   Society  @relation(fields: [societyId], references: [id])
+  visibility String? @default("all")
+  size       String?
+  type       String?
   createdAt DateTime @default(now())
 }
 
@@ -857,10 +887,30 @@ model Event {
   location    String?
   category    String?  // Festival, Meeting, Sports
   status      String   @default("UPCOMING") // UPCOMING, ONGOING, COMPLETED
+  
+  maxAttendees Int     @default(0)
+  organizer   String?
+  
   societyId   Int
   society     Society  @relation(fields: [societyId], references: [id])
+  
+  rsvps       EventRsvp[]
+  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model EventRsvp {
+  id        Int      @id @default(autoincrement())
+  eventId   Int
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  status    String   @default("RSVP") // RSVP, CANCELLED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, userId])
 }
 model PurchaseRequest {
   id           Int      @id @default(autoincrement())
@@ -1152,6 +1202,7 @@ model Staff {
   
   shift     String?  // Morning, Afternoon, Night
   gate      String?  // Main Gate, Back Gate
+  workingDays String?  // Store as comma-separated days: "Mon,Tue,Wed"
   
   status    String   @default("OFF_DUTY") // ON_DUTY, OFF_DUTY, ON_LEAVE
   attendanceStatus String? // PRESENT, ABSENT, LATE, UPCOMING, COMPLETED
@@ -1224,44 +1275,24 @@ model MoveRequest {
   updatedAt       DateTime          @updatedAt
 }
 
-model Amenity {
-  id              Int              @id @default(autoincrement())
-  name            String
-  description     String?
-  type            String?
-  capacity        Int?
-  chargesPerHour  Float?           @default(0)
-  availableDays   String?
-  timings         Json?
-  status          String           @default("AVAILABLE")
-  bookings        AmenityBooking[]
-  
-  societyId       Int
-  society         Society          @relation(fields: [societyId], references: [id])
-  
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-
-  @@index([societyId])
-}
-
-model AmenityBooking {
+model FacilityRequest {
   id          Int      @id @default(autoincrement())
-  amenityId   Int
-  amenity     Amenity  @relation(fields: [amenityId], references: [id])
+  title       String
+  description String   @db.Text
+  category    String   // Improvement, Maintenance, New Feature, Event
+  status      String   @default("PENDING") // PENDING, UNDER_REVIEW, APPROVED, REJECTED, IMPLEMENTED
+  
+  upvotes     Int      @default(0)
+  downvotes   Int      @default(0)
+  
+  societyId   Int
+  society     Society  @relation(fields: [societyId], references: [id])
   
   userId      Int
   user        User     @relation(fields: [userId], references: [id])
   
-  startTime   DateTime
-  endTime     DateTime
-  purpose     String?
-  amountPaid  Float    @default(0)
-  status      String   @default("PENDING")
+  votes       Json?    // Array of { userId, Type: 'UP' | 'DOWN' } to prevent double voting
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
-  @@index([amenityId])
-  @@index([userId])
 }

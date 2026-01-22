@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { RoleGuard } from '@/components/auth/role-guard'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { EventService } from '@/services/event.service'
+import { toast } from 'sonner'
 import {
   Plus,
   Search,
@@ -40,6 +43,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -54,46 +58,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
-const stats = [
-  {
-    title: 'Total Events',
-    value: '45',
-    change: '+12 this year',
-    icon: Calendar,
-    color: 'from-blue-500 to-indigo-600',
-    bgColor: 'bg-blue-50',
-    textColor: 'text-blue-600',
-  },
-  {
-    title: 'Upcoming',
-    value: '8',
-    change: 'Next 30 days',
-    icon: Clock,
-    color: 'from-green-500 to-emerald-600',
-    bgColor: 'bg-green-50',
-    textColor: 'text-green-600',
-    pulse: true,
-  },
-  {
-    title: 'This Month',
-    value: '6',
-    change: '3 you RSVP\'d',
-    icon: Calendar,
-    color: 'from-purple-500 to-violet-600',
-    bgColor: 'bg-purple-50',
-    textColor: 'text-purple-600',
-  },
-  {
-    title: 'Total Attendees',
-    value: '1,245',
-    change: '+156 this month',
-    icon: Users,
-    color: 'from-orange-500 to-amber-600',
-    bgColor: 'bg-orange-50',
-    textColor: 'text-orange-600',
-    trend: 'up',
-  },
-]
+
 
 const categoryIcons: Record<string, React.ElementType> = {
   festival: Sparkles,
@@ -113,93 +78,6 @@ const categoryColors: Record<string, { bg: string; text: string; gradient: strin
   cultural: { bg: 'bg-cyan-100', text: 'text-cyan-700', gradient: 'from-cyan-500 to-teal-600' },
 }
 
-const events = [
-  {
-    id: 'EVT-001',
-    title: 'Diwali Celebration',
-    description: 'Community Diwali celebration with cultural programs, rangoli competition, and grand dinner.',
-    date: '2025-11-12',
-    time: '06:00 PM',
-    venue: 'Community Hall',
-    organizer: 'Cultural Committee',
-    attendees: 250,
-    maxAttendees: 300,
-    status: 'upcoming',
-    category: 'festival',
-    isRsvp: true,
-  },
-  {
-    id: 'EVT-002',
-    title: 'New Year Party 2025',
-    description: 'Ring in the new year with music, food, and fun. DJ night and countdown celebrations.',
-    date: '2024-12-31',
-    time: '08:00 PM',
-    venue: 'Club House',
-    organizer: 'Recreation Committee',
-    attendees: 180,
-    maxAttendees: 200,
-    status: 'completed',
-    category: 'celebration',
-    isRsvp: false,
-  },
-  {
-    id: 'EVT-003',
-    title: 'Yoga Workshop',
-    description: 'Free yoga and meditation session for all residents. Led by certified yoga instructor.',
-    date: '2025-01-15',
-    time: '07:00 AM',
-    venue: 'Garden Area',
-    organizer: 'Health & Wellness',
-    attendees: 45,
-    maxAttendees: 50,
-    status: 'upcoming',
-    category: 'wellness',
-    isRsvp: true,
-  },
-  {
-    id: 'EVT-004',
-    title: 'Annual General Meeting',
-    description: 'Discuss society matters, budget allocation, and future development plans.',
-    date: '2025-01-20',
-    time: '05:00 PM',
-    venue: 'Community Hall',
-    organizer: 'Management Committee',
-    attendees: 120,
-    maxAttendees: 250,
-    status: 'upcoming',
-    category: 'meeting',
-    isRsvp: false,
-  },
-  {
-    id: 'EVT-005',
-    title: 'Kids Sports Day',
-    description: 'Fun sports activities for children including races, relay, and prize distribution.',
-    date: '2025-02-05',
-    time: '04:00 PM',
-    venue: 'Sports Ground',
-    organizer: 'Recreation Committee',
-    attendees: 85,
-    maxAttendees: 100,
-    status: 'upcoming',
-    category: 'sports',
-    isRsvp: true,
-  },
-  {
-    id: 'EVT-006',
-    title: 'Classical Music Night',
-    description: 'An evening of Indian classical music featuring renowned artists.',
-    date: '2025-01-25',
-    time: '07:00 PM',
-    venue: 'Open Air Theatre',
-    organizer: 'Cultural Committee',
-    attendees: 65,
-    maxAttendees: 150,
-    status: 'upcoming',
-    category: 'cultural',
-    isRsvp: false,
-  },
-]
-
 const categories = [
   { value: 'festival', label: 'Festival', icon: Sparkles },
   { value: 'celebration', label: 'Celebration', icon: PartyPopper },
@@ -209,21 +87,242 @@ const categories = [
   { value: 'cultural', label: 'Cultural', icon: Music },
 ]
 
+interface Event {
+  id: number;
+  title: string;
+  description: string;
+  date: string;
+  time: string;
+  location: string;
+  organizer: string;
+  attendees: number;
+  maxAttendees: number;
+  status: string;
+  category: string;
+  isRsvp: boolean;
+}
+
 export default function EventsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState('upcoming')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [isViewDetailsOpen, setIsViewDetailsOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
+  const [attendees, setAttendees] = useState<any[]>([])
+  const [isLoadingAttendees, setIsLoadingAttendees] = useState(false)
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin'
+  const queryClient = useQueryClient()
+
+  const [newEvent, setNewEvent] = useState({
+    title: '',
+    description: '',
+    date: '',
+    time: '',
+    location: '',
+    category: 'meeting',
+    maxAttendees: 0,
+    organizer: '',
+  })
+
+  const { data: eventsResponse, isLoading } = useQuery({
+    queryKey: ['events'],
+    queryFn: EventService.getAll,
+  })
+
+  const events: Event[] = eventsResponse?.data || []
+
+  const createEventMutation = useMutation({
+    mutationFn: EventService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['events'] })
+      setIsCreateDialogOpen(false)
+      toast.success('Event created successfully')
+      setNewEvent({
+        title: '',
+        description: '',
+        date: '',
+        time: '',
+        location: '',
+        category: 'meeting',
+        maxAttendees: 0,
+        organizer: '',
+      })
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to create event'),
+  })
+
+  const updateEventMutation = useMutation({
+    mutationFn: (data: { id: number; data: any }) => EventService.update(data.id, data.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['events'] })
+      setIsEditDialogOpen(false)
+      toast.success('Event updated successfully')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to update event'),
+  })
+
+  const rsvpMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) => EventService.rsvp(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['events'] })
+      toast.success('RSVP updated')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to update RSVP'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: EventService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['events'] })
+      toast.success('Event deleted successfully')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to delete event'),
+  })
+
+  const handleCreateEvent = () => {
+    if (!newEvent.title || !newEvent.date || !newEvent.time || !newEvent.location) {
+      toast.error('Please fill required fields')
+      return
+    }
+    createEventMutation.mutate(newEvent)
+  }
+
+  const handleRsvp = (eventId: number, currentStatus: boolean) => {
+    const newStatus = currentStatus ? 'CANCELLED' : 'RSVP'
+    rsvpMutation.mutate({ id: eventId, status: newStatus })
+  }
+
+  const handleDeleteEvent = (id: number) => {
+    if (confirm('Are you sure you want to delete this event?')) {
+      deleteMutation.mutate(id)
+    }
+  }
+
+  const handleEditEvent = (event: Event) => {
+    setSelectedEvent(event)
+    setNewEvent({
+      title: event.title,
+      description: event.description || '',
+      date: event.date.split('T')[0],
+      time: event.time || '',
+      location: event.location || '',
+      category: event.category,
+      maxAttendees: event.maxAttendees || 0,
+      organizer: event.organizer || '',
+    })
+    setIsEditDialogOpen(true)
+  }
+
+  const handleViewDetails = async (event: Event) => {
+    setSelectedEvent(event)
+    setIsViewDetailsOpen(true)
+    if (isAdmin) {
+      setIsLoadingAttendees(true)
+      try {
+        const data = await EventService.getAttendees(event.id)
+        setAttendees(data.data)
+      } catch (error) {
+        console.error('Failed to fetch attendees:', error)
+      } finally {
+        setIsLoadingAttendees(false)
+      }
+    }
+  }
+
+  const handleUpdateEvent = () => {
+    if (!selectedEvent) return
+    updateEventMutation.mutate({ id: selectedEvent.id, data: newEvent })
+  }
+
+  const handleShareEvent = async (event: Event) => {
+    const shareText = `Check out this event: ${event.title}\nDate: ${new Date(event.date).toLocaleDateString()}\nLocation: ${event.location}\nOrganized by: ${event.organizer}`
+
+    const copyToClipboard = () => {
+      navigator.clipboard.writeText(`${shareText}\nLink: ${window.location.href}`)
+      toast.success('Event details copied to clipboard')
+    }
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: event.title,
+          text: shareText,
+          url: window.location.href,
+        })
+      } catch (err: any) {
+        // If it's not a user-initiated cancellation, fallback to clipboard
+        if (err.name !== 'AbortError') {
+          copyToClipboard()
+        }
+      }
+    } else {
+      copyToClipboard()
+    }
+  }
+
+  const handleAddToCalendar = (event: Event) => {
+    const startDate = new Date(event.date).toISOString().replace(/-|:|\.\d\d\d/g, "")
+    const endDate = new Date(new Date(event.date).getTime() + 2 * 60 * 60 * 1000).toISOString().replace(/-|:|\.\d\d\d/g, "")
+    const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+URL:${window.location.href}
+DTSTART:${startDate}
+DTEND:${endDate}
+SUMMARY:${event.title}
+DESCRIPTION:${event.description}
+LOCATION:${event.location}
+END:VEVENT
+END:VCALENDAR`
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `${event.title.replace(/\s+/g, '_')}.ics`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const handleExportCSV = () => {
+    if (events.length === 0) return
+    const headers = ['ID', 'Title', 'Category', 'Date', 'Time', 'Location', 'Organizer', 'Attendees', 'Status']
+    const csvContent = [
+      headers.join(','),
+      ...events.map(e => [
+        e.id,
+        `"${e.title}"`,
+        e.category,
+        e.date,
+        e.time,
+        `"${e.location}"`,
+        `"${e.organizer}"`,
+        `${e.attendees}/${e.maxAttendees}`,
+        e.status
+      ].join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `events_export_${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 
   const filteredEvents = events.filter((event) => {
     const matchesSearch =
       event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.venue.toLowerCase().includes(searchQuery.toLowerCase())
+      (event.description?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      (event.location?.toLowerCase() || '').includes(searchQuery.toLowerCase())
 
-    const matchesTab = activeTab === 'all' || event.status === activeTab
+    const matchesTab = activeTab === 'all' || event.status.toLowerCase() === activeTab.toLowerCase()
     const matchesCategory = categoryFilter === 'all' || event.category === categoryFilter
 
     return matchesSearch && matchesTab && matchesCategory
@@ -231,16 +330,67 @@ export default function EventsPage() {
 
   const getStatusCounts = () => ({
     all: events.length,
-    upcoming: events.filter(e => e.status === 'upcoming').length,
-    completed: events.filter(e => e.status === 'completed').length,
+    upcoming: events.filter(e => e.status.toLowerCase() === 'upcoming').length,
+    completed: events.filter(e => e.status.toLowerCase() === 'completed').length,
   })
 
   const counts = getStatusCounts()
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  }
+  const upcomingCount = events.filter(e => {
+    const eventDate = new Date(e.date)
+    const thirtyDaysFromNow = new Date()
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30)
+    return eventDate >= new Date() && eventDate <= thirtyDaysFromNow
+  }).length
+
+  const thisMonthCount = events.filter(e => {
+    const date = new Date(e.date)
+    const now = new Date()
+    return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
+  }).length
+
+  const totalAttendees = events.reduce((sum, e) => sum + (e.attendees || 0), 0)
+
+  const dashboardStats = [
+    {
+      title: 'Total Events',
+      value: events.length.toString(),
+      change: `+${events.filter(e => new Date(e.date).getFullYear() === new Date().getFullYear()).length} this year`,
+      icon: Calendar,
+      color: 'from-blue-500 to-indigo-600',
+      bgColor: 'bg-blue-50',
+      textColor: 'text-blue-600',
+    },
+    {
+      title: 'Upcoming',
+      value: upcomingCount.toString(),
+      change: 'Next 30 days',
+      icon: Clock,
+      color: 'from-green-500 to-emerald-600',
+      bgColor: 'bg-green-50',
+      textColor: 'text-green-600',
+      pulse: true,
+    },
+    {
+      title: 'This Month',
+      value: thisMonthCount.toString(),
+      change: `${events.filter(e => e.isRsvp).length} you RSVP'd`,
+      icon: Calendar,
+      color: 'from-purple-500 to-violet-600',
+      bgColor: 'bg-purple-50',
+      textColor: 'text-purple-600',
+    },
+    {
+      title: 'Total Attendees',
+      value: totalAttendees.toLocaleString(),
+      change: 'Across all events',
+      icon: Users,
+      color: 'from-orange-500 to-amber-600',
+      bgColor: 'bg-orange-50',
+      textColor: 'text-orange-600',
+      trend: 'up',
+    },
+  ]
 
   return (
     <RoleGuard allowedRoles={['admin', 'resident']}>
@@ -263,7 +413,7 @@ export default function EventsPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
               <Download className="h-4 w-4" />
               <span>Export</span>
             </Button>
@@ -288,41 +438,54 @@ export default function EventsPage() {
                   <div className="space-y-4 py-4">
                     <div className="space-y-2">
                       <Label>Event Title *</Label>
-                      <Input placeholder="e.g., Diwali Celebration" />
+                      <Input
+                        placeholder="e.g., Diwali Celebration"
+                        value={newEvent.title}
+                        onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Description</Label>
-                      <Textarea placeholder="Describe the event details..." rows={3} />
+                      <Textarea
+                        placeholder="Describe the event details..."
+                        rows={3}
+                        value={newEvent.description}
+                        onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
+                      />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Date *</Label>
-                        <Input type="date" />
+                        <Input
+                          type="date"
+                          value={newEvent.date}
+                          onChange={(e) => setNewEvent({ ...newEvent, date: e.target.value })}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label>Time *</Label>
-                        <Input type="time" />
+                        <Input
+                          type="time"
+                          value={newEvent.time}
+                          onChange={(e) => setNewEvent({ ...newEvent, time: e.target.value })}
+                        />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Venue *</Label>
-                        <Select>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select venue" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="community-hall">Community Hall</SelectItem>
-                            <SelectItem value="club-house">Club House</SelectItem>
-                            <SelectItem value="garden">Garden Area</SelectItem>
-                            <SelectItem value="sports-ground">Sports Ground</SelectItem>
-                            <SelectItem value="open-theatre">Open Air Theatre</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <Input
+                          placeholder="e.g. Community Hall"
+                          value={newEvent.location}
+                          onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label>Category *</Label>
-                        <Select>
+                        <Select
+                          value={newEvent.category}
+                          onValueChange={(val) => setNewEvent({ ...newEvent, category: val })}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="Select category" />
                           </SelectTrigger>
@@ -345,28 +508,33 @@ export default function EventsPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Max Attendees</Label>
-                        <Input type="number" placeholder="100" />
+                        <Input
+                          type="number"
+                          placeholder="100"
+                          value={newEvent.maxAttendees}
+                          onChange={(e) => setNewEvent({ ...newEvent, maxAttendees: parseInt(e.target.value) })}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label>Organizer</Label>
-                        <Input placeholder="e.g., Cultural Committee" />
+                        <Input
+                          placeholder="e.g., Cultural Committee"
+                          value={newEvent.organizer}
+                          onChange={(e) => setNewEvent({ ...newEvent, organizer: e.target.value })}
+                        />
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3 p-4 rounded-lg bg-purple-50 border border-purple-100">
-                      <Bell className="h-5 w-5 text-purple-600" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-purple-900">Send Notifications</p>
-                        <p className="text-xs text-purple-700">Notify all residents about this event</p>
-                      </div>
-                      <input type="checkbox" className="h-4 w-4" defaultChecked />
                     </div>
                     <div className="flex justify-end gap-3 pt-4 border-t">
                       <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                         Cancel
                       </Button>
-                      <Button className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 gap-2">
+                      <Button
+                        className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 gap-2"
+                        onClick={handleCreateEvent}
+                        disabled={createEventMutation.isPending}
+                      >
                         <CalendarPlus className="h-4 w-4" />
-                        Create Event
+                        {createEventMutation.isPending ? 'Creating...' : 'Create Event'}
                       </Button>
                     </div>
                   </div>
@@ -378,7 +546,7 @@ export default function EventsPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {stats.map((stat, index) => {
+          {dashboardStats.map((stat, index) => {
             const Icon = stat.icon
             return (
               <motion.div
@@ -394,7 +562,7 @@ export default function EventsPage() {
                       <div>
                         <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
                         <h3 className="text-3xl font-bold mt-2 bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                          {stat.value}
+                          {isLoading ? '...' : stat.value}
                         </h3>
                         <div className="flex items-center gap-1 mt-2">
                           {stat.trend === 'up' && <ArrowUpRight className="h-4 w-4 text-green-500" />}
@@ -470,153 +638,12 @@ export default function EventsPage() {
           </TabsList>
         </Tabs>
 
-        {/* Events Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <AnimatePresence>
-            {filteredEvents.map((event, index) => {
-              const CategoryIcon = categoryIcons[event.category] || Calendar
-              const colors = categoryColors[event.category] || categoryColors.meeting
-              const attendeePercentage = (event.attendees / event.maxAttendees) * 100
-
-              return (
-                <motion.div
-                  key={event.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ delay: index * 0.05 }}
-                >
-                  <Card className="overflow-hidden border-0 shadow-lg hover:shadow-xl transition-all duration-300 group">
-                    {/* Header Banner */}
-                    <div className={`h-32 bg-gradient-to-br ${colors.gradient} relative overflow-hidden`}>
-                      <div className="absolute inset-0 bg-black/10" />
-                      <div className="absolute top-4 left-4">
-                        <Badge className={`${colors.bg} ${colors.text} border-0`}>
-                          <CategoryIcon className="h-3 w-3 mr-1" />
-                          {event.category}
-                        </Badge>
-                      </div>
-                      <div className="absolute top-4 right-4">
-                        <Badge
-                          className={`${
-                            event.status === 'upcoming'
-                              ? 'bg-white/90 text-green-700'
-                              : 'bg-white/90 text-gray-700'
-                          } border-0`}
-                        >
-                          {event.status === 'upcoming' && <span className="h-1.5 w-1.5 rounded-full bg-green-500 mr-1.5 animate-pulse" />}
-                          {event.status}
-                        </Badge>
-                      </div>
-                      <div className="absolute bottom-4 left-4 right-4 text-white">
-                        <h3 className="text-lg font-bold truncate">{event.title}</h3>
-                      </div>
-                    </div>
-
-                    <CardContent className="p-4 space-y-4">
-                      <p className="text-sm text-muted-foreground line-clamp-2">{event.description}</p>
-
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-sm">
-                          <Calendar className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-medium">{formatDate(event.date)}</span>
-                          <span className="text-muted-foreground">at</span>
-                          <span>{event.time}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <MapPin className="h-4 w-4 text-muted-foreground" />
-                          <span>{event.venue}</span>
-                        </div>
-                      </div>
-
-                      {/* Attendees Progress */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground flex items-center gap-1">
-                            <Users className="h-4 w-4" />
-                            Attendees
-                          </span>
-                          <span className="font-medium">
-                            {event.attendees}/{event.maxAttendees}
-                          </span>
-                        </div>
-                        <Progress value={attendeePercentage} className="h-2" />
-                        {attendeePercentage > 90 && (
-                          <p className="text-xs text-orange-600">Almost full! Book now.</p>
-                        )}
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex items-center justify-between pt-2 border-t">
-                        <p className="text-xs text-muted-foreground">By {event.organizer}</p>
-                        <div className="flex items-center gap-1">
-                          {event.status === 'upcoming' && (
-                            <Button
-                              size="sm"
-                              className={`gap-1 ${
-                                event.isRsvp
-                                  ? 'bg-green-600 hover:bg-green-700'
-                                  : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
-                              }`}
-                            >
-                              {event.isRsvp ? (
-                                <>
-                                  <CheckCircle className="h-3.5 w-3.5" />
-                                  RSVP'd
-                                </>
-                              ) : (
-                                <>
-                                  <CalendarPlus className="h-3.5 w-3.5" />
-                                  RSVP
-                                </>
-                              )}
-                            </Button>
-                          )}
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
-                                <Eye className="h-4 w-4 mr-2" />
-                                View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Share2 className="h-4 w-4 mr-2" />
-                                Share Event
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <CalendarPlus className="h-4 w-4 mr-2" />
-                                Add to Calendar
-                              </DropdownMenuItem>
-                              {isAdmin && (
-                                <>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem>
-                                    <Edit className="h-4 w-4 mr-2" />
-                                    Edit Event
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem className="text-red-600">
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Cancel Event
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              )
-            })}
-          </AnimatePresence>
-        </div>
-
-        {filteredEvents.length === 0 && (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Sparkles className="h-8 w-8 text-purple-600 animate-spin" />
+            <span className="ml-2">Loading events...</span>
+          </div>
+        ) : filteredEvents.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <div className="p-4 rounded-full bg-muted mb-4">
               <Calendar className="h-8 w-8 text-muted-foreground" />
@@ -626,7 +653,338 @@ export default function EventsPage() {
               Try adjusting your search or filter criteria
             </p>
           </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <AnimatePresence>
+              {filteredEvents.map((event, index) => {
+                const CategoryIcon = categoryIcons[event.category] || Calendar
+                const colors = categoryColors[event.category] || categoryColors.meeting
+                const attendeePercentage = (event.attendees / (event.maxAttendees || 1)) * 100
+
+                return (
+                  <motion.div
+                    key={event.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ delay: index * 0.05 }}
+                  >
+                    <Card className="overflow-hidden border-0 shadow-lg hover:shadow-xl transition-all duration-300 group">
+                      {/* Header Banner */}
+                      <div className={`h-32 bg-gradient-to-br ${colors.gradient} relative overflow-hidden`}>
+                        <div className="absolute inset-0 bg-black/10" />
+                        <div className="absolute top-4 left-4">
+                          <Badge className={`${colors.bg} ${colors.text} border-0`}>
+                            <CategoryIcon className="h-3 w-3 mr-1" />
+                            {event.category}
+                          </Badge>
+                        </div>
+                        <div className="absolute top-4 right-4">
+                          <Badge
+                            className={`${event.status.toLowerCase() === 'upcoming'
+                              ? 'bg-white/90 text-green-700'
+                              : 'bg-white/90 text-gray-700'
+                              } border-0`}
+                          >
+                            {event.status.toLowerCase() === 'upcoming' && <span className="h-1.5 w-1.5 rounded-full bg-green-500 mr-1.5 animate-pulse" />}
+                            {event.status}
+                          </Badge>
+                        </div>
+                        <div className="absolute bottom-4 left-4 right-4 text-white">
+                          <h3 className="text-lg font-bold truncate">{event.title}</h3>
+                        </div>
+                      </div>
+
+                      <CardContent className="p-4 space-y-4">
+                        <p className="text-sm text-muted-foreground line-clamp-2">{event.description}</p>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-sm">
+                            <Calendar className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium">{new Date(event.date).toLocaleDateString()}</span>
+                            <span className="text-muted-foreground">at</span>
+                            <span>{event.time}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm">
+                            <MapPin className="h-4 w-4 text-muted-foreground" />
+                            <span>{event.location}</span>
+                          </div>
+                        </div>
+
+                        {/* Attendees Progress */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              <Users className="h-4 w-4" />
+                              Attendees
+                            </span>
+                            <span className="font-medium">
+                              {event.attendees}/{event.maxAttendees}
+                            </span>
+                          </div>
+                          <Progress value={attendeePercentage} className="h-2" />
+                          {attendeePercentage >= 100 && (
+                            <p className="text-xs text-red-600">Event is full.</p>
+                          )}
+                          {attendeePercentage >= 90 && attendeePercentage < 100 && (
+                            <p className="text-xs text-orange-600">Almost full! Book now.</p>
+                          )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center justify-between pt-2 border-t">
+                          <p className="text-xs text-muted-foreground">By {event.organizer}</p>
+                          <div className="flex items-center gap-1">
+                            {event.status.toLowerCase() === 'upcoming' && (
+                              <Button
+                                size="sm"
+                                onClick={() => handleRsvp(event.id, event.isRsvp)}
+                                disabled={rsvpMutation.isPending || (attendeePercentage >= 100 && !event.isRsvp)}
+                                className={`gap-1 ${event.isRsvp
+                                  ? 'bg-green-600 hover:bg-green-700'
+                                  : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
+                                  }`}
+                              >
+                                {event.isRsvp ? (
+                                  <>
+                                    <CheckCircle className="h-3.5 w-3.5" />
+                                    RSVP'd
+                                  </>
+                                ) : (
+                                  <>
+                                    <CalendarPlus className="h-3.5 w-3.5" />
+                                    RSVP
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleViewDetails(event)}>
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleShareEvent(event)}>
+                                  <Share2 className="h-4 w-4 mr-2" />
+                                  Share Event
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleAddToCalendar(event)}>
+                                  <CalendarPlus className="h-4 w-4 mr-2" />
+                                  Add to Calendar
+                                </DropdownMenuItem>
+                                {isAdmin && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => handleEditEvent(event)}>
+                                      <Edit className="h-4 w-4 mr-2" />
+                                      Edit Event
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="text-red-600"
+                                      onClick={() => handleDeleteEvent(event.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Cancel Event
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                )
+              })}
+            </AnimatePresence>
+          </div>
         )}
+        {/* View Details Dialog */}
+        <Dialog open={isViewDetailsOpen} onOpenChange={setIsViewDetailsOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                {selectedEvent && (
+                  <>
+                    <Calendar className="h-6 w-6 text-purple-600" />
+                    {selectedEvent.title}
+                  </>
+                )}
+              </DialogTitle>
+            </DialogHeader>
+            {selectedEvent && (
+              <div className="space-y-6 py-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-muted/30 p-4 rounded-lg">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Calendar className="h-4 w-4" />
+                    <span className="font-semibold text-foreground">Date:</span>
+                    {new Date(selectedEvent.date).toLocaleDateString()}
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Clock className="h-4 w-4" />
+                    <span className="font-semibold text-foreground">Time:</span> {selectedEvent.time}
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <MapPin className="h-4 w-4" />
+                    <span className="font-semibold text-foreground">Location:</span> {selectedEvent.location}
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Users className="h-4 w-4" />
+                    <span className="font-semibold text-foreground">Capacity:</span> {selectedEvent.attendees}/{selectedEvent.maxAttendees}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="font-semibold">Description</h4>
+                  <p className="text-muted-foreground leading-relaxed">{selectedEvent.description}</p>
+                </div>
+
+                {isAdmin && (
+                  <div className="space-y-4">
+                    <h4 className="font-semibold flex items-center justify-between">
+                      Attendee List
+                      <Badge variant="outline">{attendees.length} Registered</Badge>
+                    </h4>
+                    {isLoadingAttendees ? (
+                      <div className="flex justify-center p-8">
+                        <Sparkles className="h-6 w-6 animate-spin text-purple-600" />
+                      </div>
+                    ) : attendees.length > 0 ? (
+                      <div className="border rounded-md divide-y max-h-48 overflow-y-auto">
+                        {attendees.map((attendee) => (
+                          <div key={attendee.id} className="flex items-center justify-between p-3">
+                            <div className="flex items-center gap-3">
+                              <div className="h-8 w-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold">
+                                {attendee.name[0]}
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium">{attendee.name}</p>
+                                <p className="text-xs text-muted-foreground">{attendee.email}</p>
+                              </div>
+                            </div>
+                            <span className="text-xs text-muted-foreground">{attendee.phone}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground border border-dashed rounded-md">
+                        No attendees registered yet.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Event Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit Event</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-title">Event Title</Label>
+                <Input
+                  id="edit-title"
+                  value={newEvent.title}
+                  onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-desc">Description</Label>
+                <Textarea
+                  id="edit-desc"
+                  value={newEvent.description}
+                  onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-date">Date</Label>
+                  <Input
+                    id="edit-date"
+                    type="date"
+                    value={newEvent.date}
+                    onChange={(e) => setNewEvent({ ...newEvent, date: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-time">Time</Label>
+                  <Input
+                    id="edit-time"
+                    type="time"
+                    value={newEvent.time}
+                    onChange={(e) => setNewEvent({ ...newEvent, time: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-loc">Location</Label>
+                <Input
+                  id="edit-loc"
+                  value={newEvent.location}
+                  onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-cat">Category</Label>
+                  <Select
+                    value={newEvent.category}
+                    onValueChange={(v) => setNewEvent({ ...newEvent, category: v })}
+                  >
+                    <SelectTrigger id="edit-cat">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="festival">Festival</SelectItem>
+                      <SelectItem value="meeting">Meeting</SelectItem>
+                      <SelectItem value="sports">Sports</SelectItem>
+                      <SelectItem value="cultural">Cultural</SelectItem>
+                      <SelectItem value="workshop">Workshop</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-max">Max Attendees</Label>
+                  <Input
+                    id="edit-max"
+                    type="number"
+                    value={newEvent.maxAttendees}
+                    onChange={(e) => setNewEvent({ ...newEvent, maxAttendees: parseInt(e.target.value) })}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-org">Organizer</Label>
+                <Input
+                  id="edit-org"
+                  value={newEvent.organizer}
+                  onChange={(e) => setNewEvent({ ...newEvent, organizer: e.target.value })}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
+              <Button
+                onClick={handleUpdateEvent}
+                disabled={updateEventMutation.isPending}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                {updateEventMutation.isPending ? 'Updating...' : 'Save Changes'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </RoleGuard>
   )

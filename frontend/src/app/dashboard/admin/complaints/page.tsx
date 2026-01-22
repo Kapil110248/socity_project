@@ -10,39 +10,48 @@ import api from '@/lib/api'
 import { ComplaintsTable } from '@/components/complaints/complaints-table'
 import { UserRaiseComplaintDialog } from '@/components/complaints/user-raise-complaint-dialog'
 import { useState } from 'react'
+import { ComplaintService } from '@/services/complaint.service'
 
 export default function AdminComplaintsPage() {
     const [isCreateOpen, setIsCreateOpen] = useState(false)
-    const { data: complaints = [], isLoading } = useQuery<any[]>({
-        queryKey: ['complaints'],
-        queryFn: async () => {
-            const response = await api.get('/complaints')
-            return response.data
-        }
+    const [page, setPage] = useState(1)
+    const [limit] = useState(10)
+
+    const { data: response, isLoading } = useQuery({
+        queryKey: ['complaints', page, limit],
+        queryFn: () => ComplaintService.getAll({ page, limit })
+    })
+
+    const complaints = response?.data || []
+    const meta = response?.meta || { total: 0, totalPages: 0 }
+
+    const { data: serverStats } = useQuery({
+        queryKey: ['complaint-stats'],
+        queryFn: () => ComplaintService.getStats()
     })
 
     const stats = [
         {
             title: 'Total Complaints',
-            value: complaints.length,
+            value: serverStats?.total || 0,
             icon: MessageSquare,
             color: 'bg-blue-500',
         },
         {
             title: 'Resolved',
-            value: complaints.filter((c: any) => c.status.toLowerCase() === 'resolved').length,
+            value: serverStats?.resolved || 0,
             icon: CheckCircle2,
             color: 'bg-green-500',
         },
         {
             title: 'Pending',
-            value: complaints.filter((c: any) => c.status.toLowerCase() === 'open' || c.status.toLowerCase() === 'in_progress').length,
+            value: serverStats?.pending || 0,
             icon: Clock,
             color: 'bg-orange-500',
         },
         {
             title: 'High Priority',
-            value: complaints.filter((c: any) => c.priority.toLowerCase() === 'high' || c.priority.toLowerCase() === 'urgent').length,
+            value: serverStats?.highPriority || 0, // Assuming highPriority is added to stats or handled separately
             icon: AlertCircle,
             color: 'bg-red-500',
         },
@@ -64,7 +73,7 @@ export default function AdminComplaintsPage() {
                     <h1 className="text-2xl font-bold text-gray-900">Society Complaints</h1>
                     <p className="text-gray-500">Track and manage complaints from your society members</p>
                 </div>
-                <Button 
+                <Button
                     onClick={() => setIsCreateOpen(true)}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 shadow-lg shadow-indigo-100"
                 >
@@ -123,13 +132,56 @@ export default function AdminComplaintsPage() {
                             <ComplaintsTable complaints={complaints.filter((c: any) => c.status.toLowerCase() === 'resolved')} />
                         </TabsContent>
                     </Tabs>
+
+                    {/* Pagination Controls */}
+                    <div className="flex items-center justify-between mt-6 pt-4 border-t">
+                        <p className="text-sm text-gray-500">
+                            Showing <span className="font-medium">{(page - 1) * limit + 1}</span> to{' '}
+                            <span className="font-medium">
+                                {Math.min(page * limit, meta.total)}
+                            </span>{' '}
+                            of <span className="font-medium">{meta.total}</span> results
+                        </p>
+                        <div className="flex gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPage(p => Math.max(1, p - 1))}
+                                disabled={page === 1}
+                            >
+                                Previous
+                            </Button>
+                            <div className="flex items-center gap-1">
+                                {Array.from({ length: meta.totalPages }, (_, i) => i + 1).map((p) => (
+                                    <Button
+                                        key={p}
+                                        variant={page === p ? 'default' : 'outline'}
+                                        size="sm"
+                                        className="w-8"
+                                        onClick={() => setPage(p)}
+                                    >
+                                        {p}
+                                    </Button>
+                                ))}
+                            </div>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPage(p => Math.min(meta.totalPages, p + 1))}
+                                disabled={page === meta.totalPages}
+                            >
+                                Next
+                            </Button>
+                        </div>
+                    </div>
                 </CardContent>
             </Card>
 
-            <UserRaiseComplaintDialog 
-                open={isCreateOpen} 
-                onOpenChange={setIsCreateOpen} 
+            <UserRaiseComplaintDialog
+                open={isCreateOpen}
+                onOpenChange={setIsCreateOpen}
             />
         </div>
     )
 }
+

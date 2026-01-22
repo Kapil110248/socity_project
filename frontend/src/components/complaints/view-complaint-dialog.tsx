@@ -10,28 +10,28 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { 
-    Select, 
-    SelectContent, 
-    SelectItem, 
-    SelectTrigger, 
-    SelectValue 
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { ServiceComplaint } from '@/types/services'
 import { format } from 'date-fns'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/api'
 import { toast } from 'react-hot-toast'
-import { 
-    AlertCircle, 
-    CheckCircle2, 
-    Clock, 
-    User, 
-    Mail, 
-    Phone, 
-    Building2 
+import { ComplaintService } from '@/services/complaint.service'
+import {
+    AlertCircle,
+    CheckCircle2,
+    Clock,
+    User,
+    Mail,
+    Phone,
+    Building2
 } from 'lucide-react'
 
 interface ViewComplaintDialogProps {
@@ -52,12 +52,13 @@ export function ViewComplaintDialog({ complaint, open, onOpenChange }: ViewCompl
     const { mutate: updateStatus, isPending } = useMutation({
         mutationFn: async (newStatus: string) => {
             if (!complaint) return
-            const response = await api.patch(`/complaints/${complaint.id}/status`, { status: newStatus })
-            return response.data
+            return ComplaintService.updateStatus(complaint.id, newStatus)
         },
         onSuccess: () => {
             toast.success('Complaint status updated')
-            queryClient.invalidateQueries({ queryKey: ['super-admin-complaints'] })
+            queryClient.invalidateQueries({ queryKey: ['complaints'] })
+            queryClient.invalidateQueries({ queryKey: ['complaint-stats'] })
+            queryClient.invalidateQueries({ queryKey: ['tickets'] }) // Added based on instruction
             onOpenChange(false)
         },
         onError: (error: any) => {
@@ -123,8 +124,8 @@ export function ViewComplaintDialog({ complaint, open, onOpenChange }: ViewCompl
 
                         <div className="flex items-center gap-3">
                             <Label>Update Status:</Label>
-                            <Select 
-                                defaultValue={complaint.status} 
+                            <Select
+                                defaultValue={complaint.status}
                                 onValueChange={(val) => updateStatus(val)}
                                 disabled={isPending}
                             >
@@ -195,7 +196,7 @@ export function ViewComplaintDialog({ complaint, open, onOpenChange }: ViewCompl
                 <div className="flex justify-end gap-3 pt-4 border-t">
                     <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
                     {complaint.status.toLowerCase() !== 'resolved' && (
-                        <Button 
+                        <Button
                             className="bg-green-600 hover:bg-green-700 text-white gap-2"
                             onClick={() => updateStatus('RESOLVED')}
                             disabled={isPending}

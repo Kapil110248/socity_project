@@ -69,6 +69,48 @@ async function main() {
     }
   })
 
+  await prisma.unit.upsert({
+    where: { societyId_block_number: { societyId: society.id, block: 'A', number: '102' } },
+    update: {},
+    create: {
+      block: 'A',
+      number: '102',
+      floor: 1,
+      type: '2BHK',
+      areaSqFt: 1200,
+      societyId: society.id,
+      status: 'VACANT'
+    }
+  })
+
+  await prisma.unit.upsert({
+    where: { societyId_block_number: { societyId: society.id, block: 'B', number: '101' } },
+    update: {},
+    create: {
+      block: 'B',
+      number: '101',
+      floor: 1,
+      type: '3BHK',
+      areaSqFt: 1800,
+      societyId: society.id,
+      status: 'VACANT'
+    }
+  })
+
+  await prisma.unit.upsert({
+    where: { societyId_block_number: { societyId: society.id, block: 'C', number: '143' } },
+    update: {},
+    create: {
+      block: 'C',
+      number: '143',
+      floor: 1,
+      type: '3BHK',
+      areaSqFt: 1800,
+      societyId: society.id,
+      status: 'VACANT'
+    }
+  })
+
   // Create Service Categories
   await prisma.serviceCategory.createMany({
     data: [
@@ -353,19 +395,28 @@ async function main() {
   });
 
   // Create Events
-  await prisma.event.createMany({
-    data: [
-      {
-        title: 'Diwali Celebration',
-        description: 'Grand celebration with fireworks and dinner.',
-        date: new Date(new Date().setDate(new Date().getDate() + 30)),
-        location: 'Central Park',
-        status: 'UPCOMING',
-        societyId: society.id
-      }
-    ],
-    skipDuplicates: true
+  const existingEvents = await prisma.event.findMany({
+    where: { societyId: society.id }
   });
+
+  if (existingEvents.length === 0) {
+    await prisma.event.createMany({
+      data: [
+        {
+          title: 'Diwali Celebration',
+          description: 'Grand celebration with fireworks and dinner.',
+          date: new Date(new Date().setDate(new Date().getDate() + 30)),
+          location: 'Central Park',
+          status: 'UPCOMING',
+          societyId: society.id,
+          category: 'festival',
+          organizer: 'Cultural Committee',
+          maxAttendees: 500
+        }
+      ],
+      skipDuplicates: true
+    });
+  }
 
   // Create Parcels
   await prisma.parcel.createMany({
@@ -432,87 +483,87 @@ async function main() {
     ],
     skipDuplicates: true
   });
-  
+
   // Documents
   await prisma.document.createMany({
-      data: [
-          {
-              title: 'Society By-Laws',
-              category: 'Legal',
-              fileUrl: '#',
-              societyId: society.id
-          }
-      ],
-      skipDuplicates: true
+    data: [
+      {
+        title: 'Society By-Laws',
+        category: 'Legal',
+        fileUrl: '#',
+        societyId: society.id
+      }
+    ],
+    skipDuplicates: true
   });
 
   // Incidents
   const guard = await prisma.user.findFirst({ where: { role: 'GUARD' } });
-  
-  if (guard && resident1) {
-      await prisma.incident.createMany({
-          data: [
-              {
-                  title: 'Unauthorized Entry Attempt',
-                  description: 'A person tried to enter the gate by tailgating a resident vehicle.',
-                  location: 'Gate 2',
-                  severity: 'high',
-                  status: 'resolved',
-                  societyId: society.id,
-                  reportedById: guard.id
-              },
-              {
-                  title: 'Water Leakage in Block B',
-                  description: 'Main pipe burst reported near basement parking.',
-                  location: 'Block B Basement',
-                  severity: 'medium',
-                  status: 'in-progress',
-                  societyId: society.id,
-                  reportedById: resident1.id
-              },
-              {
-                  title: 'Suspicious Package',
-                  description: 'Unclaimed bag found near the clubhouse main entrance.',
-                  location: 'Clubhouse',
-                  severity: 'critical',
-                  status: 'open',
-                  societyId: society.id,
-                  reportedById: guard.id
-              }
-          ],
-          skipDuplicates: true
-      });
 
-      // Patrol Logs
-      await prisma.patrolLog.createMany({
-          data: [
-              {
-                  area: 'Block A & B',
-                  notes: 'All clear. Checkpoints scanned.',
-                  status: 'completed',
-                  societyId: society.id,
-                  guardId: guard.id,
-                  startTime: new Date(new Date().setHours(11, 0, 0, 0))
-              },
-              {
-                  area: 'Society Perimeter',
-                  notes: 'South fence check complete. Minor foliage clearing required.',
-                  status: 'completed',
-                  societyId: society.id,
-                  guardId: guard.id,
-                  startTime: new Date(new Date().setHours(10, 0, 0, 0))
-              },
-              {
-                  area: 'Parking Area',
-                  notes: 'Vehicle KA-05-ZZ-1111 parked in wrong slot.',
-                  status: 'issue-found',
-                  societyId: society.id,
-                  guardId: guard.id,
-                  startTime: new Date(new Date().setHours(9, 0, 0, 0))
-              }
-          ],
-          skipDuplicates: true
-      });
+  if (guard && resident1) {
+    await prisma.incident.createMany({
+      data: [
+        {
+          title: 'Unauthorized Entry Attempt',
+          description: 'A person tried to enter the gate by tailgating a resident vehicle.',
+          location: 'Gate 2',
+          severity: 'high',
+          status: 'resolved',
+          societyId: society.id,
+          reportedById: guard.id
+        },
+        {
+          title: 'Water Leakage in Block B',
+          description: 'Main pipe burst reported near basement parking.',
+          location: 'Block B Basement',
+          severity: 'medium',
+          status: 'in-progress',
+          societyId: society.id,
+          reportedById: resident1.id
+        },
+        {
+          title: 'Suspicious Package',
+          description: 'Unclaimed bag found near the clubhouse main entrance.',
+          location: 'Clubhouse',
+          severity: 'critical',
+          status: 'open',
+          societyId: society.id,
+          reportedById: guard.id
+        }
+      ],
+      skipDuplicates: true
+    });
+
+    // Patrol Logs
+    await prisma.patrolLog.createMany({
+      data: [
+        {
+          area: 'Block A & B',
+          notes: 'All clear. Checkpoints scanned.',
+          status: 'completed',
+          societyId: society.id,
+          guardId: guard.id,
+          startTime: new Date(new Date().setHours(11, 0, 0, 0))
+        },
+        {
+          area: 'Society Perimeter',
+          notes: 'South fence check complete. Minor foliage clearing required.',
+          status: 'completed',
+          societyId: society.id,
+          guardId: guard.id,
+          startTime: new Date(new Date().setHours(10, 0, 0, 0))
+        },
+        {
+          area: 'Parking Area',
+          notes: 'Vehicle KA-05-ZZ-1111 parked in wrong slot.',
+          status: 'issue-found',
+          societyId: society.id,
+          guardId: guard.id,
+          startTime: new Date(new Date().setHours(9, 0, 0, 0))
+        }
+      ],
+      skipDuplicates: true
+    });
   }
 
   console.log('Seeding completed');

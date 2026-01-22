@@ -7,10 +7,16 @@ const router = express.Router();
 router.get('/', authenticate, VendorController.listSocietalVendors);
 router.post('/', authenticate, authorize(['ADMIN', 'SUPER_ADMIN']), VendorController.createVendor);
 
-// Super Admin
+// Admin \u0026 Super Admin Actions
+router.get('/stats', authenticate, authorize(['ADMIN', 'SUPER_ADMIN']), VendorController.getStats);
+router.put('/:id', authenticate, authorize(['ADMIN', 'SUPER_ADMIN']), VendorController.updateVendor);
+router.patch('/:id/status', authenticate, authorize(['ADMIN', 'SUPER_ADMIN']), VendorController.updateVendorStatus);
+router.delete('/:id', authenticate, authorize(['ADMIN', 'SUPER_ADMIN']), VendorController.deleteVendor);
+router.post('/:id/renew', authenticate, authorize(['ADMIN']), VendorController.renewContract);
+router.post('/:id/rate', authenticate, authorize(['ADMIN']), VendorController.rateVendor);
+router.get('/:id/payments', authenticate, authorize(['ADMIN']), VendorController.getPaymentHistory);
+
+// Super Admin Only
 router.get('/all', authenticate, authorize(['SUPER_ADMIN']), VendorController.listAllVendors);
-router.patch('/:id/status', authenticate, authorize(['SUPER_ADMIN']), VendorController.updateVendorStatus);
-router.delete('/:id', authenticate, authorize(['SUPER_ADMIN']), VendorController.deleteVendor);
-router.get('/stats', authenticate, authorize(['SUPER_ADMIN']), VendorController.getStats);
 
 module.exports = router;

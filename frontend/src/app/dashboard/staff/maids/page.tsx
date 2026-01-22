@@ -84,16 +84,17 @@ export default function MaidsManagementPage() {
     emergencyContact: '',
     idProof: '',
     idNumber: '',
-    photo: '', // Add photo field
+    photo: '',
+    workingDays: 'Mon,Tue,Wed,Thu,Fri,Sat', // Set default to standard working week
   })
-  
+
   const queryClient = useQueryClient()
 
   // Fetch helpers/maids from backend
   const { data: apiData, isLoading } = useQuery({
     queryKey: ['staff-helpers', typeFilter],
-    queryFn: () => StaffService.getAll({ 
-      role: typeFilter === 'all' ? 'MAID' : typeFilter.toUpperCase() 
+    queryFn: () => StaffService.getAll({
+      role: typeFilter === 'all' ? 'MAID' : typeFilter.toUpperCase()
     })
   })
 
@@ -112,13 +113,13 @@ export default function MaidsManagementPage() {
       rating: staff.rating || 0,
       verified: true, // TODO: Add verification logic
       documents: true, // TODO: Add document verification logic
-      workingDays: staff.shift || 'Mon-Sat',
-      photo: staff.photo || '', // Add photo field
+      workingDays: staff.workingDays || staff.shift || 'Mon-Sat',
+      photo: staff.photo || '',
     };
   })
 
   const statsData = apiData?.stats || { total: 0, onDuty: 0, onLeave: 0, vacant: 0 }
-  
+
   const stats = [
     { label: 'Total Helpers', value: statsData.total.toString(), icon: Users, color: 'bg-blue-500' },
     { label: 'Present Today', value: statsData.onDuty.toString(), icon: CheckCircle, color: 'bg-green-500' },
@@ -129,12 +130,12 @@ export default function MaidsManagementPage() {
   // Filter helpers based on search and status
   const filteredHelpers = helpers.filter(helper => {
     const matchesSearch = helper.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         helper.phone.includes(searchQuery)
-    const matchesStatus = statusFilter === 'all' || 
-                         (statusFilter === 'present' && helper.todayStatus === 'present') ||
-                         (statusFilter === 'absent' && helper.todayStatus === 'absent') ||
-                         (statusFilter === 'verified' && helper.verified) ||
-                         (statusFilter === 'unverified' && !helper.verified)
+      helper.phone.includes(searchQuery)
+    const matchesStatus = statusFilter === 'all' ||
+      (statusFilter === 'present' && helper.todayStatus === 'present') ||
+      (statusFilter === 'absent' && helper.todayStatus === 'absent') ||
+      (statusFilter === 'verified' && helper.verified) ||
+      (statusFilter === 'unverified' && !helper.verified)
     return matchesSearch && matchesStatus
   })
 
@@ -156,6 +157,7 @@ export default function MaidsManagementPage() {
         idProof: '',
         idNumber: '',
         photo: '',
+        workingDays: 'Mon,Tue,Wed,Thu,Fri,Sat',
       })
       setIsSubmitting(false)
     },
@@ -220,6 +222,7 @@ export default function MaidsManagementPage() {
       idProof: '',
       idNumber: '',
       photo: helper.photo || '',
+      workingDays: helper.workingDays || 'Mon-Sat',
     })
     setIsEditDialogOpen(true)
   }
@@ -541,13 +544,36 @@ export default function MaidsManagementPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="shift">Working Days</Label>
-                <Input
-                  id="shift"
-                  placeholder="e.g., Mon-Sat"
-                  value={formData.shift}
-                  onChange={(e) => setFormData({ ...formData, shift: e.target.value })}
-                />
+                <Label>Working Days *</Label>
+                <div className="flex flex-wrap gap-2">
+                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => {
+                    const isSelected = (formData.workingDays || '').includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => {
+                          const days = formData.workingDays.split(',').filter(d => d !== '');
+                          const newDays = isSelected
+                            ? days.filter(d => d !== day)
+                            : [...days, day];
+                          setFormData({
+                            ...formData, workingDays: newDays.sort((a, b) => {
+                              const order = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                              return order.indexOf(a) - order.indexOf(b);
+                            }).join(',')
+                          });
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${isSelected
+                          ? 'bg-purple-600 text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
@@ -726,12 +752,36 @@ export default function MaidsManagementPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-shift">Working Days</Label>
-              <Input
-                id="edit-shift"
-                value={formData.shift}
-                onChange={(e) => setFormData({ ...formData, shift: e.target.value })}
-              />
+              <Label>Working Days *</Label>
+              <div className="flex flex-wrap gap-2">
+                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => {
+                  const isSelected = (formData.workingDays || '').includes(day);
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => {
+                        const days = formData.workingDays.split(',').filter(d => d !== '');
+                        const newDays = isSelected
+                          ? days.filter(d => d !== day)
+                          : [...days, day];
+                        setFormData({
+                          ...formData, workingDays: newDays.sort((a, b) => {
+                            const order = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                            return order.indexOf(a) - order.indexOf(b);
+                          }).join(',')
+                        });
+                      }}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${isSelected
+                        ? 'bg-purple-600 text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                    >
+                      {day}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 

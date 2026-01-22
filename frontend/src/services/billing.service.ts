@@ -43,4 +43,14 @@ export const BillingService = {
     const response = await api.patch(API_CONFIG.BILLING.PAY(invoiceNo), { paymentMode });
     return response.data;
   },
+
+  getDefaulters: async (params?: { block?: string; search?: string }) => {
+    const response = await api.get(API_CONFIG.BILLING.DEFAULTERS, { params });
+    return response.data;
+  },
+
+  getDefaulterStats: async () => {
+    const response = await api.get(API_CONFIG.BILLING.DEFAULTER_STATS);
+    return response.data;
+  },
 };

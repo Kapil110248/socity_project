@@ -84,7 +84,7 @@ class InvoiceController {
             stats.forEach(s => {
                 const amount = s._sum.amount || 0;
                 const count = s._count.id || 0;
-                
+
                 result.totalBilled += amount;
                 result.totalInvoices += count;
 
@@ -228,6 +228,110 @@ class InvoiceController {
             });
 
             res.json(invoice);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async listDefaulters(req, res) {
+        try {
+            const societyId = req.user.societyId;
+            const { block, search } = req.query;
+
+            // Find all units with PENDING or OVERDUE invoices
+            const defaultersRaw = await prisma.invoice.groupBy({
+                by: ['unitId', 'residentId'],
+                where: {
+                    societyId,
+                    status: { in: ['PENDING', 'OVERDUE'] }
+                },
+                _sum: { amount: true },
+                _count: { id: true },
+                _min: { dueDate: true }
+            });
+
+            const unitIds = defaultersRaw.map(d => d.unitId);
+            const units = await prisma.unit.findMany({
+                where: {
+                    id: { in: unitIds },
+                    ...(block && block !== 'all' ? { block } : {}),
+                    ...(search ? {
+                        OR: [
+                            { number: { contains: search } },
+                            { owner: { name: { contains: search } } },
+                            { tenant: { name: { contains: search } } }
+                        ]
+                    } : {})
+                },
+                include: { owner: true, tenant: true }
+            });
+
+            const unitMap = units.reduce((acc, unit) => {
+                acc[unit.id] = unit;
+                return acc;
+            }, {});
+
+            const result = defaultersRaw
+                .filter(d => unitMap[d.unitId])
+                .map(d => {
+                    const unit = unitMap[d.unitId];
+                    const resident = unit.tenant || unit.owner;
+                    const dueDays = Math.floor((new Date() - new Date(d._min.dueDate)) / (1000 * 60 * 60 * 24));
+
+                    let status = 'low';
+                    if (dueDays > 90 || d._sum.amount > 10000) status = 'critical';
+                    else if (dueDays > 60 || d._sum.amount > 5000) status = 'high';
+                    else if (dueDays > 30) status = 'medium';
+
+                    return {
+                        id: unit.id.toString(),
+                        unit: unit.number,
+                        block: unit.block,
+                        ownerName: resident?.name || 'Unknown',
+                        phone: resident?.phone || 'N/A',
+                        outstandingAmount: d._sum.amount,
+                        dueSince: d._min.dueDate.toISOString().split('T')[0],
+                        dueDays,
+                        status,
+                        reminders: 0, // Placeholder
+                        paymentStatus: 'overdue'
+                    };
+                });
+
+            res.json(result);
+        } catch (error) {
+            console.error('List Defaulters Error:', error);
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async getDefaulterStats(req, res) {
+        try {
+            const societyId = req.user.societyId;
+
+            const overdueData = await prisma.invoice.aggregate({
+                where: {
+                    societyId,
+                    status: { in: ['PENDING', 'OVERDUE'] }
+                },
+                _sum: { amount: true },
+                _count: { id: true }
+            });
+
+            const uniqueDefaulters = await prisma.invoice.groupBy({
+                by: ['unitId'],
+                where: {
+                    societyId,
+                    status: { in: ['PENDING', 'OVERDUE'] }
+                }
+            });
+
+            res.json({
+                totalOutstanding: overdueData._sum.amount || 0,
+                totalDefaulters: uniqueDefaulters.length,
+                overdueInvoices: overdueData._count.id,
+                criticalCases: 0 // Logic could be added here
+            });
         } catch (error) {
             res.status(500).json({ error: error.message });
         }

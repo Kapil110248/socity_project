@@ -19,6 +19,8 @@ export const EventService = {
     time?: string;
     location?: string;
     category?: string;
+    maxAttendees?: number;
+    organizer?: string;
   }) => {
     const response = await api.post(API_CONFIG.EVENT.CREATE, data);
     return response.data;
@@ -26,6 +28,16 @@ export const EventService = {
 
   update: async (id: number | string, data: any) => {
     const response = await api.patch(API_CONFIG.EVENT.UPDATE(id), data);
+    return response.data;
+  },
+
+  rsvp: async (eventId: number | string, status: string) => {
+    const response = await api.post(API_CONFIG.EVENT.RSVP(eventId), { status });
+    return response.data;
+  },
+
+  getAttendees: async (id: number | string) => {
+    const response = await api.get(API_CONFIG.EVENT.GET_ATTENDEES(id));
     return response.data;
   },
 

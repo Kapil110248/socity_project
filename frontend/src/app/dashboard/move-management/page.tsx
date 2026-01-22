@@ -403,7 +403,9 @@ export default function MoveManagementPage() {
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <Home className="h-3 w-3 text-gray-400" />
-                        <span className="font-medium">{request.unit}</span>
+                        <span className="font-medium">
+                          {request.unit ? `${request.unit.block}-${request.unit.number}` : 'No Unit'}
+                        </span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -456,7 +458,9 @@ export default function MoveManagementPage() {
                                 </div>
                                 <div>
                                   <span className="text-gray-600">Unit:</span>
-                                  <p className="font-medium">{request.unit}</p>
+                                  <p className="font-medium">
+                                    {request.unit ? `${request.unit.block}-${request.unit.number}` : 'No Unit'}
+                                  </p>
                                 </div>
                                 <div>
                                   <span className="text-gray-600">Phone:</span>

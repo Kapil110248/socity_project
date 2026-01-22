@@ -9,6 +9,7 @@ router.patch('/units/:id/ownership', authenticate, authorize(['ADMIN']), Society
 router.post('/notices', authenticate, authorize(['ADMIN']), SocietyController.postNotice);
 router.get('/admin-dashboard-stats', authenticate, authorize(['ADMIN', 'SUPER_ADMIN']), SocietyController.getAdminDashboardStats);
 router.get('/members', authenticate, SocietyController.getMembers);
+router.post('/members', authenticate, authorize(['ADMIN']), SocietyController.addMember);
 
 // Super Admin
 router.get('/stats', authenticate, authorize(['SUPER_ADMIN']), SocietyController.getStats);

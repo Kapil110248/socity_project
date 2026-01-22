@@ -41,6 +41,9 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { AdminResidentService } from '@/services/admin-resident.service'
+import { toast } from 'sonner'
 
 const stats = [
   {
@@ -140,20 +143,143 @@ export default function DirectoryPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [blockFilter, setBlockFilter] = useState('all')
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const queryClient = useQueryClient()
 
-  const filteredResidents = residents.filter((resident) => {
-    const matchesSearch =
-      resident.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      resident.unit.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      resident.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      resident.phone.includes(searchQuery)
-
-    const matchesStatus = statusFilter === 'all' || resident.status === statusFilter
-    const matchesBlock =
-      blockFilter === 'all' || resident.unit.startsWith(blockFilter.toUpperCase())
-
-    return matchesSearch && matchesStatus && matchesBlock
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    role: 'owner',
+    unitId: '',
+    familyMembers: ''
   })
+
+  // Queries
+  const { data: apiResidents = [], isLoading: residentsLoading } = useQuery({
+    queryKey: ['admin-residents', blockFilter, statusFilter],
+    queryFn: () => AdminResidentService.getResidents({
+      block: blockFilter === 'all' ? undefined : blockFilter,
+      type: 'directory'
+    })
+  })
+
+  const { data: serverStats } = useQuery({
+    queryKey: ['admin-resident-stats'],
+    queryFn: () => AdminResidentService.getStats()
+  })
+
+  const { data: units = [] } = useQuery({
+    queryKey: ['available-units'],
+    queryFn: () => AdminResidentService.getUnits()
+  })
+
+  // Mutations
+  const addResidentMutation = useMutation({
+    mutationFn: AdminResidentService.addResident,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-residents'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-resident-stats'] })
+      setIsAddDialogOpen(false)
+      toast.success('Resident added successfully')
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        role: 'owner',
+        unitId: '',
+        familyMembers: ''
+      })
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to add resident')
+    }
+  })
+
+  const filteredResidents = (apiResidents as any[]).filter((resident) => {
+    const nameMatch = resident.name.toLowerCase().includes(searchQuery.toLowerCase())
+    const emailMatch = resident.email?.toLowerCase().includes(searchQuery.toLowerCase())
+    const phoneMatch = resident.phone?.includes(searchQuery)
+    const unitMatch = (resident.unit?.block + '-' + resident.unit?.number).toLowerCase().includes(searchQuery.toLowerCase())
+
+    const matchesSearch = nameMatch || emailMatch || phoneMatch || unitMatch
+    const matchesStatus = statusFilter === 'all' || resident.role?.toLowerCase() === statusFilter.toLowerCase()
+
+    return matchesSearch && matchesStatus
+  })
+
+  const handleAddResident = () => {
+    if (!formData.name || !formData.email || !formData.unitId) {
+      toast.error('Please fill in all required fields')
+      return
+    }
+    addResidentMutation.mutate(formData)
+  }
+
+  const handleExportCSV = () => {
+    if (filteredResidents.length === 0) {
+      toast.error('No data to export')
+      return
+    }
+
+    const headers = ['UID', 'Name', 'Unit', 'Email', 'Phone', 'Type', 'Join Date', 'Family Members', 'Vehicles']
+    const csvContent = [
+      headers.join(','),
+      ...filteredResidents.map(r => [
+        r.id,
+        `"${r.name}"`,
+        `"${r.unit ? `${r.unit.block}-${r.unit.number}` : 'N/A'}"`,
+        r.email,
+        r.phone || 'N/A',
+        r.role,
+        new Date(r.createdAt).toLocaleDateString(),
+        r.familyMembersCount || 0,
+        r.vehiclesCount || 0
+      ].join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `resident_directory_${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    toast.success('Directory exported successfully')
+  }
+
+  const residentStats = [
+    {
+      title: 'Total Units',
+      value: serverStats?.units?.total || '0',
+      change: '+0',
+      icon: Home,
+      color: 'blue',
+    },
+    {
+      title: 'Total Residents',
+      value: serverStats?.users?.totalResidents || '0',
+      change: `+${serverStats?.users?.pending || 0}`,
+      icon: Users,
+      color: 'green',
+    },
+    {
+      title: 'Owners',
+      value: serverStats?.users?.owners || '0',
+      change: 'Static',
+      icon: UserCheck,
+      color: 'purple',
+    },
+    {
+      title: 'Tenants',
+      value: serverStats?.users?.tenants || '0',
+      change: 'Static',
+      icon: UserX,
+      color: 'orange',
+    },
+  ]
 
   return (
     <RoleGuard allowedRoles={['admin']}>
@@ -168,11 +294,11 @@ export default function DirectoryPage() {
             </p>
           </div>
           <div className="flex items-center space-x-3">
-            <Button variant="outline" className="space-x-2">
+            <Button variant="outline" className="space-x-2" onClick={handleExportCSV}>
               <Download className="h-4 w-4" />
               <span>Export</span>
             </Button>
-            <Dialog>
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="bg-gradient-to-r from-teal-500 to-cyan-500 text-white space-x-2">
                   <Plus className="h-4 w-4" />
@@ -189,37 +315,53 @@ export default function DirectoryPage() {
                 <div className="space-y-4 py-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Full Name</Label>
-                      <Input placeholder="John Doe" />
+                      <Label>Full Name *</Label>
+                      <Input
+                        placeholder="John Doe"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-2">
-                      <Label>Unit Number</Label>
-                      <Select>
+                      <Label>Unit Number *</Label>
+                      <Select value={formData.unitId} onValueChange={(val) => setFormData({ ...formData, unitId: val })}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select unit" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="a-101">A-101</SelectItem>
-                          <SelectItem value="a-102">A-102</SelectItem>
-                          <SelectItem value="b-201">B-201</SelectItem>
+                          {(units as any[]).map((unit) => (
+                            <SelectItem key={unit.id} value={unit.id.toString()}>
+                              {unit.block}-{unit.number}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Email</Label>
-                      <Input type="email" placeholder="john@example.com" />
+                      <Label>Email *</Label>
+                      <Input
+                        type="email"
+                        placeholder="john@example.com"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Phone</Label>
-                      <Input type="tel" placeholder="+91 98765 43210" />
+                      <Input
+                        type="tel"
+                        placeholder="+91 98765 43210"
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Resident Type</Label>
-                      <Select>
+                      <Label>Resident Type *</Label>
+                      <Select value={formData.role} onValueChange={(val) => setFormData({ ...formData, role: val })}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select type" />
                         </SelectTrigger>
@@ -231,15 +373,24 @@ export default function DirectoryPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Family Members</Label>
-                      <Input type="number" placeholder="4" />
+                      <Input
+                        type="number"
+                        placeholder="4"
+                        value={formData.familyMembers}
+                        onChange={(e) => setFormData({ ...formData, familyMembers: e.target.value })}
+                      />
                     </div>
                   </div>
                   <DialogFooter>
                     <DialogClose asChild>
                       <Button variant="outline">Cancel</Button>
                     </DialogClose>
-                    <Button className="bg-blue-600 hover:bg-blue-700">
-                      Add Resident
+                    <Button
+                      className="bg-blue-600 hover:bg-blue-700"
+                      onClick={handleAddResident}
+                      disabled={addResidentMutation.isPending}
+                    >
+                      {addResidentMutation.isPending ? 'Adding...' : 'Add Resident'}
                     </Button>
                   </DialogFooter>
                 </div>
@@ -250,7 +401,7 @@ export default function DirectoryPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {stats.map((stat, index) => {
+          {residentStats.map((stat, index) => {
             const Icon = stat.icon
             return (
               <motion.div
@@ -356,76 +507,90 @@ export default function DirectoryPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredResidents.map((resident) => (
-                <TableRow key={resident.id}>
-                  <TableCell>
-                    <div className="flex items-center space-x-3">
-                      <Avatar>
-                        <AvatarImage src={resident.avatar || undefined} />
-                        <AvatarFallback className="bg-gradient-to-br from-teal-500 to-cyan-500 text-white">
-                          {resident.name.charAt(0)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-semibold text-gray-900">{resident.name}</p>
-                        <p className="text-sm text-gray-500">{resident.id}</p>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="font-semibold">
-                      {resident.unit}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2 text-sm">
-                        <Mail className="h-3 w-3 text-gray-400" />
-                        <span className="text-gray-600">{resident.email}</span>
-                      </div>
-                      <div className="flex items-center space-x-2 text-sm">
-                        <Phone className="h-3 w-3 text-gray-400" />
-                        <span className="text-gray-600">{resident.phone}</span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center">{resident.members}</TableCell>
-                  <TableCell className="text-center">{resident.vehicles}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={resident.status === 'owner' ? 'default' : 'secondary'}
-                      className={
-                        resident.status === 'owner'
-                          ? 'bg-blue-100 text-blue-700 hover:bg-blue-100'
-                          : 'bg-purple-100 text-purple-700 hover:bg-purple-100'
-                      }
-                    >
-                      {resident.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{resident.joinDate}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="View Details"
-                        onClick={() => alert(`Resident Details:\n\nID: ${resident.id}\nName: ${resident.name}\nUnit: ${resident.unit}\nEmail: ${resident.email}\nPhone: ${resident.phone}\nFamily Members: ${resident.members}\nVehicles: ${resident.vehicles}\nType: ${resident.status}\nJoined: ${resident.joinDate}`)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Send Email"
-                        onClick={() => window.location.href = `mailto:${resident.email}?subject=Message from Society Management`}
-                      >
-                        <Mail className="h-4 w-4" />
-                      </Button>
-                    </div>
+              {residentsLoading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-10 text-gray-500">
+                    Loading residents...
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : filteredResidents.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-10 text-gray-500">
+                    No residents found matching your criteria.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredResidents.map((resident: any) => (
+                  <TableRow key={resident.id}>
+                    <TableCell>
+                      <div className="flex items-center space-x-3">
+                        <Avatar>
+                          <AvatarImage src={resident.profileImg || undefined} />
+                          <AvatarFallback className="bg-gradient-to-br from-teal-500 to-cyan-500 text-white">
+                            {resident.name?.charAt(0) || 'U'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-semibold text-gray-900">{resident.name}</p>
+                          <p className="text-sm text-gray-500">UID: {resident.id}</p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="font-semibold">
+                        {resident.unit ? `${resident.unit.block}-${resident.unit.number}` : 'No Unit'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-2 text-sm">
+                          <Mail className="h-3 w-3 text-gray-400" />
+                          <span className="text-gray-600">{resident.email}</span>
+                        </div>
+                        <div className="flex items-center space-x-2 text-sm">
+                          <Phone className="h-3 w-3 text-gray-400" />
+                          <span className="text-gray-600">{resident.phone || 'N/A'}</span>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center">{resident.familyMembersCount || 0}</TableCell>
+                    <TableCell className="text-center">{resident.vehiclesCount || 0}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={resident.role === 'OWNER' ? 'default' : 'secondary'}
+                        className={
+                          resident.role === 'OWNER'
+                            ? 'bg-blue-100 text-blue-700 hover:bg-blue-100'
+                            : 'bg-purple-100 text-purple-700 hover:bg-purple-100'
+                        }
+                      >
+                        {resident.role}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{new Date(resident.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="View Details"
+                          onClick={() => alert(`Resident Details:\n\nID: ${resident.id}\nName: ${resident.name}\nUnit: ${resident.unit ? `${resident.unit.block}-${resident.unit.number}` : 'None'}\nEmail: ${resident.email}\nPhone: ${resident.phone}\nType: ${resident.role}\nJoined: ${new Date(resident.createdAt).toLocaleDateString()}`)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Send Email"
+                          onClick={() => window.location.href = `mailto:${resident.email}?subject=Message from Society Management`}
+                        >
+                          <Mail className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </Card>

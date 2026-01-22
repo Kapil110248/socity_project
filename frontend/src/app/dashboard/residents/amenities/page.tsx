@@ -297,10 +297,41 @@ export default function AmenitiesPage() {
   const [activeTab, setActiveTab] = useState('amenities')
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const isAdmin = user?.role === 'admin'
+  const queryClient = useQueryClient()
+  const [newAmenity, setNewAmenity] = useState({
+    name: '',
+    type: 'other',
+    description: '',
+    capacity: 0,
+    chargesPerHour: 0,
+    availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    timings: { start: '09:00', end: '22:00' },
+    status: 'available'
+  })
 
   const { data: amenitiesData, isLoading, error } = useQuery({
     queryKey: ['amenities'],
     queryFn: residentService.getAmenities
+  })
+
+  const createAmenityMutation = useMutation({
+    mutationFn: AmenityService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['amenities'] })
+      setIsAddDialogOpen(false)
+      toast.success('Amenity added successfully!')
+      setNewAmenity({
+        name: '',
+        type: 'other',
+        description: '',
+        capacity: 0,
+        chargesPerHour: 0,
+        availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        timings: { start: '09:00', end: '22:00' },
+        status: 'available'
+      })
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to add amenity')
   })
 
   const amenities = amenitiesData?.amenities || []
@@ -309,8 +340,11 @@ export default function AmenitiesPage() {
   const pastBookings = allBookings.filter((b: any) => new Date(b.date) < new Date())
 
   const handleAddAmenity = () => {
-    setIsAddDialogOpen(false)
-    toast.success('Amenity added successfully!')
+    if (!newAmenity.name) {
+      toast.error('Name is required')
+      return
+    }
+    createAmenityMutation.mutate(newAmenity)
   }
 
   const handleViewDetails = (bookingId: string) => {
@@ -321,9 +355,9 @@ export default function AmenitiesPage() {
     toast.info(`Modifying booking ${bookingId}...`)
   }
 
-  const handleCancelBooking = (bookingId: string) => {
+  const handleCancelBooking = (id: number) => {
     if (confirm('Are you sure you want to cancel this booking?')) {
-      toast.success('Booking cancelled successfully!')
+      updateStatusMutation.mutate({ id, status: 'CANCELLED' })
     }
   }
 
@@ -390,11 +424,18 @@ export default function AmenitiesPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Amenity Name</Label>
-                      <Input placeholder="e.g. Mini Theater" />
+                      <Input
+                        placeholder="e.g. Mini Theater"
+                        value={newAmenity.name}
+                        onChange={(e) => setNewAmenity({ ...newAmenity, name: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Amenity Type</Label>
-                      <Select>
+                      <Select
+                        value={newAmenity.type}
+                        onValueChange={(value) => setNewAmenity({ ...newAmenity, type: value })}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select type" />
                         </SelectTrigger>
@@ -413,17 +454,32 @@ export default function AmenitiesPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Capacity (Persons)</Label>
-                      <Input type="number" placeholder="e.g. 50" />
+                      <Input
+                        type="number"
+                        placeholder="e.g. 50"
+                        value={newAmenity.capacity}
+                        onChange={(e) => setNewAmenity({ ...newAmenity, capacity: parseInt(e.target.value) })}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Price per Hour (₹)</Label>
-                      <Input type="number" placeholder="0 for free" />
+                      <Input
+                        type="number"
+                        placeholder="0 for free"
+                        value={newAmenity.chargesPerHour}
+                        onChange={(e) => setNewAmenity({ ...newAmenity, chargesPerHour: parseFloat(e.target.value) })}
+                      />
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <Label>Description</Label>
-                    <Textarea placeholder="Describe the amenity and its features..." rows={3} />
+                    <Textarea
+                      placeholder="Describe the amenity and its features..."
+                      rows={3}
+                      value={newAmenity.description}
+                      onChange={(e) => setNewAmenity({ ...newAmenity, description: e.target.value })}
+                    />
                   </div>
 
                   <div className="space-y-3">
@@ -431,7 +487,17 @@ export default function AmenitiesPage() {
                     <div className="flex flex-wrap gap-4">
                       {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
                         <div key={day} className="flex items-center gap-2">
-                          <Checkbox id={`day-${day}`} defaultChecked />
+                          <Checkbox
+                            id={`day-${day}`}
+                            checked={newAmenity.availableDays.includes(day)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setNewAmenity({ ...newAmenity, availableDays: [...newAmenity.availableDays, day] })
+                              } else {
+                                setNewAmenity({ ...newAmenity, availableDays: newAmenity.availableDays.filter(d => d !== day) })
+                              }
+                            }}
+                          />
                           <label htmlFor={`day-${day}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                             {day}
                           </label>
@@ -443,45 +509,48 @@ export default function AmenitiesPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Start Time</Label>
-                      <Select defaultValue="09:00">
+                      <Select
+                        value={newAmenity.timings.start}
+                        onValueChange={(val) => setNewAmenity({ ...newAmenity, timings: { ...newAmenity.timings, start: val } })}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select" />
                         </SelectTrigger>
                         <SelectContent>
-                          {Array.from({ length: 24 }, (_, i) => i).map((hour) => (
-                            <SelectItem key={hour} value={`${hour.toString().padStart(2, '0')}:00`}>
-                              {hour.toString().padStart(2, '0')}:00
-                            </SelectItem>
-                          ))}
+                          {Array.from({ length: 24 }, (_, i) => i).map((hour) => {
+                            const val = `${hour.toString().padStart(2, '0')}:00`
+                            return <SelectItem key={hour} value={val}>{val}</SelectItem>
+                          })}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
                       <Label>End Time</Label>
-                      <Select defaultValue="22:00">
+                      <Select
+                        value={newAmenity.timings.end}
+                        onValueChange={(val) => setNewAmenity({ ...newAmenity, timings: { ...newAmenity.timings, end: val } })}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select" />
                         </SelectTrigger>
                         <SelectContent>
-                          {Array.from({ length: 24 }, (_, i) => i).map((hour) => (
-                            <SelectItem key={hour} value={`${hour.toString().padStart(2, '0')}:00`}>
-                              {hour.toString().padStart(2, '0')}:00
-                            </SelectItem>
-                          ))}
+                          {Array.from({ length: 24 }, (_, i) => i).map((hour) => {
+                            const val = `${hour.toString().padStart(2, '0')}:00`
+                            return <SelectItem key={hour} value={val}>{val}</SelectItem>
+                          })}
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
 
                   <DialogFooter className="pt-4 border-t">
-                    <DialogClose asChild>
-                      <Button variant="outline">Cancel</Button>
-                    </DialogClose>
+                    <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
                     <Button
                       className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white"
                       onClick={handleAddAmenity}
+                      disabled={createAmenityMutation.isPending}
                     >
-                      Create Amenity
+                      {createAmenityMutation.isPending ? 'Creating...' : 'Create Amenity'}
                     </Button>
                   </DialogFooter>
                 </div>
@@ -644,21 +713,21 @@ export default function AmenitiesPage() {
                           {booking.user?.ownedUnits?.[0] && ` (Unit: ${booking.user.ownedUnits[0].block}-${booking.user.ownedUnits[0].number})`}
                         </p>
                         <div className="flex gap-4 mt-2 text-sm text-gray-500">
-                           <span className="flex items-center gap-1"><Calendar className="w-4 h-4"/> {formatDate(booking.date)}</span>
-                           <span className="flex items-center gap-1"><Clock className="w-4 h-4"/> {booking.startTime} - {booking.endTime}</span>
+                          <span className="flex items-center gap-1"><Calendar className="w-4 h-4" /> {formatDate(booking.date)}</span>
+                          <span className="flex items-center gap-1"><Clock className="w-4 h-4" /> {booking.startTime} - {booking.endTime}</span>
                         </div>
                         <p className="text-sm mt-1">Purpose: {booking.purpose}</p>
                       </div>
                       <div className="flex gap-2">
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           className="bg-green-600 hover:bg-green-700 text-white"
                           onClick={() => handleUpdateStatus(booking.id, 'APPROVED')}
                         >
                           Approve
                         </Button>
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           variant="destructive"
                           onClick={() => handleUpdateStatus(booking.id, 'REJECTED')}
                         >
@@ -669,10 +738,10 @@ export default function AmenitiesPage() {
                   </Card>
                 ))
               ) : (
-                 <div className="text-center py-12 text-muted-foreground bg-muted/30 rounded-xl">
-                    <CheckCircle className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
-                    <p>No pending booking requests</p>
-                 </div>
+                <div className="text-center py-12 text-muted-foreground bg-muted/30 rounded-xl">
+                  <CheckCircle className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
+                  <p>No pending booking requests</p>
+                </div>
               )}
             </TabsContent>
           )}
@@ -686,11 +755,11 @@ export default function AmenitiesPage() {
                 const colors = amenityColors[bookingAmenity.type] || amenityColors.other
 
                 const statusStyles: Record<string, string> = {
-                   PENDING: "bg-yellow-100 text-yellow-700 border-yellow-200",
-                   APPROVED: "bg-green-100 text-green-700 border-green-200",
-                   CONFIRMED: "bg-green-100 text-green-700 border-green-200",
-                   REJECTED: "bg-red-100 text-red-700 border-red-200",
-                   CANCELLED: "bg-gray-100 text-gray-700 border-gray-200"
+                  PENDING: "bg-yellow-100 text-yellow-700 border-yellow-200",
+                  APPROVED: "bg-green-100 text-green-700 border-green-200",
+                  CONFIRMED: "bg-green-100 text-green-700 border-green-200",
+                  REJECTED: "bg-red-100 text-red-700 border-red-200",
+                  CANCELLED: "bg-gray-100 text-gray-700 border-gray-200"
                 }
 
                 return (
@@ -728,7 +797,7 @@ export default function AmenitiesPage() {
                                 {booking.amountPaid === 0 ? 'Free' : `Rs. ${booking.amountPaid}`}
                               </p>
                               <Badge className={`${statusStyles[booking.status] || statusStyles.PENDING} border`}>
-                                {booking.status === 'APPROVED' || booking.status === 'CONFIRMED' ? <CheckCircle className="h-3 w-3 mr-1"/> : <Clock className="h-3 w-3 mr-1"/>}
+                                {booking.status === 'APPROVED' || booking.status === 'CONFIRMED' ? <CheckCircle className="h-3 w-3 mr-1" /> : <Clock className="h-3 w-3 mr-1" />}
                                 {booking.status}
                               </Badge>
                             </div>
@@ -744,10 +813,10 @@ export default function AmenitiesPage() {
                                   View Details
                                 </DropdownMenuItem>
                                 {booking.status === 'PENDING' && (
-                                   <DropdownMenuItem className="text-red-600" onClick={() => handleCancelBooking(booking.id)}>
-                                     <XCircle className="h-4 w-4 mr-2" />
-                                     Cancel Request
-                                   </DropdownMenuItem>
+                                  <DropdownMenuItem className="text-red-600" onClick={() => handleCancelBooking(booking.id)}>
+                                    <XCircle className="h-4 w-4 mr-2" />
+                                    Cancel Request
+                                  </DropdownMenuItem>
                                 )}
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -779,12 +848,12 @@ export default function AmenitiesPage() {
                 const AmenityIcon = amenityIcons[bookingAmenity.type] || Building
 
                 const statusStyles: Record<string, string> = {
-                   PENDING: "bg-yellow-100 text-yellow-700 border-yellow-200",
-                   APPROVED: "bg-green-100 text-green-700 border-green-200",
-                   CONFIRMED: "bg-green-100 text-green-700 border-green-200",
-                   REJECTED: "bg-red-100 text-red-700 border-red-200",
-                   CANCELLED: "bg-gray-100 text-gray-700 border-gray-200",
-                   COMPLETED: "bg-blue-100 text-blue-700 border-blue-200"
+                  PENDING: "bg-yellow-100 text-yellow-700 border-yellow-200",
+                  APPROVED: "bg-green-100 text-green-700 border-green-200",
+                  CONFIRMED: "bg-green-100 text-green-700 border-green-200",
+                  REJECTED: "bg-red-100 text-red-700 border-red-200",
+                  CANCELLED: "bg-gray-100 text-gray-700 border-gray-200",
+                  COMPLETED: "bg-blue-100 text-blue-700 border-blue-200"
                 }
 
                 return (
@@ -821,9 +890,9 @@ export default function AmenitiesPage() {
                               {booking.amountPaid === 0 ? 'Free' : `Rs. ${booking.amountPaid}`}
                             </p>
                             <Badge className={`${statusStyles[booking.status] || statusStyles.COMPLETED} border`}>
-                               {booking.status === 'APPROVED' || booking.status === 'CONFIRMED' ? <CheckCircle className="h-3 w-3 mr-1"/> : <Clock className="h-3 w-3 mr-1"/>}
-                               {booking.status}
-                             </Badge>
+                              {booking.status === 'APPROVED' || booking.status === 'CONFIRMED' ? <CheckCircle className="h-3 w-3 mr-1" /> : <Clock className="h-3 w-3 mr-1" />}
+                              {booking.status}
+                            </Badge>
                           </div>
                         </div>
                       </CardContent>

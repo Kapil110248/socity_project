@@ -21,7 +21,7 @@ const StaffController = {
       // Calculate stats based on the role filter
       const statsWhere = { societyId };
       if (role && role !== 'all') statsWhere.role = role.toUpperCase();
-      
+
       const total = await prisma.staff.count({ where: statsWhere });
       const onDuty = await prisma.staff.count({ where: { ...statsWhere, status: 'ON_DUTY' } });
       const onLeave = await prisma.staff.count({ where: { ...statsWhere, status: 'ON_LEAVE' } });
@@ -46,7 +46,7 @@ const StaffController = {
   // Create new staff
   create: async (req, res) => {
     try {
-      const { name, phone, email, shift, gate, role, address, emergencyContact, idProof, idNumber, password } = req.body;
+      const { name, phone, email, shift, gate, role, address, emergencyContact, idProof, idNumber, password, workingDays } = req.body;
       const societyId = req.user.societyId;
       const bcrypt = require('bcryptjs');
 
@@ -96,6 +96,7 @@ const StaffController = {
           email,
           shift,
           gate,
+          workingDays,
           role: role || 'GUARD',
           address,
           emergencyContact,
@@ -109,8 +110,8 @@ const StaffController = {
 
       // Remove password from response
       const { password: _, ...staffData } = staff;
-      res.status(201).json({ 
-        success: true, 
+      res.status(201).json({
+        success: true,
         data: staffData,
         loginCredentials: {
           email: user.email,
@@ -120,9 +121,9 @@ const StaffController = {
     } catch (error) {
       console.error('Create staff error:', error);
       res.status(500).json({
-        success: false, 
+        success: false,
         error: error.message || 'Failed to create staff',
-        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined 
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   },
@@ -132,7 +133,7 @@ const StaffController = {
     try {
       const { id } = req.params;
       const data = req.body;
-      
+
       const staff = await prisma.staff.update({
         where: { id: parseInt(id) },
         data

@@ -220,7 +220,7 @@ class ResidentController {
         try {
             const userId = req.user.id;
             const user = await prisma.user.findUnique({ where: { id: userId } });
-            
+
             if (!user) return res.status(404).json({ error: 'User not found' });
 
             const transactions = await prisma.transaction.findMany({
@@ -268,7 +268,7 @@ class ResidentController {
             try {
                 const { getIO } = require('../lib/socket');
                 const io = getIO();
-                
+
                 // Construct a standardized payload for the frontend overlay
                 const notificationPayload = {
                     id: alert.id,
@@ -285,10 +285,10 @@ class ResidentController {
 
                 // Notify local society (Admins/Security)
                 io.to(`society_${societyId}`).emit('new_emergency_alert', notificationPayload);
-                
+
                 // Notify Super Admins globally
                 io.to('platform_admin').emit('new_emergency_alert', notificationPayload);
-                
+
                 console.log(`SOS Alert emitted for society_${societyId}`);
             } catch (socketError) {
                 console.error('Socket emit failed:', socketError.message);
@@ -342,30 +342,30 @@ class ResidentController {
             if (role === 'RESIDENT') {
                 where.reportedById = userId;
             } else if (role === 'ADMIN' || role === 'COMMITTEE') {
-                 // Admins/Committee see all public tickets, 
-                 // OR private tickets assigned to them, 
-                 // OR private tickets they reported
-                 where.OR = [
-                     { isPrivate: false },
-                     { assignedToId: userId },
-                     { reportedById: userId }
-                 ];
+                // Admins/Committee see all public tickets, 
+                // OR private tickets assigned to them, 
+                // OR private tickets they reported
+                where.OR = [
+                    { isPrivate: false },
+                    { assignedToId: userId },
+                    { reportedById: userId }
+                ];
             } else if (role === 'SUPER_ADMIN') {
-                 // Super Admins logic - matching ComplaintController defaults
-                 // showing public tickets 
-                 where.isPrivate = false;
+                // Super Admins logic - matching ComplaintController defaults
+                // showing public tickets 
+                where.isPrivate = false;
             }
 
             const tickets = await prisma.complaint.findMany({
                 where,
                 orderBy: { createdAt: 'desc' },
                 include: {
-                    reportedBy: { 
-                        select: { 
-                            name: true, 
+                    reportedBy: {
+                        select: {
+                            name: true,
                             role: true,
                             profileImg: true // Useful for UI avatar
-                        } 
+                        }
                     }
                 }
             });
@@ -404,7 +404,7 @@ class ResidentController {
             const { title, description, category, priority, isPrivate } = req.body;
             const ticket = await prisma.complaint.create({
                 data: {
-                    title, description, category, 
+                    title, description, category,
                     priority: priority?.toUpperCase() || 'MEDIUM',
                     reportedById: req.user.id,
                     societyId: req.user.societyId,
@@ -519,7 +519,7 @@ class ResidentController {
         try {
             const { id } = req.params;
             const item = await prisma.marketplaceItem.findUnique({ where: { id: parseInt(id) } });
-            
+
             if (!item) {
                 return res.status(404).json({ error: 'Item not found' });
             }
@@ -538,8 +538,8 @@ class ResidentController {
     static async getServices(req, res) {
         try {
             const categories = await prisma.serviceCategory.findMany({ include: { variants: true } });
-            const myRequests = await prisma.serviceInquiry.findMany({ 
-                where: { 
+            const myRequests = await prisma.serviceInquiry.findMany({
+                where: {
                     societyId: req.user.societyId,
                     residentId: req.user.id
                 },
@@ -577,10 +577,29 @@ class ResidentController {
     // --- Amenities ---
     static async getAmenities(req, res) {
         try {
-            const amenities = await prisma.amenity.findMany({ where: { societyId: req.user.societyId } });
+            const societyId = parseInt(req.user.societyId);
+            const amenities = await prisma.amenity.findMany({ where: { societyId } });
+
+            const bookingWhere = req.user.role === 'ADMIN' ? {
+                amenity: { societyId }
+            } : {
+                userId: req.user.id
+            };
+
             const myBookings = await prisma.amenityBooking.findMany({
-                where: { userId: req.user.id },
-                include: { amenity: true }
+                where: bookingWhere,
+                include: {
+                    amenity: true,
+                    user: {
+                        select: {
+                            id: true,
+                            name: true,
+                            ownedUnits: { select: { block: true, number: true }, take: 1 },
+                            rentedUnits: { select: { block: true, number: true }, take: 1 }
+                        }
+                    }
+                },
+                orderBy: { date: 'desc' }
             });
             res.json({ amenities, myBookings });
         } catch (error) {
@@ -819,7 +838,7 @@ class ResidentController {
             // Delete related likes and comments first
             await prisma.buzzLike.deleteMany({ where: { buzzId: parseInt(id) } });
             await prisma.communityComment.deleteMany({ where: { buzzId: parseInt(id) } });
-            
+
             // Delete the post
             await prisma.communityBuzz.delete({
                 where: { id: parseInt(id) }
@@ -836,7 +855,7 @@ class ResidentController {
         try {
             const { buzzId } = req.body;
             const userId = req.user.id;
-            
+
             const existingLike = await prisma.buzzLike.findUnique({
                 where: {
                     buzzId_userId: {

@@ -55,7 +55,17 @@ class SocietyController {
 
       const whereClause = { societyId };
       if (type === 'directory') {
-        whereClause.role = { in: ['RESIDENT', 'OWNER', 'TENANT'] };
+        whereClause.role = 'RESIDENT';
+        // Only show users who are either owners or tenants
+        whereClause.OR = [
+          { ownedUnits: { some: {} } },
+          { rentedUnits: { some: {} } }
+        ];
+      }
+
+      // Privacy: Residents can only see their own data
+      if (req.user.role === 'RESIDENT') {
+        whereClause.id = req.user.id;
       }
 
       const members = await prisma.user.findMany({
@@ -70,23 +80,99 @@ class SocietyController {
           profileImg: true,
           createdAt: true,
           ownedUnits: {
-            select: { id: true, block: true, number: true }
+            select: {
+              id: true, block: true, number: true,
+              _count: { select: { members: true, vehicles: true } }
+            }
           },
-          tenantUnits: {
-            select: { id: true, block: true, number: true }
+          rentedUnits: {
+            select: {
+              id: true, block: true, number: true,
+              _count: { select: { members: true, vehicles: true } }
+            }
           }
         },
         orderBy: { name: 'asc' }
       });
 
-      const formatted = members.map(m => ({
-        ...m,
-        unit: m.ownedUnits[0] || m.tenantUnits[0] || null,
-        avatar: m.profileImg,
-      }));
+      const formatted = members.map(m => {
+        const isOwner = m.ownedUnits.length > 0;
+        const isTenant = m.rentedUnits.length > 0;
+
+        // Aggregate counts from all units (usually just one)
+        const unitsList = [...m.ownedUnits, ...m.rentedUnits];
+        const membersCount = unitsList.reduce((sum, u) => sum + (u._count?.members || 0), 0);
+        const vehiclesCount = unitsList.reduce((sum, u) => sum + (u._count?.vehicles || 0), 0);
+
+        return {
+          ...m,
+          role: isOwner ? 'OWNER' : (isTenant ? 'TENANT' : 'RESIDENT'),
+          unit: unitsList[0] || null,
+          avatar: m.profileImg,
+          familyMembersCount: membersCount,
+          vehiclesCount: vehiclesCount
+        };
+      });
 
       res.json(formatted);
     } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async addMember(req, res) {
+    try {
+      const { name, email, phone, role, unitId, status } = req.body;
+      const societyId = req.user.societyId;
+      const bcrypt = require('bcryptjs');
+
+      // Check for duplicate email
+      const existingUser = await prisma.user.findUnique({ where: { email } });
+      if (existingUser) {
+        return res.status(400).json({ error: 'Email already registered' });
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        // 1. Create User
+        // Map 'owner'/'tenant' to 'RESIDENT' for role enum compliance if needed, 
+        // OR use the role as is if we update the enum. 
+        // For now, let's keep it flexible but ensure it's a valid enum value.
+        const validRoles = ['RESIDENT', 'ADMIN', 'SUPER_ADMIN', 'GUARD', 'VENDOR', 'ACCOUNTANT'];
+        let userRole = role?.toUpperCase() || 'RESIDENT';
+        if (!validRoles.includes(userRole)) {
+          userRole = 'RESIDENT'; // Default to RESIDENT if it's 'OWNER' or 'TENANT' which are relations
+        }
+
+        const user = await tx.user.create({
+          data: {
+            name,
+            email,
+            phone,
+            role: userRole,
+            status: status?.toUpperCase() || 'ACTIVE',
+            password: await bcrypt.hash('password123', 10), // Default password
+            societyId
+          }
+        });
+
+        // 2. Link to Unit
+        if (unitId) {
+          const isTenant = role?.toLowerCase() === 'tenant';
+          await tx.unit.update({
+            where: { id: parseInt(unitId) },
+            data: {
+              ownerId: isTenant ? undefined : user.id,
+              tenantId: isTenant ? user.id : undefined,
+              status: 'OCCUPIED'
+            }
+          });
+        }
+        return user;
+      });
+
+      res.status(201).json(result);
+    } catch (error) {
+      console.error('Add Member Error:', error);
       res.status(500).json({ error: error.message });
     }
   }
@@ -321,7 +407,7 @@ class SocietyController {
       const society = await prisma.society.findUnique({ where: { id: societyId } });
 
       // ========== USER COUNTS ==========
-      const [totalUsers, activeUsers, inactiveUsers, pendingUsers, owners, tenants, staff, neverLoggedIn] = await Promise.all([
+      const [totalUsers, activeUsers, inactiveUsers, pendingUsers, owners, tenants, staff, totalResidentUsers, totalFamilyMembers] = await Promise.all([
         prisma.user.count({ where: { societyId } }),
         prisma.user.count({ where: { societyId, status: 'ACTIVE' } }),
         prisma.user.count({ where: { societyId, status: 'SUSPENDED' } }),
@@ -329,7 +415,17 @@ class SocietyController {
         prisma.user.count({ where: { societyId, ownedUnits: { some: {} } } }),
         prisma.user.count({ where: { societyId, rentedUnits: { some: {} } } }),
         prisma.user.count({ where: { societyId, role: { in: ['GUARD', 'VENDOR', 'ACCOUNTANT'] } } }),
-        prisma.user.count({ where: { societyId, sessions: { none: {} } } }),
+        prisma.user.count({
+          where: {
+            societyId,
+            role: 'RESIDENT',
+            OR: [
+              { ownedUnits: { some: {} } },
+              { rentedUnits: { some: {} } }
+            ]
+          }
+        }),
+        prisma.unitMember.count({ where: { unit: { societyId } } }),
       ]);
 
       // ========== UNIT COUNTS ==========
@@ -512,7 +608,7 @@ class SocietyController {
           owners,
           tenants,
           staff,
-          neverLoggedIn,
+          totalResidents: totalResidentUsers + totalFamilyMembers,
         },
         units: {
           total: totalUnits,
@@ -556,22 +652,22 @@ class SocietyController {
   }
 
   // ========== GUIDELINES MANAGEMENT (Super Admin) ==========
-  
+
   static async getGuidelines(req, res) {
     try {
       const { societyId } = req.query;
       const where = societyId ? { societyId: parseInt(societyId) } : {};
-      
+
       const guidelines = await prisma.communityGuideline.findMany({
         where,
-        include: { 
-          society: { 
-            select: { id: true, name: true } 
-          } 
+        include: {
+          society: {
+            select: { id: true, name: true }
+          }
         },
         orderBy: { createdAt: 'desc' }
       });
-      
+
       res.json(guidelines);
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -581,11 +677,11 @@ class SocietyController {
   static async createGuideline(req, res) {
     try {
       const { societyId, title, content, category } = req.body;
-      
+
       if (!societyId || !title || !content || !category) {
         return res.status(400).json({ error: 'Missing required fields' });
       }
-      
+
       const guideline = await prisma.communityGuideline.create({
         data: {
           societyId: parseInt(societyId),
@@ -599,7 +695,7 @@ class SocietyController {
           }
         }
       });
-      
+
       res.status(201).json(guideline);
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -610,7 +706,7 @@ class SocietyController {
     try {
       const { id } = req.params;
       const { title, content, category } = req.body;
-      
+
       const guideline = await prisma.communityGuideline.update({
         where: { id: parseInt(id) },
         data: {
@@ -624,7 +720,7 @@ class SocietyController {
           }
         }
       });
-      
+
       res.json(guideline);
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -634,11 +730,11 @@ class SocietyController {
   static async deleteGuideline(req, res) {
     try {
       const { id } = req.params;
-      
+
       await prisma.communityGuideline.delete({
         where: { id: parseInt(id) }
       });
-      
+
       res.json({ success: true, message: 'Guideline deleted successfully' });
     } catch (error) {
       res.status(500).json({ error: error.message });

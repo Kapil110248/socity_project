@@ -7,10 +7,12 @@ export const ComplaintService = {
     category?: string;
     search?: string;
     priority?: string;
+    page?: number;
+    limit?: number;
   }) => {
     let url = API_CONFIG.COMPLAINT.LIST;
     const queryParams: string[] = [];
-    
+
     if (params?.status && params.status !== 'all') {
       queryParams.push(`status=${params.status.toUpperCase()}`);
     }
@@ -23,9 +25,15 @@ export const ComplaintService = {
     if (params?.priority && params.priority !== 'all') {
       queryParams.push(`priority=${params.priority.toUpperCase()}`);
     }
-    
+    if (params?.page) {
+      queryParams.push(`page=${params.page}`);
+    }
+    if (params?.limit) {
+      queryParams.push(`limit=${params.limit}`);
+    }
+
     if (queryParams.length) url += `?${queryParams.join('&')}`;
-    
+
     const response = await api.get(url);
     return response.data;
   },
@@ -57,15 +65,20 @@ export const ComplaintService = {
     return response.data;
   },
 
-  addComment: async (id: number | string, content: string) => {
-    const response = await api.post(API_CONFIG.COMPLAINT.ADD_COMMENT(id), { content });
+  addComment: async (id: number | string, message: string) => {
+    const response = await api.post(API_CONFIG.COMPLAINT.ADD_COMMENT(id), { message });
     return response.data;
   },
 
   resolve: async (id: number | string) => {
-    const response = await api.patch(API_CONFIG.COMPLAINT.UPDATE_STATUS(id), { 
-      status: 'RESOLVED' 
+    const response = await api.patch(API_CONFIG.COMPLAINT.UPDATE_STATUS(id), {
+      status: 'RESOLVED'
     });
+    return response.data;
+  },
+
+  getStats: async () => {
+    const response = await api.get(API_CONFIG.COMPLAINT.STATS);
     return response.data;
   },
 };

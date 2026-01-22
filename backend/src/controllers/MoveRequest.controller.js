@@ -56,10 +56,46 @@ const MoveRequestController = {
       } = req.body;
       const societyId = req.user.societyId;
 
+      // Validate unit existence
+      if (unitId) {
+        console.log(`Creating MoveRequest: Attempting to find unit with identifier: ${unitId} in society: ${societyId}`);
+
+        let unit = null;
+        const numericId = parseInt(unitId);
+
+        if (!isNaN(numericId)) {
+          // Try finding by primary key ID first
+          unit = await prisma.unit.findFirst({
+            where: { id: numericId, societyId }
+          });
+        }
+
+        // If not found by ID, try finding by unit number (common user input)
+        if (!unit) {
+          unit = await prisma.unit.findFirst({
+            where: { number: unitId.toString(), societyId }
+          });
+        }
+
+        if (!unit) {
+          console.warn(`Create MoveRequest failed: Unit ${unitId} not found`);
+          return res.status(400).json({
+            success: false,
+            error: `Unit '${unitId}' not found. Please ensure the unit number is correct.`
+          });
+        }
+
+        // Use the actual database ID for the move request
+        req.body.actualUnitId = unit.id;
+        console.log(`Unit found: ${unit.block}-${unit.number} (ID: ${unit.id})`);
+      }
+
+      const normalizedType = type ? type.toUpperCase().replace('-', '_') : 'MOVE_IN';
+
       const request = await prisma.moveRequest.create({
         data: {
-          type: type.toUpperCase().replace('-', '_'),
-          unitId: unitId ? parseInt(unitId) : null,
+          type: normalizedType,
+          unitId: req.body.actualUnitId || (unitId ? parseInt(unitId) : null),
           residentName,
           phone,
           email,
@@ -68,7 +104,7 @@ const MoveRequestController = {
           vehicleType,
           vehicleNumber,
           depositAmount: depositAmount ? parseFloat(depositAmount) : null,
-          depositStatus: type === 'move-in' ? 'PAID' : null,
+          depositStatus: normalizedType === 'MOVE_IN' ? 'PAID' : null,
           notes,
           societyId,
         },

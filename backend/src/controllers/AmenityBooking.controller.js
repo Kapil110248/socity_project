@@ -22,13 +22,15 @@ class AmenityBookingController {
 
   static async create(req, res) {
     try {
-      const { amenityId, startTime, endTime, status, amountPaid } = req.body;
+      const { amenityId, date, startTime, endTime, status, amountPaid, purpose } = req.body;
       const booking = await prisma.amenityBooking.create({
         data: {
           amenityId: parseInt(amenityId),
           userId: req.user.id,
-          startTime: new Date(startTime),
-          endTime: new Date(endTime),
+          date: new Date(date),
+          startTime,
+          endTime,
+          purpose,
           status: status || 'PENDING',
           amountPaid: parseFloat(amountPaid || 0)
         }
@@ -42,13 +44,14 @@ class AmenityBookingController {
   static async update(req, res) {
     try {
       const { id } = req.params;
-      const { status, startTime, endTime } = req.body;
+      const { status, startTime, endTime, date } = req.body;
       const booking = await prisma.amenityBooking.update({
         where: { id: parseInt(id) },
         data: {
           status,
-          startTime: startTime ? new Date(startTime) : undefined,
-          endTime: endTime ? new Date(endTime) : undefined
+          date: date ? new Date(date) : undefined,
+          startTime,
+          endTime
         }
       });
       res.json(booking);

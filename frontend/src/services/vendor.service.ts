@@ -8,7 +8,7 @@ export const VendorService = {
     if (typeFilter && typeFilter !== 'all') params.push(`type=${typeFilter}`);
     if (statusFilter && statusFilter !== 'all') params.push(`status=${statusFilter}`);
     if (params.length) url += `?${params.join('&')}`;
-    
+
     const response = await api.get(url);
     return response.data;
   },
@@ -38,7 +38,7 @@ export const VendorService = {
   },
 
   update: async (id: number | string, data: any) => {
-    const response = await api.patch(API_CONFIG.VENDOR.UPDATE(id), data);
+    const response = await api.put(API_CONFIG.VENDOR.UPDATE(id), data);
     return response.data;
   },
 
@@ -47,22 +47,30 @@ export const VendorService = {
     return response.data;
   },
 
+  getStats: async () => {
+    const response = await api.get(API_CONFIG.VENDOR.STATS);
+    return response.data;
+  },
+
   // Renew contract
-  renewContract: async (id: number | string, data: {
-    contractStart: string;
-    contractEnd: string;
-    contractValue: number;
-  }) => {
-    const response = await api.patch(API_CONFIG.VENDOR.UPDATE(id), {
-      ...data,
-      contractStatus: 'active',
-    });
+  renewContract: async (id: number | string) => {
+    const response = await api.post(API_CONFIG.VENDOR.RENEW(id), {});
     return response.data;
   },
 
   // Update status
-  updateStatus: async (id: number | string, status: 'active' | 'inactive') => {
-    const response = await api.patch(API_CONFIG.VENDOR.UPDATE(id), { status });
+  updateStatus: async (id: number | string, status: string) => {
+    const response = await api.patch(API_CONFIG.VENDOR.UPDATE_STATUS(id), { status });
+    return response.data;
+  },
+
+  rateVendor: async (id: number | string, rating: number) => {
+    const response = await api.post(API_CONFIG.VENDOR.RATE(id), { rating });
+    return response.data;
+  },
+
+  getPaymentHistory: async (id: number | string) => {
+    const response = await api.get(API_CONFIG.VENDOR.PAYMENTS(id));
     return response.data;
   },
 };

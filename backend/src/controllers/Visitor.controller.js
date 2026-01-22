@@ -39,15 +39,15 @@ class VisitorController {
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
         if (date === 'today') {
-           where.createdAt = { gte: startOfDay };
+          where.createdAt = { gte: startOfDay };
         } else if (date === 'yesterday') {
-           const yesterdayStart = new Date(new Date().setDate(new Date().getDate() - 1)).setHours(0,0,0,0);
-           const yesterdayEnd = new Date(new Date().setDate(new Date().getDate() - 1)).setHours(23,59,59,999);
-           where.createdAt = { gte: new Date(yesterdayStart), lte: new Date(yesterdayEnd) };
+          const yesterdayStart = new Date(new Date().setDate(new Date().getDate() - 1)).setHours(0, 0, 0, 0);
+          const yesterdayEnd = new Date(new Date().setDate(new Date().getDate() - 1)).setHours(23, 59, 59, 999);
+          where.createdAt = { gte: new Date(yesterdayStart), lte: new Date(yesterdayEnd) };
         } else if (date === 'week') {
-           where.createdAt = { gte: startOfWeek };
+          where.createdAt = { gte: startOfWeek };
         } else if (date === 'month') {
-           where.createdAt = { gte: startOfMonth };
+          where.createdAt = { gte: startOfMonth };
         }
       }
 
@@ -88,7 +88,7 @@ class VisitorController {
       const societyId = req.user.societyId;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
       const [totalToday, activeNow, preApproved, totalMonth] = await Promise.all([
@@ -145,16 +145,16 @@ class VisitorController {
         });
         photoUrl = uploadResponse.secure_url;
       }
-      
+
       // Auto-assign resident if unit is provided
       let residentId = null;
       if (visitingUnitId) {
         const unit = await prisma.unit.findUnique({
-             where: { id: parseInt(visitingUnitId) },
-             include: { owner: true, tenant: true }
+          where: { id: parseInt(visitingUnitId) },
+          include: { owner: true, tenant: true }
         });
         if (unit) {
-            residentId = unit.tenantId || unit.ownerId;
+          residentId = unit.tenantId || unit.ownerId;
         }
       }
 
@@ -198,10 +198,10 @@ class VisitorController {
 
       let unitId = visitingUnitId;
       if (req.user.role === 'RESIDENT' && !unitId) {
-         const userUnit = await prisma.unit.findFirst({
-             where: { OR: [{ ownerId: req.user.id }, { tenantId: req.user.id }] }
-         });
-         if (userUnit) unitId = userUnit.id;
+        const userUnit = await prisma.unit.findFirst({
+          where: { OR: [{ ownerId: req.user.id }, { tenantId: req.user.id }] }
+        });
+        if (userUnit) unitId = userUnit.id;
       }
 
       const visitor = await prisma.visitor.create({
@@ -211,7 +211,7 @@ class VisitorController {
           purpose,
           vehicleNo,
           visitingUnitId: unitId ? parseInt(unitId) : null,
-          residentId: req.user.role === 'RESIDENT' ? req.user.id : null, 
+          residentId: req.user.role === 'RESIDENT' ? req.user.id : null,
           status: 'APPROVED',
           photo: photoUrl,
           societyId: req.user.societyId
@@ -233,6 +233,21 @@ class VisitorController {
           status: 'CHECKED_OUT',
           exitTime: new Date()
         }
+      });
+      res.json(visitor);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async updateStatus(req, res) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      const visitor = await prisma.visitor.update({
+        where: { id: parseInt(id) },
+        data: { status: status.toUpperCase() }
       });
       res.json(visitor);
     } catch (error) {

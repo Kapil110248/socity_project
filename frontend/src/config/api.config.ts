@@ -47,6 +47,7 @@ export const API_CONFIG = {
   COMPLAINT: {
     LIST: '/complaints',
     CREATE: '/complaints',
+    STATS: '/complaints/stats',
     GET: (id: number | string) => `/complaints/${id}`,
     UPDATE_STATUS: (id: number | string) => `/complaints/${id}/status`,
     ASSIGN: (id: number | string) => `/complaints/${id}/assign`,
@@ -126,6 +127,8 @@ export const API_CONFIG = {
     CREATE: '/events',
     UPDATE: (id: number | string) => `/events/${id}`,
     DELETE: (id: number | string) => `/events/${id}`,
+    RSVP: (id: number | string) => `/events/${id}/rsvp`,
+    GET_ATTENDEES: (id: number | string) => `/events/${id}/attendees`,
   },
 
   // Meetings
@@ -158,10 +161,15 @@ export const API_CONFIG = {
   // Vendors
   VENDOR: {
     LIST: '/vendors',
+    STATS: '/vendors/stats',
     GET: (id: number | string) => `/vendors/${id}`,
     CREATE: '/vendors',
     UPDATE: (id: number | string) => `/vendors/${id}`,
+    UPDATE_STATUS: (id: number | string) => `/vendors/${id}/status`,
     DELETE: (id: number | string) => `/vendors/${id}`,
+    RENEW: (id: number | string) => `/vendors/${id}/renew`,
+    RATE: (id: number | string) => `/vendors/${id}/rate`,
+    PAYMENTS: (id: number | string) => `/vendors/${id}/payments`,
   },
 
   // Vendor Payouts
@@ -211,13 +219,39 @@ export const API_CONFIG = {
     INVOICES: '/invoices',
     GENERATE: '/invoices/generate',
     STATS: '/invoices/stats',
+    DEFAULTERS: '/invoices/defaulters',
+    DEFAULTER_STATS: '/invoices/defaulters/stats',
     PAY: (no: string) => `/invoices/${no}/pay`,
+  },
+
+  // Facility Requests
+  FACILITY_REQUEST: {
+    LIST: '/facility-requests',
+    CREATE: '/facility-requests',
+    STATS: '/facility-requests/stats',
+    UPDATE_STATUS: (id: number | string) => `/facility-requests/${id}/status`,
+    VOTE: (id: number | string) => `/facility-requests/${id}/vote`,
   },
 
   // Reports
   REPORT: {
     PLATFORM_STATS: '/reports/platform-stats',
     SOCIETY_STATS: '/reports/society-stats',
+  },
+
+  // Tenants
+  TENANT: {
+    LIST: '/tenants',
+    STATS: '/tenants/stats',
+    CREATE: '/tenants',
+    UPDATE: (id: number | string) => `/tenants/${id}`,
+    DELETE: (id: number | string) => `/tenants/${id}`,
+  },
+
+  // Guard Dashboard
+  GUARD: {
+    STATS: '/guard/stats',
+    ACTIVITY: '/guard/activity',
   },
 };
 

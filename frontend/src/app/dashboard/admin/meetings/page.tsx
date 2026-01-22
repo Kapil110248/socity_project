@@ -84,23 +84,23 @@ export default function MeetingsPage() {
     }
 
     interface Meeting {
-  id: number;
-  title: string;
-  description?: string;
-  agenda?: string;
-  status: string;
-  date: string;
-  time: string;
-  location: string;
-  type: string;
-  attendees: string[];
-}
+        id: number;
+        title: string;
+        description?: string;
+        agenda?: string;
+        status: string;
+        date: string;
+        time: string;
+        location: string;
+        type: string;
+        attendees: string[];
+    }
 
-// Replace implicit any with explicit Meeting type
-const filteredMeetings = meetings.filter((m: Meeting) =>
-  m.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-  m.description?.toLowerCase().includes(searchQuery.toLowerCase())
-);
+    // Replace implicit any with explicit Meeting type
+    const filteredMeetings = meetings.filter((m: Meeting) =>
+        m.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        m.description?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
 
     return (
@@ -127,19 +127,43 @@ const filteredMeetings = meetings.filter((m: Meeting) =>
                             <div className="grid gap-4 py-4">
                                 <div className="grid grid-cols-4 items-center gap-4">
                                     <Label htmlFor="title" className="text-right">Title</Label>
-                                    <Input id="title" placeholder="e.g. Finance Review" className="col-span-3" />
+                                    <Input
+                                        id="title"
+                                        placeholder="e.g. Finance Review"
+                                        className="col-span-3"
+                                        value={formData.title}
+                                        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                                    />
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
                                     <Label htmlFor="date" className="text-right">Date</Label>
-                                    <Input id="date" type="date" className="col-span-3" />
+                                    <Input
+                                        id="date"
+                                        type="date"
+                                        className="col-span-3"
+                                        value={formData.date}
+                                        onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                                    />
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
                                     <Label htmlFor="time" className="text-right">Time</Label>
-                                    <Input id="time" type="time" className="col-span-3" />
+                                    <Input
+                                        id="time"
+                                        type="time"
+                                        className="col-span-3"
+                                        value={formData.time}
+                                        onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+                                    />
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
                                     <Label htmlFor="location" className="text-right">Location</Label>
-                                    <Input id="location" placeholder="Clubhouse / Zoom" className="col-span-3" />
+                                    <Input
+                                        id="location"
+                                        placeholder="Clubhouse / Zoom"
+                                        className="col-span-3"
+                                        value={formData.location}
+                                        onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                                    />
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
                                     <Label htmlFor="type" className="text-right">Type</Label>
@@ -155,12 +179,25 @@ const filteredMeetings = meetings.filter((m: Meeting) =>
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
                                     <Label htmlFor="agenda" className="text-right">Agenda</Label>
-                                    <Textarea id="agenda" placeholder="Points to discuss..." className="col-span-3" rows={4} />
+                                    <Textarea
+                                        id="agenda"
+                                        placeholder="Points to discuss..."
+                                        className="col-span-3"
+                                        rows={4}
+                                        value={formData.description}
+                                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    />
                                 </div>
                             </div>
                             <div className="flex justify-end gap-2">
                                 <Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-                                <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => setIsModalOpen(false)}>Schedule</Button>
+                                <Button
+                                    className="bg-teal-600 hover:bg-teal-700 text-white"
+                                    onClick={handleCreate}
+                                    disabled={createMutation.isPending}
+                                >
+                                    {createMutation.isPending ? 'Scheduling...' : 'Schedule'}
+                                </Button>
                             </div>
                         </DialogContent>
                     </Dialog>
@@ -226,14 +263,14 @@ const filteredMeetings = meetings.filter((m: Meeting) =>
                                             Agenda
                                         </p>
                                         <p className="text-sm text-gray-600 whitespace-pre-line bg-gray-50 p-3 rounded-lg border border-gray-100">
-                                            {meeting.agenda}
+                                            {meeting.description || meeting.agenda || 'No agenda provided'}
                                         </p>
                                     </div>
 
                                     <div className="flex items-center justify-between pt-4 border-t">
                                         <div className="flex items-center gap-2">
                                             <div className="flex -space-x-2">
-                                                {meeting.attendees.map((attendee: string, i: number) => (
+                                                {(meeting.attendees || []).map((attendee: string, i: number) => (
                                                     <div
                                                         key={i}
                                                         className="h-7 w-7 rounded-full border-2 border-white bg-teal-100 flex items-center justify-center text-[10px] font-bold text-teal-700"
@@ -242,7 +279,7 @@ const filteredMeetings = meetings.filter((m: Meeting) =>
                                                     </div>
                                                 ))}
                                             </div>
-                                            <span className="text-xs text-muted-foreground">{meeting.attendees.length} Attendees</span>
+                                            <span className="text-xs text-muted-foreground">{(meeting.attendees || []).length} Attendees</span>
                                         </div>
                                         <Button size="sm" variant="outline" className="text-xs h-8">
                                             View Details

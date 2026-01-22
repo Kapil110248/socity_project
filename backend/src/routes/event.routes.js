@@ -17,6 +17,12 @@ router.post('/', authorize(['ADMIN', 'SUPER_ADMIN']), EventController.create);
 // Update event
 router.patch('/:id', authorize(['ADMIN', 'SUPER_ADMIN']), EventController.update);
 
+// RSVP for event
+router.post('/:id/rsvp', EventController.rsvp);
+
+// Get attendees for an event
+router.get('/:id/attendees', EventController.getAttendees);
+
 // Delete event
 router.delete('/:id', authorize(['ADMIN', 'SUPER_ADMIN']), EventController.remove);
 

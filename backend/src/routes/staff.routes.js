@@ -4,7 +4,7 @@ const StaffController = require('../controllers/Staff.controller');
 const { authenticate, authorize } = require('../middlewares/auth.middleware');
 
 router.use(authenticate);
-router.use(authorize(['ADMIN', 'SUPER_ADMIN']));
+router.use(authorize(['ADMIN', 'SUPER_ADMIN', 'GUARD']));
 
 // List all staff (supports query params: role, status, shift)
 router.get('/', StaffController.list);

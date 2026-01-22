@@ -23,7 +23,7 @@ interface UserRaiseComplaintDialogProps {
 export function UserRaiseComplaintDialog({ preSelectedServiceId, preSelectedServiceName, trigger, open: externalOpen, onOpenChange: externalOnOpenChange }: UserRaiseComplaintDialogProps) {
     const queryClient = useQueryClient()
     const [internalOpen, setInternalOpen] = useState(false)
-    
+
     const open = externalOpen !== undefined ? externalOpen : internalOpen
     const setOpen = externalOnOpenChange !== undefined ? externalOnOpenChange : setInternalOpen
     const [category, setCategory] = useState(preSelectedServiceId || '')
@@ -39,6 +39,8 @@ export function UserRaiseComplaintDialog({ preSelectedServiceId, preSelectedServ
     const mutation = useMutation({
         mutationFn: (data: any) => residentService.createTicket(data),
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['complaints'] })
+            queryClient.invalidateQueries({ queryKey: ['complaint-stats'] })
             queryClient.invalidateQueries({ queryKey: ['tickets'] })
             toast.success('Complaint submitted successfully!')
             setOpen(false)
@@ -61,7 +63,7 @@ export function UserRaiseComplaintDialog({ preSelectedServiceId, preSelectedServ
             description,
             category,
             priority: 'MEDIUM',
-            isPrivate: false 
+            isPrivate: false
         })
     }
 
@@ -103,8 +105,8 @@ export function UserRaiseComplaintDialog({ preSelectedServiceId, preSelectedServ
 
                     <div className="space-y-2">
                         <Label>Subject *</Label>
-                        <Input 
-                            placeholder="What is the issue?" 
+                        <Input
+                            placeholder="What is the issue?"
                             value={subject}
                             onChange={(e) => setSubject(e.target.value)}
                         />
@@ -112,9 +114,9 @@ export function UserRaiseComplaintDialog({ preSelectedServiceId, preSelectedServ
 
                     <div className="space-y-2">
                         <Label>Description *</Label>
-                        <Textarea 
-                            placeholder="Describe the problem in detail..." 
-                            className="min-h-[100px]" 
+                        <Textarea
+                            placeholder="Describe the problem in detail..."
+                            className="min-h-[100px]"
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
                         />
@@ -122,8 +124,8 @@ export function UserRaiseComplaintDialog({ preSelectedServiceId, preSelectedServ
 
                     <div className="flex justify-end gap-3 pt-4 border-t mt-4">
                         <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-                        <Button 
-                            className="bg-red-600 hover:bg-red-700 text-white gap-2" 
+                        <Button
+                            className="bg-red-600 hover:bg-red-700 text-white gap-2"
                             onClick={handleSubmit}
                             disabled={mutation.isPending}
                         >

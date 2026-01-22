@@ -47,172 +47,198 @@ import {
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { TenantService } from '@/services/tenant.service'
+import { AdminResidentService } from '@/services/admin-resident.service'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 
-const stats = [
-  {
-    title: 'Total Tenants',
-    value: '48',
-    change: '+5 this month',
-    icon: Users,
-    color: 'blue',
-  },
-  {
-    title: 'Active Leases',
-    value: '42',
-    change: '87.5%',
-    icon: Home,
-    color: 'green',
-  },
-  {
-    title: 'Notice Period',
-    value: '4',
-    change: 'Expiring soon',
-    icon: Clock,
-    color: 'orange',
-  },
-  {
-    title: 'Monthly Rent Collection',
-    value: '\u20B912.5L',
-    change: '+8% vs last month',
-    icon: IndianRupee,
-    color: 'purple',
-  },
-]
-
-const tenants = [
-  {
-    id: 'TEN-001',
-    name: 'Rajesh Kumar',
-    email: 'rajesh.kumar@gmail.com',
-    phone: '+91 98765 43210',
-    unit: 'A-101',
-    block: 'Block A',
-    floor: '1st Floor',
-    ownerName: 'Suresh Sharma',
-    ownerPhone: '+91 87654 32109',
-    leaseStartDate: '2024-01-15',
-    leaseEndDate: '2025-01-14',
-    rentAmount: 25000,
-    securityDeposit: 75000,
-    maintenanceCharges: 3500,
-    parkingSlot: 'P-A-15',
-    vehicleNumber: 'MH 01 AB 1234',
-    familyMembers: 4,
-    status: 'active',
-  },
-  {
-    id: 'TEN-002',
-    name: 'Priya Patel',
-    email: 'priya.patel@yahoo.com',
-    phone: '+91 98123 45678',
-    unit: 'B-205',
-    block: 'Block B',
-    floor: '2nd Floor',
-    ownerName: 'Amit Patel',
-    ownerPhone: '+91 76543 21098',
-    leaseStartDate: '2024-03-01',
-    leaseEndDate: '2025-02-28',
-    rentAmount: 32000,
-    securityDeposit: 96000,
-    maintenanceCharges: 4000,
-    parkingSlot: 'P-B-08',
-    vehicleNumber: 'MH 02 CD 5678',
-    familyMembers: 3,
-    status: 'active',
-  },
-  {
-    id: 'TEN-003',
-    name: 'Mohammed Farooq',
-    email: 'mfarooq@gmail.com',
-    phone: '+91 99887 76655',
-    unit: 'C-302',
-    block: 'Block C',
-    floor: '3rd Floor',
-    ownerName: 'Vikram Singh',
-    ownerPhone: '+91 65432 10987',
-    leaseStartDate: '2023-06-15',
-    leaseEndDate: '2024-12-31',
-    rentAmount: 28000,
-    securityDeposit: 84000,
-    maintenanceCharges: 3500,
-    parkingSlot: null,
-    vehicleNumber: null,
-    familyMembers: 5,
-    status: 'notice_period',
-  },
-  {
-    id: 'TEN-004',
-    name: 'Sneha Reddy',
-    email: 'sneha.reddy@outlook.com',
-    phone: '+91 88776 65544',
-    unit: 'A-402',
-    block: 'Block A',
-    floor: '4th Floor',
-    ownerName: 'Krishna Murthy',
-    ownerPhone: '+91 54321 09876',
-    leaseStartDate: '2024-06-01',
-    leaseEndDate: '2025-05-31',
-    rentAmount: 35000,
-    securityDeposit: 105000,
-    maintenanceCharges: 4500,
-    parkingSlot: 'P-A-22',
-    vehicleNumber: 'TS 09 EF 9012',
-    familyMembers: 2,
-    status: 'active',
-  },
-  {
-    id: 'TEN-005',
-    name: 'Ankit Jain',
-    email: 'ankit.jain@gmail.com',
-    phone: '+91 77665 54433',
-    unit: 'D-103',
-    block: 'Block D',
-    floor: '1st Floor',
-    ownerName: 'Ramesh Agarwal',
-    ownerPhone: '+91 43210 98765',
-    leaseStartDate: '2024-02-15',
-    leaseEndDate: '2025-02-14',
-    rentAmount: 22000,
-    securityDeposit: 66000,
-    maintenanceCharges: 3000,
-    parkingSlot: 'P-D-05',
-    vehicleNumber: 'MH 04 GH 3456',
-    familyMembers: 3,
-    status: 'active',
-  },
-]
+interface Tenant {
+  id: string;
+  dbId: number;
+  name: string;
+  email: string;
+  phone: string;
+  unit: string;
+  block: string;
+  floor: string;
+  ownerName: string;
+  ownerPhone: string;
+  leaseStartDate: string;
+  leaseEndDate: string;
+  rentAmount: number;
+  securityDeposit: number;
+  maintenanceCharges: number;
+  parkingSlot: string;
+  vehicleNumber: string;
+  emergencyContact: string;
+  status: string;
+}
 
 export default function TenantsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [blockFilter, setBlockFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const [showSuccess, setShowSuccess] = useState<string | null>(null)
-  const [viewingTenant, setViewingTenant] = useState<typeof tenants[0] | null>(null)
-  const [editingTenant, setEditingTenant] = useState<typeof tenants[0] | null>(null)
+  const [viewingTenant, setViewingTenant] = useState<Tenant | null>(null)
+  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null)
+  const [newTenant, setNewTenant] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    familyMembers: '',
+    emergencyContact: '',
+    block: '',
+    floor: '',
+    unitNumber: '',
+    ownerName: '',
+    ownerPhone: '',
+    leaseStartDate: '',
+    leaseEndDate: '',
+    rentAmount: '',
+    securityDeposit: '',
+    maintenanceCharges: '',
+    parkingSlot: '',
+    vehicleNumber: '',
+    notes: '',
+    status: 'active'
+  })
 
-  const showNotification = (message: string) => {
-    setShowSuccess(message)
-    setTimeout(() => setShowSuccess(null), 3000)
-  }
+  const queryClient = useQueryClient()
+
+  const { data: tenantsData, isLoading } = useQuery({
+    queryKey: ['tenants'],
+    queryFn: () => TenantService.getAll()
+  })
+
+  const { data: statsData } = useQuery({
+    queryKey: ['tenant-stats'],
+    queryFn: () => TenantService.getStats()
+  })
+
+  const { data: unitsData } = useQuery({
+    queryKey: ['units'],
+    queryFn: () => AdminResidentService.getUnits()
+  })
+
+  const tenants = tenantsData?.data || []
+  const stats = [
+    {
+      title: 'Total Tenants',
+      value: statsData?.data?.totalTenants.toString() || '0',
+      change: '+5 this month',
+      icon: Users,
+      color: 'blue',
+    },
+    {
+      title: 'Active Leases',
+      value: statsData?.data?.activeLeases.toString() || '0',
+      change: 'Calculated live',
+      icon: Home,
+      color: 'green',
+    },
+    {
+      title: 'Notice Period',
+      value: statsData?.data?.expiringSoon.toString() || '0',
+      change: 'Expiring soon',
+      icon: Clock,
+      color: 'orange',
+    },
+    {
+      title: 'Monthly Rent Collection',
+      value: `₹${((statsData?.data?.totalRent || 0) / 100000).toFixed(1)}L`,
+      change: 'Total projected',
+      icon: IndianRupee,
+      color: 'purple',
+    },
+  ]
+
+  const createMutation = useMutation({
+    mutationFn: TenantService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenants'] })
+      queryClient.invalidateQueries({ queryKey: ['tenant-stats'] })
+      setIsAddDialogOpen(false)
+      toast.success('Tenant added successfully!')
+      setNewTenant({
+        name: '', email: '', phone: '', familyMembers: '', emergencyContact: '',
+        block: '', floor: '', unitNumber: '', ownerName: '', ownerPhone: '',
+        leaseStartDate: '', leaseEndDate: '', rentAmount: '', securityDeposit: '',
+        maintenanceCharges: '', parkingSlot: '', vehicleNumber: '', notes: '', status: 'active'
+      })
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to add tenant')
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => TenantService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenants'] })
+      queryClient.invalidateQueries({ queryKey: ['tenant-stats'] })
+      setEditingTenant(null)
+      toast.success('Tenant updated successfully!')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to update tenant')
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: TenantService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenants'] })
+      queryClient.invalidateQueries({ queryKey: ['tenant-stats'] })
+      toast.success('Tenant removed successfully!')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to remove tenant')
+  })
 
   const handleAddTenant = () => {
-    setIsAddDialogOpen(false)
-    showNotification('Tenant added successfully!')
+    if (!newTenant.name || !newTenant.email || !newTenant.unitNumber) {
+      toast.error('Please fill required fields')
+      return
+    }
+    createMutation.mutate(newTenant)
   }
 
   const handleExport = () => {
-    showNotification('Tenant data exported successfully!')
+    if (tenants.length === 0) {
+      toast.error('No tenants to export')
+      return
+    }
+    const headers = ['Tenant ID', 'Name', 'Email', 'Phone', 'Unit', 'Block', 'Floor', 'Rent', 'Lease End', 'Status']
+    const csvContent = [
+      headers.join(','),
+      ...tenants.map(t => [
+        t.id,
+        `"${t.name}"`,
+        t.email,
+        t.phone,
+        t.unit,
+        t.block,
+        t.floor,
+        t.rentAmount,
+        t.leaseEndDate,
+        t.status
+      ].join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `tenants_export_${new Date().toISOString().split('T')[0]}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    toast.success('Tenant data exported successfully!')
   }
 
   const handleSaveEdit = () => {
-    setEditingTenant(null)
-    showNotification('Tenant details updated successfully!')
+    if (!editingTenant) return
+    updateMutation.mutate({ id: editingTenant.dbId, data: editingTenant })
   }
 
-  const handleDeleteTenant = (tenantId: string) => {
-    if (confirm(`Are you sure you want to remove tenant ${tenantId}?`)) {
-      showNotification(`Tenant ${tenantId} removed successfully!`)
+  const handleDeleteTenant = (dbId: number) => {
+    if (confirm(`Are you sure you want to remove this tenant?`)) {
+      deleteMutation.mutate(dbId)
     }
   }
 
@@ -232,20 +258,6 @@ export default function TenantsPage() {
   return (
     <RoleGuard allowedRoles={['admin']}>
       <div className="space-y-6">
-        {/* Success Notification */}
-        <AnimatePresence>
-          {showSuccess && (
-            <motion.div
-              initial={{ opacity: 0, y: -50 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -50 }}
-              className="fixed top-4 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2"
-            >
-              <CheckCircle2 className="h-5 w-5" />
-              {showSuccess}
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -281,23 +293,45 @@ export default function TenantsPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Full Name *</Label>
-                        <Input placeholder="Enter tenant name" />
+                        <Input
+                          placeholder="Enter tenant name"
+                          value={newTenant.name}
+                          onChange={(e) => setNewTenant({ ...newTenant, name: e.target.value })}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label>Email *</Label>
-                        <Input type="email" placeholder="tenant@email.com" />
+                        <Input
+                          type="email"
+                          placeholder="tenant@email.com"
+                          value={newTenant.email}
+                          onChange={(e) => setNewTenant({ ...newTenant, email: e.target.value })}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label>Phone Number *</Label>
-                        <Input placeholder="+91 98765 43210" />
+                        <Input
+                          placeholder="+91 98765 43210"
+                          value={newTenant.phone}
+                          onChange={(e) => setNewTenant({ ...newTenant, phone: e.target.value })}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label>Family Members</Label>
-                        <Input type="number" placeholder="4" />
+                        <Input
+                          type="number"
+                          placeholder="4"
+                          value={newTenant.familyMembers}
+                          onChange={(e) => setNewTenant({ ...newTenant, familyMembers: e.target.value })}
+                        />
                       </div>
                       <div className="space-y-2 col-span-2">
                         <Label>Emergency Contact</Label>
-                        <Input placeholder="+91 87654 32109" />
+                        <Input
+                          placeholder="+91 87654 32109"
+                          value={newTenant.emergencyContact}
+                          onChange={(e) => setNewTenant({ ...newTenant, emergencyContact: e.target.value })}
+                        />
                       </div>
                     </div>
                   </div>
@@ -308,36 +342,38 @@ export default function TenantsPage() {
                     <div className="grid grid-cols-3 gap-4">
                       <div className="space-y-2">
                         <Label>Block *</Label>
-                        <Select>
+                        <Select
+                          value={newTenant.block}
+                          onValueChange={(val) => setNewTenant({ ...newTenant, block: val })}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="Select block" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="Block A">Block A</SelectItem>
-                            <SelectItem value="Block B">Block B</SelectItem>
-                            <SelectItem value="Block C">Block C</SelectItem>
-                            <SelectItem value="Block D">Block D</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Floor *</Label>
-                        <Select>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select floor" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Ground Floor">Ground Floor</SelectItem>
-                            <SelectItem value="1st Floor">1st Floor</SelectItem>
-                            <SelectItem value="2nd Floor">2nd Floor</SelectItem>
-                            <SelectItem value="3rd Floor">3rd Floor</SelectItem>
-                            <SelectItem value="4th Floor">4th Floor</SelectItem>
+                            <SelectItem value="A">Block A</SelectItem>
+                            <SelectItem value="B">Block B</SelectItem>
+                            <SelectItem value="C">Block C</SelectItem>
+                            <SelectItem value="D">Block D</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-2">
                         <Label>Unit Number *</Label>
-                        <Input placeholder="A-101" />
+                        <Select
+                          value={newTenant.unitNumber}
+                          onValueChange={(val) => setNewTenant({ ...newTenant, unitNumber: val })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select unit" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {unitsData?.filter((u: any) => !newTenant.block || u.block === newTenant.block).map((unit: any) => (
+                              <SelectItem key={unit.id} value={unit.number}>
+                                {unit.number} ({unit.type})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                   </div>
@@ -347,12 +383,20 @@ export default function TenantsPage() {
                     <h3 className="text-sm font-semibold text-gray-700 mb-3">Owner Details</h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Owner Name *</Label>
-                        <Input placeholder="Property owner name" />
+                        <Label>Owner Name</Label>
+                        <Input
+                          placeholder="Property owner name"
+                          value={newTenant.ownerName}
+                          onChange={(e) => setNewTenant({ ...newTenant, ownerName: e.target.value })}
+                        />
                       </div>
                       <div className="space-y-2">
-                        <Label>Owner Phone *</Label>
-                        <Input placeholder="+91 87654 32109" />
+                        <Label>Owner Phone</Label>
+                        <Input
+                          placeholder="+91 87654 32109"
+                          value={newTenant.ownerPhone}
+                          onChange={(e) => setNewTenant({ ...newTenant, ownerPhone: e.target.value })}
+                        />
                       </div>
                     </div>
                   </div>
@@ -363,27 +407,53 @@ export default function TenantsPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Lease Start Date *</Label>
-                        <Input type="date" />
+                        <Input
+                          type="date"
+                          value={newTenant.leaseStartDate}
+                          onChange={(e) => setNewTenant({ ...newTenant, leaseStartDate: e.target.value })}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label>Lease End Date *</Label>
-                        <Input type="date" />
+                        <Input
+                          type="date"
+                          value={newTenant.leaseEndDate}
+                          onChange={(e) => setNewTenant({ ...newTenant, leaseEndDate: e.target.value })}
+                        />
                       </div>
                       <div className="space-y-2">
-                        <Label>Monthly Rent (\u20B9) *</Label>
-                        <Input type="number" placeholder="25000" />
+                        <Label>Monthly Rent (₹) *</Label>
+                        <Input
+                          type="number"
+                          placeholder="25000"
+                          value={newTenant.rentAmount}
+                          onChange={(e) => setNewTenant({ ...newTenant, rentAmount: e.target.value })}
+                        />
                       </div>
                       <div className="space-y-2">
-                        <Label>Security Deposit (\u20B9) *</Label>
-                        <Input type="number" placeholder="75000" />
+                        <Label>Security Deposit (₹) *</Label>
+                        <Input
+                          type="number"
+                          placeholder="75000"
+                          value={newTenant.securityDeposit}
+                          onChange={(e) => setNewTenant({ ...newTenant, securityDeposit: e.target.value })}
+                        />
                       </div>
                       <div className="space-y-2">
-                        <Label>Maintenance Charges (\u20B9)</Label>
-                        <Input type="number" placeholder="3500" />
+                        <Label>Maintenance Charges (₹)</Label>
+                        <Input
+                          type="number"
+                          placeholder="3500"
+                          value={newTenant.maintenanceCharges}
+                          onChange={(e) => setNewTenant({ ...newTenant, maintenanceCharges: e.target.value })}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label>Status</Label>
-                        <Select>
+                        <Select
+                          value={newTenant.status}
+                          onValueChange={(val) => setNewTenant({ ...newTenant, status: val })}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="Select status" />
                           </SelectTrigger>
@@ -403,11 +473,19 @@ export default function TenantsPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Parking Slot</Label>
-                        <Input placeholder="P-A-15" />
+                        <Input
+                          placeholder="P-A-15"
+                          value={newTenant.parkingSlot}
+                          onChange={(e) => setNewTenant({ ...newTenant, parkingSlot: e.target.value })}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label>Vehicle Number</Label>
-                        <Input placeholder="MH 01 AB 1234" />
+                        <Input
+                          placeholder="MH 01 AB 1234"
+                          value={newTenant.vehicleNumber}
+                          onChange={(e) => setNewTenant({ ...newTenant, vehicleNumber: e.target.value })}
+                        />
                       </div>
                     </div>
                   </div>
@@ -415,7 +493,12 @@ export default function TenantsPage() {
                   {/* Notes */}
                   <div className="space-y-2">
                     <Label>Additional Notes</Label>
-                    <Textarea placeholder="Any additional information..." rows={3} />
+                    <Textarea
+                      placeholder="Any additional information..."
+                      rows={3}
+                      value={newTenant.notes}
+                      onChange={(e) => setNewTenant({ ...newTenant, notes: e.target.value })}
+                    />
                   </div>
 
                   <div className="flex justify-end space-x-2 pt-4">
@@ -457,26 +540,24 @@ export default function TenantsPage() {
                       </p>
                     </div>
                     <div
-                      className={`p-3 rounded-xl ${
-                        stat.color === 'blue'
-                          ? 'bg-blue-100'
-                          : stat.color === 'green'
+                      className={`p-3 rounded-xl ${stat.color === 'blue'
+                        ? 'bg-blue-100'
+                        : stat.color === 'green'
                           ? 'bg-green-100'
                           : stat.color === 'orange'
-                          ? 'bg-orange-100'
-                          : 'bg-purple-100'
-                      }`}
+                            ? 'bg-orange-100'
+                            : 'bg-purple-100'
+                        }`}
                     >
                       <Icon
-                        className={`h-6 w-6 ${
-                          stat.color === 'blue'
-                            ? 'text-blue-600'
-                            : stat.color === 'green'
+                        className={`h-6 w-6 ${stat.color === 'blue'
+                          ? 'text-blue-600'
+                          : stat.color === 'green'
                             ? 'text-green-600'
                             : stat.color === 'orange'
-                            ? 'text-orange-600'
-                            : 'text-purple-600'
-                        }`}
+                              ? 'text-orange-600'
+                              : 'text-purple-600'
+                          }`}
                       />
                     </div>
                   </div>
@@ -505,10 +586,10 @@ export default function TenantsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Blocks</SelectItem>
-                <SelectItem value="Block A">Block A</SelectItem>
-                <SelectItem value="Block B">Block B</SelectItem>
-                <SelectItem value="Block C">Block C</SelectItem>
-                <SelectItem value="Block D">Block D</SelectItem>
+                <SelectItem value="A">Block A</SelectItem>
+                <SelectItem value="B">Block B</SelectItem>
+                <SelectItem value="C">Block C</SelectItem>
+                <SelectItem value="D">Block D</SelectItem>
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -547,8 +628,19 @@ export default function TenantsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTenants.map((tenant) => (
-                  <TableRow key={tenant.id}>
+                {tenants.filter((tenant: any) => {
+                  const matchesSearch =
+                    tenant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    tenant.unit.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    tenant.phone.includes(searchQuery) ||
+                    tenant.email.toLowerCase().includes(searchQuery.toLowerCase())
+
+                  const matchesBlock = blockFilter === 'all' || tenant.block === blockFilter
+                  const matchesStatus = statusFilter === 'all' || tenant.status === statusFilter
+
+                  return matchesSearch && matchesBlock && matchesStatus
+                }).map((tenant: any) => (
+                  <TableRow key={tenant.dbId}>
                     <TableCell className="font-medium">{tenant.id}</TableCell>
                     <TableCell>
                       <div>
@@ -564,10 +656,10 @@ export default function TenantsPage() {
                     </TableCell>
                     <TableCell className="text-sm">{tenant.phone}</TableCell>
                     <TableCell className="font-semibold">
-                      \u20B9{tenant.rentAmount.toLocaleString()}
+                      ₹{tenant.rentAmount?.toLocaleString()}
                     </TableCell>
                     <TableCell>
-                      \u20B9{tenant.maintenanceCharges.toLocaleString()}
+                      ₹{tenant.maintenanceCharges?.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-sm">{tenant.leaseEndDate}</TableCell>
                     <TableCell>
@@ -576,8 +668,8 @@ export default function TenantsPage() {
                           tenant.status === 'active'
                             ? 'bg-green-100 text-green-700 hover:bg-green-100'
                             : tenant.status === 'notice_period'
-                            ? 'bg-orange-100 text-orange-700 hover:bg-orange-100'
-                            : 'bg-red-100 text-red-700 hover:bg-red-100'
+                              ? 'bg-orange-100 text-orange-700 hover:bg-orange-100'
+                              : 'bg-red-100 text-red-700 hover:bg-red-100'
                         }
                       >
                         {tenant.status === 'active' && 'Active'}
@@ -593,7 +685,7 @@ export default function TenantsPage() {
                         <Button variant="ghost" size="icon" title="Edit" onClick={() => setEditingTenant(tenant)}>
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" title="Delete" onClick={() => handleDeleteTenant(tenant.id)}>
+                        <Button variant="ghost" size="icon" title="Delete" onClick={() => handleDeleteTenant(tenant.dbId)}>
                           <Trash2 className="h-4 w-4 text-red-500" />
                         </Button>
                       </div>
@@ -695,15 +787,15 @@ export default function TenantsPage() {
                     </div>
                     <div>
                       <Label className="text-muted-foreground text-xs">Monthly Rent</Label>
-                      <p className="font-medium text-green-600">\u20B9{viewingTenant.rentAmount.toLocaleString()}</p>
+                      <p className="font-medium text-green-600">₹{viewingTenant.rentAmount?.toLocaleString()}</p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground text-xs">Security Deposit</Label>
-                      <p className="font-medium">\u20B9{viewingTenant.securityDeposit.toLocaleString()}</p>
+                      <p className="font-medium">₹{viewingTenant.securityDeposit?.toLocaleString()}</p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground text-xs">Maintenance Charges</Label>
-                      <p className="font-medium">\u20B9{viewingTenant.maintenanceCharges.toLocaleString()}</p>
+                      <p className="font-medium">₹{viewingTenant.maintenanceCharges?.toLocaleString()}</p>
                     </div>
                   </div>
                 </div>
@@ -743,31 +835,54 @@ export default function TenantsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Full Name</Label>
-                    <Input defaultValue={editingTenant.name} />
+                    <Input
+                      value={editingTenant.name}
+                      onChange={(e) => setEditingTenant({ ...editingTenant, name: e.target.value })}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Phone</Label>
-                    <Input defaultValue={editingTenant.phone} />
+                    <Input
+                      value={editingTenant.phone}
+                      onChange={(e) => setEditingTenant({ ...editingTenant, phone: e.target.value })}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Email</Label>
-                    <Input defaultValue={editingTenant.email} />
+                    <Input
+                      value={editingTenant.email}
+                      onChange={(e) => setEditingTenant({ ...editingTenant, email: e.target.value })}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Unit</Label>
-                    <Input defaultValue={editingTenant.unit} />
+                    <Input
+                      value={editingTenant.unit}
+                      onChange={(e) => setEditingTenant({ ...editingTenant, unit: e.target.value })}
+                    />
                   </div>
                   <div className="space-y-2">
-                    <Label>Monthly Rent (\u20B9)</Label>
-                    <Input type="number" defaultValue={editingTenant.rentAmount} />
+                    <Label>Monthly Rent (₹)</Label>
+                    <Input
+                      type="number"
+                      value={editingTenant.rentAmount}
+                      onChange={(e) => setEditingTenant({ ...editingTenant, rentAmount: parseFloat(e.target.value) })}
+                    />
                   </div>
                   <div className="space-y-2">
-                    <Label>Maintenance (\u20B9)</Label>
-                    <Input type="number" defaultValue={editingTenant.maintenanceCharges} />
+                    <Label>Maintenance (₹)</Label>
+                    <Input
+                      type="number"
+                      value={editingTenant.maintenanceCharges}
+                      onChange={(e) => setEditingTenant({ ...editingTenant, maintenanceCharges: parseFloat(e.target.value) })}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Status</Label>
-                    <Select defaultValue={editingTenant.status}>
+                    <Select
+                      value={editingTenant.status}
+                      onValueChange={(val) => setEditingTenant({ ...editingTenant, status: val })}
+                    >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -780,7 +895,11 @@ export default function TenantsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Lease End Date</Label>
-                    <Input type="date" defaultValue={editingTenant.leaseEndDate} />
+                    <Input
+                      type="date"
+                      value={editingTenant.leaseEndDate}
+                      onChange={(e) => setEditingTenant({ ...editingTenant, leaseEndDate: e.target.value })}
+                    />
                   </div>
                 </div>
                 <div className="flex justify-end space-x-2 pt-4">

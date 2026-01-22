@@ -3,8 +3,8 @@ import { API_CONFIG } from '@/config/api.config';
 
 export const DocumentService = {
   getAll: async (category?: string) => {
-    const url = category 
-      ? `${API_CONFIG.DOCUMENT.LIST}?category=${category}` 
+    const url = category
+      ? `${API_CONFIG.DOCUMENT.LIST}?category=${category}`
       : API_CONFIG.DOCUMENT.LIST;
     const response = await api.get(url);
     return response.data;
@@ -18,7 +18,8 @@ export const DocumentService = {
   create: async (data: {
     title: string;
     category: string;
-    fileUrl: string;
+    file: string;
+    visibility: string;
   }) => {
     const response = await api.post(API_CONFIG.DOCUMENT.CREATE, data);
     return response.data;

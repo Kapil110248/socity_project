@@ -3,7 +3,11 @@ const prisma = require('../lib/prisma');
 class ComplaintController {
   static async list(req, res) {
     try {
-      const { status, category, priority, search, isPrivate, escalatedToTech } = req.query;
+      let { status, category, priority, search, isPrivate, escalatedToTech, page = 1, limit = 10 } = req.query;
+      page = parseInt(page);
+      limit = parseInt(limit);
+      const skip = (page - 1) * limit;
+
       const where = {};
 
       if (req.user.role === 'RESIDENT') {
@@ -34,29 +38,34 @@ class ComplaintController {
         ];
       }
 
-      const complaints = await prisma.complaint.findMany({
-        where,
-        include: {
-          reportedBy: { 
-            select: { 
-              name: true, 
-              email: true, 
-              role: true,
-              ownedUnits: { select: { block: true, number: true } },
-              rentedUnits: { select: { block: true, number: true } }
-            } 
+      const [total, complaints] = await Promise.all([
+        prisma.complaint.count({ where }),
+        prisma.complaint.findMany({
+          where,
+          skip,
+          take: limit,
+          include: {
+            reportedBy: {
+              select: {
+                name: true,
+                email: true,
+                role: true,
+                ownedUnits: { select: { block: true, number: true } },
+                rentedUnits: { select: { block: true, number: true } }
+              }
+            },
+            assignedTo: { select: { name: true } },
+            society: { select: { name: true } },
+            comments: { select: { id: true } }
           },
-          assignedTo: { select: { name: true } },
-          society: { select: { name: true } },
-          comments: { select: { id: true } }
-        },
-        orderBy: { createdAt: 'desc' }
-      });
+          orderBy: { createdAt: 'desc' }
+        })
+      ]);
 
       const transformed = complaints.map(c => {
         const units = [...c.reportedBy.ownedUnits, ...c.reportedBy.rentedUnits];
         const unitStr = units.length > 0 ? `${units[0].block}-${units[0].number}` : 'N/A';
-        
+
         return {
           ...c,
           unit: unitStr,
@@ -69,7 +78,15 @@ class ComplaintController {
         };
       });
 
-      res.json(transformed);
+      res.json({
+        data: transformed,
+        meta: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit)
+        }
+      });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -159,6 +176,38 @@ class ComplaintController {
         }
       });
       res.status(201).json(comment);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async getStats(req, res) {
+    try {
+      const societyId = req.user.societyId;
+      const stats = await prisma.complaint.groupBy({
+        by: ['status'],
+        where: { societyId },
+        _count: true
+      });
+
+      const total = await prisma.complaint.count({ where: { societyId } });
+      const highPriority = await prisma.complaint.count({
+        where: {
+          societyId,
+          priority: { in: ['HIGH', 'URGENT'] }
+        }
+      });
+      const resolved = stats.find(s => s.status === 'RESOLVED')?._count || 0;
+      const inProgress = stats.find(s => s.status === 'IN_PROGRESS')?._count || 0;
+      const open = stats.find(s => s.status === 'OPEN')?._count || 0;
+
+      res.json({
+        total,
+        resolved,
+        pending: inProgress + open,
+        highPriority,
+        byStatus: stats
+      });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

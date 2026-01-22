@@ -48,83 +48,104 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-
-const stats = [
-  { label: 'Visitors Today', value: '24', icon: Users, color: 'bg-blue-500', change: '+5' },
-  { label: 'Pending Approvals', value: '8', icon: Clock, color: 'bg-yellow-500', change: '3 urgent' },
-  { label: 'Parcels to Deliver', value: '12', icon: Package, color: 'bg-purple-500', change: '2 new' },
-  { label: 'Vehicles In', value: '156', icon: Car, color: 'bg-green-500', change: 'of 200' },
-]
-
-const allVisitors = [
-  { id: 1, name: 'Rahul Sharma', visiting: 'A-205', purpose: 'Guest', time: '2 min ago', phone: '+91 98765 43210', status: 'pending' },
-  { id: 2, name: 'Delivery - Amazon', visiting: 'B-102', purpose: 'Parcel', time: '5 min ago', phone: '+91 98765 43211', status: 'pending' },
-  { id: 3, name: 'Plumber - Raj', visiting: 'C-301', purpose: 'Service', time: '10 min ago', phone: '+91 98765 43212', status: 'pending' },
-  { id: 4, name: 'Priya Reddy', visiting: 'D-104', purpose: 'Guest', time: '15 min ago', phone: '+91 98765 43213', status: 'approved' },
-  { id: 5, name: 'Carpenter - Mohan', visiting: 'A-305', purpose: 'Service', time: '20 min ago', phone: '+91 98765 43214', status: 'approved' },
-  { id: 6, name: 'Unknown Person', visiting: 'B-201', purpose: 'Guest', time: '25 min ago', phone: '+91 98765 43215', status: 'rejected' },
-]
-
-const expectedVisitors = [
-  { id: 1, name: 'Sameer Khan', visiting: 'A-101', purpose: 'Guest', expectedTime: '2:00 PM', phone: '+91 98765 43216', approvedBy: 'Mr. Verma' },
-  { id: 2, name: 'Electrician - Suresh', visiting: 'C-202', purpose: 'Service', expectedTime: '3:30 PM', phone: '+91 98765 43217', approvedBy: 'Mrs. Patel' },
-  { id: 3, name: 'Dr. Mehta', visiting: 'B-305', purpose: 'Guest', expectedTime: '4:00 PM', phone: '+91 98765 43218', approvedBy: 'Mr. Singh' },
-]
-
-const recentActivity = [
-  { id: 1, action: 'Visitor Approved', unit: 'A-205', name: 'Amit Kumar', time: '10:30 AM', status: 'approved' },
-  { id: 2, action: 'Parcel Delivered', unit: 'B-102', name: 'Flipkart Package', time: '10:15 AM', status: 'delivered' },
-  { id: 3, action: 'Visitor Rejected', unit: 'D-401', name: 'Unknown', time: '10:00 AM', status: 'rejected' },
-  { id: 4, action: 'Helper Check-in', unit: 'A-101', name: 'Maid - Sunita', time: '9:45 AM', status: 'checkin' },
-  { id: 5, action: 'Vehicle Exit', unit: 'C-205', name: 'MH 02 AB 1234', time: '9:30 AM', status: 'exit' },
-]
-
-const helpers = [
-  { id: 1, name: 'Sunita Devi', type: 'Maid', units: ['A-101', 'A-102', 'A-103'], status: 'present', checkIn: '9:00 AM', checkOut: '-' },
-  { id: 2, name: 'Ramu', type: 'Driver', units: ['B-201'], status: 'present', checkIn: '8:30 AM', checkOut: '-' },
-  { id: 3, name: 'Lakshmi', type: 'Cook', units: ['C-301', 'C-302'], status: 'absent', checkIn: '-', checkOut: '-' },
-  { id: 4, name: 'Ganesh', type: 'Gardener', units: ['Common Area'], status: 'present', checkIn: '7:00 AM', checkOut: '-' },
-  { id: 5, name: 'Rita', type: 'Maid', units: ['D-101', 'D-102'], status: 'checked-out', checkIn: '9:00 AM', checkOut: '1:00 PM' },
-  { id: 6, name: 'Vijay', type: 'Driver', units: ['A-205'], status: 'present', checkIn: '10:00 AM', checkOut: '-' },
-]
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { GuardService } from '@/services/guard.service'
+import { VisitorService } from '@/services/visitor.service'
+import { StaffService } from '@/services/staff.service'
+import { toast } from 'sonner'
 
 export default function GuardDashboardPage() {
+  const queryClient = useQueryClient()
   const [visitorSearch, setVisitorSearch] = useState('')
   const [helperSearch, setHelperSearch] = useState('')
   const [showIncidentDialog, setShowIncidentDialog] = useState(false)
   const [incidentPhoto, setIncidentPhoto] = useState<File | null>(null)
-  const [incidentSeverity, setIncidentSeverity] = useState('')
+  const [incidentSeverity, setIncidentSeverity] = useState('medium')
   const [incidentDescription, setIncidentDescription] = useState('')
   const [incidentAssignee, setIncidentAssignee] = useState('')
 
-  const pendingVisitors = allVisitors.filter(v => v.status === 'pending')
-  const filteredAllVisitors = allVisitors.filter(v =>
-    v.name.toLowerCase().includes(visitorSearch.toLowerCase()) ||
-    v.visiting.toLowerCase().includes(visitorSearch.toLowerCase())
-  )
-  const filteredExpectedVisitors = expectedVisitors.filter(v =>
-    v.name.toLowerCase().includes(visitorSearch.toLowerCase()) ||
-    v.visiting.toLowerCase().includes(visitorSearch.toLowerCase())
-  )
-  const filteredHelpers = helpers.filter(h =>
-    h.name.toLowerCase().includes(helperSearch.toLowerCase()) ||
-    h.units.some(u => u.toLowerCase().includes(helperSearch.toLowerCase())) ||
-    h.type.toLowerCase().includes(helperSearch.toLowerCase())
-  )
+  // Queries
+  const { data: statsData } = useQuery({
+    queryKey: ['guard-stats'],
+    queryFn: () => GuardService.getStats()
+  })
+
+  const { data: visitors = [] } = useQuery({
+    queryKey: ['visitors', visitorSearch],
+    queryFn: () => VisitorService.getAll({ search: visitorSearch })
+  })
+
+  const { data: activities = [] } = useQuery({
+    queryKey: ['guard-activity'],
+    queryFn: () => GuardService.getActivity()
+  })
+
+  const { data: helpersData } = useQuery({
+    queryKey: ['staff'],
+    queryFn: () => StaffService.getAll() // Fetch all staff (maids, drivers, etc.)
+  })
+
+  const helpers = helpersData?.data || []
+
+  // Mutations
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number, status: string }) => GuardService.updateVisitorStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['visitors'] })
+      queryClient.invalidateQueries({ queryKey: ['guard-activity'] })
+      queryClient.invalidateQueries({ queryKey: ['guard-stats'] })
+      toast.success('Status updated successfully')
+    }
+  })
+
+  const checkOutMutation = useMutation({
+    mutationFn: GuardService.checkOutVisitor,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['visitors'] })
+      queryClient.invalidateQueries({ queryKey: ['guard-activity'] })
+      queryClient.invalidateQueries({ queryKey: ['guard-stats'] })
+      toast.success('Checked out successfully')
+    }
+  })
+
+  const reportIncidentMutation = useMutation({
+    mutationFn: GuardService.reportIncident,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['guard-activity'] })
+      setShowIncidentDialog(false)
+      setIncidentDescription('')
+      setIncidentSeverity('medium')
+      setIncidentAssignee('')
+      toast.success('Incident reported successfully')
+    }
+  })
+
+  const createEmergencyMutation = useMutation({
+    mutationFn: GuardService.createEmergencyAlert,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['guard-activity'] })
+      toast.error('Emergency Alert Sent!')
+    }
+  })
 
   const handleIncidentSubmit = () => {
-    console.log('Incident Report:', {
-      photo: incidentPhoto,
+    reportIncidentMutation.mutate({
+      title: 'Security Incident',
       severity: incidentSeverity,
       description: incidentDescription,
-      assignee: incidentAssignee
+      assignedToId: incidentAssignee ? parseInt(incidentAssignee) : null,
+      status: 'open'
     })
-    setShowIncidentDialog(false)
-    setIncidentPhoto(null)
-    setIncidentSeverity('')
-    setIncidentDescription('')
-    setIncidentAssignee('')
   }
+
+  const helperList = helpers.filter((h: any) =>
+    h.name.toLowerCase().includes(helperSearch.toLowerCase()) ||
+    h.role.toLowerCase().includes(helperSearch.toLowerCase())
+  )
+
+  const pendingVisitors = visitors.filter((v: any) => v.status === 'PENDING')
+  const expectedVisitors = visitors.filter((v: any) => v.status === 'APPROVED' || v.status === 'PRE_APPROVED')
+  const allVisitorsList = visitors
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -138,6 +159,13 @@ export default function GuardDashboardPage() {
         return <Badge>{status}</Badge>
     }
   }
+
+  const stats = [
+    { label: 'Visitors Today', value: statsData?.visitorsToday || 0, icon: Users, color: 'bg-blue-500', change: '+5' },
+    { label: 'Pending Approvals', value: statsData?.pendingApprovals || 0, icon: Clock, color: 'bg-yellow-500', change: 'urgent' },
+    { label: 'Parcels to Deliver', value: statsData?.parcelsToDeliver || 0, icon: Package, color: 'bg-purple-500', change: 'new' },
+    { label: 'Vehicles In', value: statsData?.vehiclesIn || 0, icon: Car, color: 'bg-green-500', change: 'active' },
+  ]
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
@@ -155,7 +183,13 @@ export default function GuardDashboardPage() {
             <QrCode className="h-4 w-4" />
             Scan QR
           </Button>
-          <Button className="gap-2 bg-red-600 hover:bg-red-700">
+          <Button
+            className="gap-2 bg-red-600 hover:bg-red-700"
+            onClick={() => createEmergencyMutation.mutate({
+              type: 'SOS',
+              description: 'Guard triggered emergency alert'
+            })}
+          >
             <AlertTriangle className="h-4 w-4" />
             Emergency
           </Button>
@@ -224,10 +258,10 @@ export default function GuardDashboardPage() {
             </TabsList>
 
             <TabsContent value="pending" className="space-y-3 mt-4">
-              {filteredAllVisitors.filter(v => v.status === 'pending').length === 0 ? (
+              {pendingVisitors.length === 0 ? (
                 <p className="text-center text-gray-500 py-4">No pending visitors</p>
               ) : (
-                filteredAllVisitors.filter(v => v.status === 'pending').map((visitor) => (
+                pendingVisitors.map((visitor: any) => (
                   <motion.div
                     key={visitor.id}
                     initial={{ opacity: 0, x: -20 }}
@@ -241,9 +275,9 @@ export default function GuardDashboardPage() {
                       <div>
                         <p className="font-medium">{visitor.name}</p>
                         <p className="text-sm text-gray-600">
-                          Unit: {visitor.visiting} • {visitor.purpose}
+                          Unit: {visitor.unit ? `${visitor.unit.block}-${visitor.unit.number}` : 'N/A'} • {visitor.purpose}
                         </p>
-                        <p className="text-xs text-gray-500">{visitor.time}</p>
+                        <p className="text-xs text-gray-500">{new Date(visitor.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -251,11 +285,20 @@ export default function GuardDashboardPage() {
                         <Phone className="h-3 w-3" />
                         Call
                       </Button>
-                      <Button size="sm" variant="outline" className="gap-1 text-red-600 border-red-200">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1 text-red-600 border-red-200"
+                        onClick={() => updateStatusMutation.mutate({ id: visitor.id, status: 'REJECTED' })}
+                      >
                         <UserX className="h-3 w-3" />
                         Reject
                       </Button>
-                      <Button size="sm" className="gap-1 bg-green-600 hover:bg-green-700">
+                      <Button
+                        size="sm"
+                        className="gap-1 bg-green-600 hover:bg-green-700"
+                        onClick={() => updateStatusMutation.mutate({ id: visitor.id, status: 'CHECKED_IN' })}
+                      >
                         <UserCheck className="h-3 w-3" />
                         Approve
                       </Button>
@@ -266,10 +309,10 @@ export default function GuardDashboardPage() {
             </TabsContent>
 
             <TabsContent value="all" className="space-y-3 mt-4">
-              {filteredAllVisitors.length === 0 ? (
+              {allVisitorsList.length === 0 ? (
                 <p className="text-center text-gray-500 py-4">No visitors found</p>
               ) : (
-                filteredAllVisitors.map((visitor) => (
+                allVisitorsList.map((visitor: any) => (
                   <div
                     key={visitor.id}
                     className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg"
@@ -281,17 +324,27 @@ export default function GuardDashboardPage() {
                       <div>
                         <p className="font-medium">{visitor.name}</p>
                         <p className="text-sm text-gray-600">
-                          Unit: {visitor.visiting} • {visitor.purpose}
+                          Unit: {visitor.unit ? `${visitor.unit.block}-${visitor.unit.number}` : 'N/A'} • {visitor.purpose}
                         </p>
-                        <p className="text-xs text-gray-500">{visitor.time}</p>
+                        <p className="text-xs text-gray-500">{new Date(visitor.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                       </div>
                     </div>
                     <div className="flex gap-2 items-center">
-                      {getStatusBadge(visitor.status)}
+                      {getStatusBadge(visitor.status.toLowerCase())}
                       <Button size="sm" variant="outline" className="gap-1">
                         <Phone className="h-3 w-3" />
                         Call
                       </Button>
+                      {visitor.status === 'CHECKED_IN' && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="h-8 text-xs"
+                          onClick={() => checkOutMutation.mutate(visitor.id)}
+                        >
+                          Check Out
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))
@@ -299,10 +352,10 @@ export default function GuardDashboardPage() {
             </TabsContent>
 
             <TabsContent value="expected" className="space-y-3 mt-4">
-              {filteredExpectedVisitors.length === 0 ? (
+              {expectedVisitors.length === 0 ? (
                 <p className="text-center text-gray-500 py-4">No expected visitors</p>
               ) : (
-                filteredExpectedVisitors.map((visitor) => (
+                expectedVisitors.map((visitor: any) => (
                   <div
                     key={visitor.id}
                     className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg"
@@ -314,10 +367,10 @@ export default function GuardDashboardPage() {
                       <div>
                         <p className="font-medium">{visitor.name}</p>
                         <p className="text-sm text-gray-600">
-                          Unit: {visitor.visiting} • {visitor.purpose}
+                          Unit: {visitor.unit ? `${visitor.unit.block}-${visitor.unit.number}` : 'N/A'} • {visitor.purpose}
                         </p>
                         <p className="text-xs text-gray-500">
-                          Expected: {visitor.expectedTime} • Approved by: {visitor.approvedBy}
+                          Expected: Today • Approved by: {visitor.resident?.name || 'Resident'}
                         </p>
                       </div>
                     </div>
@@ -326,7 +379,11 @@ export default function GuardDashboardPage() {
                         <Phone className="h-3 w-3" />
                         Call
                       </Button>
-                      <Button size="sm" className="gap-1 bg-green-600 hover:bg-green-700">
+                      <Button
+                        size="sm"
+                        className="gap-1 bg-green-600 hover:bg-green-700"
+                        onClick={() => updateStatusMutation.mutate({ id: visitor.id, status: 'CHECKED_IN' })}
+                      >
                         <UserCheck className="h-3 w-3" />
                         Check In
                       </Button>
@@ -337,6 +394,7 @@ export default function GuardDashboardPage() {
             </TabsContent>
           </Tabs>
         </Card>
+
 
         {/* Quick Actions */}
         <Card className="p-4">
@@ -379,29 +437,34 @@ export default function GuardDashboardPage() {
         <Card className="p-4">
           <h2 className="text-lg font-semibold mb-4">Recent Activity</h2>
           <div className="space-y-3">
-            {recentActivity.map((activity) => (
-              <div key={activity.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-full ${
-                    activity.status === 'approved' ? 'bg-green-100' :
-                    activity.status === 'rejected' ? 'bg-red-100' :
-                    activity.status === 'delivered' ? 'bg-purple-100' :
-                    activity.status === 'checkin' ? 'bg-blue-100' : 'bg-gray-100'
-                  }`}>
-                    {activity.status === 'approved' && <CheckCircle className="h-4 w-4 text-green-600" />}
-                    {activity.status === 'rejected' && <UserX className="h-4 w-4 text-red-600" />}
-                    {activity.status === 'delivered' && <Package className="h-4 w-4 text-purple-600" />}
-                    {activity.status === 'checkin' && <LogIn className="h-4 w-4 text-blue-600" />}
-                    {activity.status === 'exit' && <LogOut className="h-4 w-4 text-gray-600" />}
+            {activities.length === 0 ? (
+              <p className="text-center text-gray-500 py-4 text-sm">No recent activity</p>
+            ) : (
+              activities.map((activity: any) => (
+                <div key={activity.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-full ${activity.status === 'approved' ? 'bg-green-100' :
+                      activity.status === 'rejected' ? 'bg-red-100' :
+                        activity.status === 'delivered' ? 'bg-purple-100' :
+                          activity.status === 'checkin' ? 'bg-blue-100' :
+                            activity.status === 'incident' ? 'bg-orange-100' : 'bg-gray-100'
+                      }`}>
+                      {activity.status === 'approved' && <CheckCircle className="h-4 w-4 text-green-600" />}
+                      {activity.status === 'rejected' && <UserX className="h-4 w-4 text-red-600" />}
+                      {activity.status === 'delivered' && <Package className="h-4 w-4 text-purple-600" />}
+                      {activity.status === 'checkin' && <LogIn className="h-4 w-4 text-blue-600" />}
+                      {activity.status === 'exit' && <LogOut className="h-4 w-4 text-gray-600" />}
+                      {activity.status === 'incident' && <AlertTriangle className="h-4 w-4 text-orange-600" />}
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{activity.action}</p>
+                      <p className="text-xs text-gray-600">{activity.name} • {activity.unit}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">{activity.action}</p>
-                    <p className="text-xs text-gray-600">{activity.name} • {activity.unit}</p>
-                  </div>
+                  <span className="text-xs text-gray-500">{new Date(activity.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
-                <span className="text-xs text-gray-500">{activity.time}</span>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </Card>
 
@@ -427,39 +490,35 @@ export default function GuardDashboardPage() {
           </div>
 
           <div className="space-y-3 max-h-[400px] overflow-y-auto">
-            {filteredHelpers.length === 0 ? (
+            {helperList.length === 0 ? (
               <p className="text-center text-gray-500 py-4">No helpers found</p>
             ) : (
-              filteredHelpers.map((helper) => (
-                <div key={helper.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+              helperList.map((staff: any) => (
+                <div key={staff.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-3">
                       <Avatar>
-                        <AvatarFallback>{helper.name[0]}</AvatarFallback>
+                        <AvatarFallback>{staff.name[0]}</AvatarFallback>
                       </Avatar>
                       <div>
-                        <p className="font-medium">{helper.name}</p>
-                        <p className="text-xs text-gray-600">{helper.type}</p>
+                        <p className="font-medium">{staff.name}</p>
+                        <p className="text-xs text-gray-600">{staff.role}</p>
                       </div>
                     </div>
                     <Badge variant={
-                      helper.status === 'present' ? 'default' :
-                      helper.status === 'checked-out' ? 'secondary' : 'outline'
+                      staff.status === 'ON_DUTY' ? 'default' :
+                        staff.status === 'OFF_DUTY' ? 'secondary' : 'outline'
                     }>
-                      {helper.status === 'present' ? 'Present' :
-                       helper.status === 'checked-out' ? 'Checked Out' : 'Absent'}
+                      {staff.status === 'ON_DUTY' ? 'Present' :
+                        staff.status === 'OFF_DUTY' ? 'Off Duty' : staff.status}
                     </Badge>
                   </div>
                   <div className="text-xs text-gray-600 space-y-1">
-                    <p>Units: {helper.units.join(', ')}</p>
+                    <p>Shift: {staff.shift || 'N/A'}</p>
                     <div className="flex gap-4">
                       <span className="flex items-center gap-1">
                         <LogIn className="h-3 w-3 text-green-600" />
-                        Check-in: {helper.checkIn}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <LogOut className="h-3 w-3 text-red-600" />
-                        Check-out: {helper.checkOut}
+                        Check-in: {staff.checkInTime || '-'}
                       </span>
                     </div>
                   </div>

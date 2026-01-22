@@ -54,6 +54,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { FacilityRequestService } from '@/services/facility-request.service'
 
 const facilityCategories = [
   { value: 'new', label: 'New Facility', icon: Plus },
@@ -74,85 +76,7 @@ const facilityTypes = [
   { value: 'other', label: 'Other', icon: Lightbulb },
 ]
 
-const mockRequests = [
-  {
-    id: 'FR-001',
-    title: 'Install EV Charging Stations',
-    category: 'new',
-    type: 'ev_charging',
-    description: 'Request to install 4 EV charging stations in the basement parking area for electric vehicle owners.',
-    requestedBy: 'Rajesh Kumar',
-    unit: 'A-101',
-    date: '2024-12-15',
-    status: 'approved',
-    votes: { up: 45, down: 3 },
-    adminNotes: 'Approved. Vendor quotes received. Installation scheduled for January.',
-    priority: 'high',
-  },
-  {
-    id: 'FR-002',
-    title: 'Upgrade Gym Equipment',
-    category: 'upgrade',
-    type: 'gym',
-    description: 'Current treadmills are outdated. Request to add 2 new treadmills and a rowing machine.',
-    requestedBy: 'Priya Sharma',
-    unit: 'B-205',
-    date: '2024-12-10',
-    status: 'under_review',
-    votes: { up: 32, down: 5 },
-    adminNotes: 'Getting quotes from vendors.',
-    priority: 'medium',
-  },
-  {
-    id: 'FR-003',
-    title: 'Create Reading Library',
-    category: 'new',
-    type: 'library',
-    description: 'Suggest converting the unused room near clubhouse into a community library with books and study area.',
-    requestedBy: 'Amit Patel',
-    unit: 'C-304',
-    date: '2024-12-08',
-    status: 'pending',
-    votes: { up: 28, down: 8 },
-    adminNotes: '',
-    priority: 'low',
-  },
-  {
-    id: 'FR-004',
-    title: 'High-Speed Internet in Common Areas',
-    category: 'new',
-    type: 'wifi',
-    description: 'Request for high-speed WiFi coverage in clubhouse, gym, and pool area.',
-    requestedBy: 'Sneha Reddy',
-    unit: 'D-501',
-    date: '2024-12-05',
-    status: 'rejected',
-    votes: { up: 15, down: 22 },
-    adminNotes: 'Rejected due to high recurring costs. Individual residents can opt for personal connections.',
-    priority: 'medium',
-  },
-  {
-    id: 'FR-005',
-    title: 'Install CCTV in Parking',
-    category: 'upgrade',
-    type: 'cctv',
-    description: 'Additional CCTV cameras needed in basement parking area for better security coverage.',
-    requestedBy: 'Security Committee',
-    unit: 'Admin',
-    date: '2024-12-01',
-    status: 'approved',
-    votes: { up: 65, down: 2 },
-    adminNotes: 'Approved with high priority. Installation in progress.',
-    priority: 'high',
-  },
-]
-
-const stats = [
-  { title: 'Total Requests', value: '24', icon: Lightbulb, color: 'blue' },
-  { title: 'Pending Review', value: '8', icon: Clock, color: 'orange' },
-  { title: 'Approved', value: '12', icon: CheckCircle2, color: 'green' },
-  { title: 'Rejected', value: '4', icon: XCircle, color: 'red' },
-]
+// Mock data removed - using API data only
 
 const statusColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700',
@@ -174,8 +98,58 @@ export default function FacilityRequestsPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
-  const [selectedRequest, setSelectedRequest] = useState<typeof mockRequests[0] | null>(null)
+  const [selectedRequest, setSelectedRequest] = useState<any | null>(null)
   const [showSuccess, setShowSuccess] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    category: '',
+    priority: 'medium'
+  })
+
+  // Queries
+  const { data: apiRequests = [], isLoading } = useQuery({
+    queryKey: ['facility-requests', statusFilter],
+    queryFn: () => FacilityRequestService.getAll()
+  })
+
+  const { data: serverStats } = useQuery({
+    queryKey: ['facility-request-stats'],
+    queryFn: () => FacilityRequestService.getStats()
+  })
+
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: FacilityRequestService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['facility-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['facility-request-stats'] })
+      setIsAddDialogOpen(false)
+      showNotification('Facility request submitted successfully!')
+    }
+  })
+
+  const voteMutation = useMutation({
+    mutationFn: ({ id, type }: { id: string | number, type: 'UP' | 'DOWN' }) =>
+      FacilityRequestService.vote(id, type),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['facility-requests'] })
+      showNotification('Vote recorded! Thank you for your feedback.')
+    }
+  })
+
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status, adminNotes }: { id: string | number, status: string, adminNotes?: string }) =>
+      FacilityRequestService.updateStatus(id, status, adminNotes),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['facility-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['facility-request-stats'] })
+      setIsViewDialogOpen(false)
+      showNotification(`Request updated successfully!`)
+    }
+  })
 
   const showNotification = (message: string) => {
     setShowSuccess(message)
@@ -183,22 +157,24 @@ export default function FacilityRequestsPage() {
   }
 
   const handleSubmitRequest = () => {
-    setIsAddDialogOpen(false)
-    showNotification('Facility request submitted successfully!')
+    createMutation.mutate(formData)
   }
 
-  const handleUpdateStatus = (status: string) => {
-    setIsViewDialogOpen(false)
-    showNotification(`Request ${status}!`)
+  const handleUpdateStatus = (status: string, adminNotes?: string) => {
+    if (selectedRequest) {
+      updateStatusMutation.mutate({ id: selectedRequest.id, status, adminNotes })
+    }
   }
 
-  const handleVote = (type: 'up' | 'down') => {
-    showNotification(`Vote recorded! Thank you for your feedback.`)
+  const handleVote = (id: string | number, type: 'UP' | 'DOWN') => {
+    voteMutation.mutate({ id, type })
   }
 
-  const filteredRequests = mockRequests.filter((request) => {
+  const requests = (Array.isArray(apiRequests) ? apiRequests : apiRequests?.data || []) as any[]
+
+  const filteredRequests = requests.filter((request) => {
     const matchesSearch = request.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      request.requestedBy.toLowerCase().includes(searchQuery.toLowerCase())
+      (request.user?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
     const matchesStatus = statusFilter === 'all' || request.status === statusFilter
     return matchesSearch && matchesStatus
   })
@@ -283,7 +259,11 @@ export default function FacilityRequestsPage() {
 
               <div className="space-y-2">
                 <Label>Title *</Label>
-                <Input placeholder="Brief title for your request" />
+                <Input
+                  placeholder="Brief title for your request"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                />
               </div>
 
               <div className="space-y-2">
@@ -291,21 +271,14 @@ export default function FacilityRequestsPage() {
                 <Textarea
                   placeholder="Describe the facility you're requesting and why it would benefit the community..."
                   rows={4}
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Attach Images (Optional)</Label>
-                <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center hover:border-teal-400 transition-colors cursor-pointer">
-                  <Image className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                  <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
-                  <p className="text-xs text-gray-400">PNG, JPG up to 5MB</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
                 <Label>Priority</Label>
-                <Select defaultValue="medium">
+                <Select value={formData.priority} onValueChange={(val) => setFormData({ ...formData, priority: val })}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -333,30 +306,64 @@ export default function FacilityRequestsPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat, index) => {
-          const Icon = stat.icon
-          const colorClasses: Record<string, string> = {
-            blue: 'bg-blue-500',
-            orange: 'bg-orange-500',
-            green: 'bg-green-500',
-            red: 'bg-red-500',
-          }
-          return (
-            <Card key={index} className="border-0 shadow-md">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">{stat.title}</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</p>
-                  </div>
-                  <div className={`p-3 rounded-xl ${colorClasses[stat.color]} bg-opacity-10`}>
-                    <Icon className={`h-6 w-6 text-${stat.color}-600`} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
+        <Card className="border-0 shadow-md">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Total Requests</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">{serverStats?.total || 0}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-blue-500 bg-opacity-10">
+                <Lightbulb className="h-6 w-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-md">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Pending Review</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">
+                  {serverStats?.byStatus?.find((s: any) => s.status === 'pending')?._count || 0}
+                </p>
+              </div>
+              <div className="p-3 rounded-xl bg-orange-500 bg-opacity-10">
+                <Clock className="h-6 w-6 text-orange-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-md">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Approved</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">
+                  {serverStats?.byStatus?.find((s: any) => s.status === 'approved')?._count || 0}
+                </p>
+              </div>
+              <div className="p-3 rounded-xl bg-green-500 bg-opacity-10">
+                <CheckCircle2 className="h-6 w-6 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-md">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Rejected</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">
+                  {serverStats?.byStatus?.find((s: any) => s.status === 'rejected')?._count || 0}
+                </p>
+              </div>
+              <div className="p-3 rounded-xl bg-red-500 bg-opacity-10">
+                <XCircle className="h-6 w-6 text-red-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters */}
@@ -406,8 +413,8 @@ export default function FacilityRequestsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredRequests.map((request) => {
-                const typeInfo = facilityTypes.find(t => t.value === request.type)
+              {filteredRequests.map((request: any) => {
+                const typeInfo = facilityTypes.find(t => t.value === request.category)
                 const TypeIcon = typeInfo?.icon || Lightbulb
                 return (
                   <TableRow key={request.id}>
@@ -419,7 +426,7 @@ export default function FacilityRequestsPage() {
                         </div>
                         <div>
                           <p className="font-medium text-sm">{request.title}</p>
-                          <p className="text-xs text-gray-500">{typeInfo?.label}</p>
+                          <p className="text-xs text-gray-500">{typeInfo?.label || request.category}</p>
                         </div>
                       </div>
                     </TableCell>
@@ -427,42 +434,44 @@ export default function FacilityRequestsPage() {
                       <div className="flex items-center gap-2">
                         <Avatar className="h-7 w-7">
                           <AvatarFallback className="bg-gradient-to-br from-teal-500 to-cyan-500 text-white text-xs">
-                            {request.requestedBy.charAt(0)}
+                            {(request.user?.name || 'U').charAt(0)}
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <p className="text-sm font-medium">{request.requestedBy}</p>
-                          <p className="text-xs text-gray-500">{request.unit}</p>
+                          <p className="text-sm font-medium">{request.user?.name || 'Unknown'}</p>
+                          <p className="text-xs text-gray-500">{request.user?.society?.name || 'Resident'}</p>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm">{request.date}</TableCell>
+                    <TableCell className="text-sm">{new Date(request.createdAt).toLocaleDateString()}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <button
                           className="flex items-center gap-1 text-green-600 hover:text-green-700"
-                          onClick={() => handleVote('up')}
+                          onClick={() => handleVote(request.id, 'UP')}
+                          disabled={voteMutation.isPending}
                         >
                           <ThumbsUp className="h-4 w-4" />
-                          <span className="text-xs font-medium">{request.votes.up}</span>
+                          <span className="text-xs font-medium">{request.upvotes}</span>
                         </button>
                         <button
                           className="flex items-center gap-1 text-red-500 hover:text-red-600"
-                          onClick={() => handleVote('down')}
+                          onClick={() => handleVote(request.id, 'DOWN')}
+                          disabled={voteMutation.isPending}
                         >
                           <ThumbsDown className="h-4 w-4" />
-                          <span className="text-xs font-medium">{request.votes.down}</span>
+                          <span className="text-xs font-medium">{request.downvotes}</span>
                         </button>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge className={priorityColors[request.priority]}>
-                        {request.priority.charAt(0).toUpperCase() + request.priority.slice(1)}
+                      <Badge className={priorityColors[request.priority?.toLowerCase()] || 'bg-gray-100'}>
+                        {request.priority || 'Medium'}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge className={statusColors[request.status]}>
-                        {request.status.replace('_', ' ').charAt(0).toUpperCase() + request.status.replace('_', ' ').slice(1)}
+                      <Badge className={statusColors[request.status?.toLowerCase()] || 'bg-blue-100'}>
+                        {request.status}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -513,15 +522,15 @@ export default function FacilityRequestsPage() {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-gray-500">Requested By</p>
-                    <p className="font-medium">{selectedRequest.requestedBy} ({selectedRequest.unit})</p>
+                    <p className="font-medium">{selectedRequest.user?.name || 'Unknown'} ({selectedRequest.user?.society?.name || 'Resident'})</p>
                   </div>
                   <div>
                     <p className="text-gray-500">Date Submitted</p>
-                    <p className="font-medium">{selectedRequest.date}</p>
+                    <p className="font-medium">{new Date(selectedRequest.createdAt).toLocaleDateString()}</p>
                   </div>
                   <div>
                     <p className="text-gray-500">Priority</p>
-                    <Badge className={priorityColors[selectedRequest.priority]}>
+                    <Badge className={priorityColors[selectedRequest.priority?.toLowerCase()] || 'bg-gray-100'}>
                       {selectedRequest.priority}
                     </Badge>
                   </div>
@@ -529,10 +538,10 @@ export default function FacilityRequestsPage() {
                     <p className="text-gray-500">Community Votes</p>
                     <div className="flex items-center gap-3">
                       <span className="text-green-600 flex items-center gap-1">
-                        <ThumbsUp className="h-4 w-4" /> {selectedRequest.votes.up}
+                        <ThumbsUp className="h-4 w-4" /> {selectedRequest.upvotes}
                       </span>
                       <span className="text-red-500 flex items-center gap-1">
-                        <ThumbsDown className="h-4 w-4" /> {selectedRequest.votes.down}
+                        <ThumbsDown className="h-4 w-4" /> {selectedRequest.downvotes}
                       </span>
                     </div>
                   </div>
@@ -563,10 +572,10 @@ export default function FacilityRequestsPage() {
               <DialogFooter className="flex-col sm:flex-row gap-2">
                 {!isAdmin && (
                   <div className="flex gap-2 mr-auto">
-                    <Button variant="outline" onClick={() => handleVote('up')} className="gap-1">
+                    <Button variant="outline" onClick={() => handleVote(selectedRequest.id, 'UP')} className="gap-1">
                       <ThumbsUp className="h-4 w-4" /> Support
                     </Button>
-                    <Button variant="outline" onClick={() => handleVote('down')} className="gap-1">
+                    <Button variant="outline" onClick={() => handleVote(selectedRequest.id, 'DOWN')} className="gap-1">
                       <ThumbsDown className="h-4 w-4" /> Oppose
                     </Button>
                   </div>

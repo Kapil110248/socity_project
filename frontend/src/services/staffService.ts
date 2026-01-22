@@ -7,6 +7,7 @@ export interface Staff {
   phone: string;
   email?: string;
   shift?: string;
+  workingDays?: string;
   gate?: string;
   status: string;
   attendanceStatus?: string;

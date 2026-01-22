@@ -86,6 +86,7 @@ interface Guard {
   emergencyContact?: string
   idProof?: string
   idNumber?: string
+  workingDays?: string
 }
 
 const emptyGuardForm = {
@@ -99,7 +100,8 @@ const emptyGuardForm = {
   emergencyContact: '',
   idProof: '',
   idNumber: '',
-  photo: '', // Add photo field
+  photo: '',
+  workingDays: 'Mon,Tue,Wed,Thu,Fri,Sat,Sun',
 }
 
 // Stats mapped dynamically now
@@ -108,7 +110,7 @@ const emptyGuardForm = {
 export default function GuardsManagementPage() {
   const [searchQuery, setSearchQuery] = useState('')
   // const [guards, setGuards] = useState<Guard[]>(initialGuards) // Replaced by query
-  
+
   const queryClient = useQueryClient()
   const photoRef = useRef<string>('') // Store photo separately to avoid state timing issues
 
@@ -135,11 +137,12 @@ export default function GuardsManagementPage() {
     emergencyContact: staff.emergencyContact,
     idProof: staff.idProof,
     idNumber: staff.idNumber,
-    photo: staff.photo || '', // Add photo field
+    photo: staff.photo || '',
+    workingDays: staff.workingDays || 'Mon,Tue,Wed,Thu,Fri,Sat,Sun',
   }))
 
   const statsData = apiData?.stats || { total: 0, onDuty: 0, onLeave: 0, vacant: 0 }
-  
+
   const stats = [
     { label: 'Total Guards', value: statsData.total.toString(), color: 'bg-blue-500' },
     { label: 'On Duty Now', value: statsData.onDuty.toString(), color: 'bg-green-500' },
@@ -448,14 +451,14 @@ export default function GuardsManagementPage() {
                         const checkInTime = guard.status === 'on-duty' ? null : new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
                         updateMutation.mutate({
                           id: guard.id,
-                          data: { 
+                          data: {
                             status: newStatus,
                             checkInTime: checkInTime,
                             attendanceStatus: guard.status === 'on-duty' ? 'UPCOMING' : 'PRESENT'
                           }
                         })
                       }}>
-                        <UserCheck className="h-4 w-4 mr-2" /> 
+                        <UserCheck className="h-4 w-4 mr-2" />
                         {guard.status === 'on-duty' ? 'Check Out' : 'Check In'}
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => openEditDialog(guard)}>
@@ -531,8 +534,8 @@ export default function GuardsManagementPage() {
                     }
                   }}
                 />
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   type="button"
                   onClick={() => document.getElementById('photo-upload')?.click()}
@@ -757,10 +760,10 @@ export default function GuardsManagementPage() {
                   <p className="text-gray-500">Status</p>
                   <Badge className={
                     selectedGuard.status === 'on-duty' ? 'bg-green-600' :
-                    selectedGuard.status === 'leave' ? 'bg-yellow-500' : ''
+                      selectedGuard.status === 'leave' ? 'bg-yellow-500' : ''
                   }>
                     {selectedGuard.status === 'on-duty' ? 'On Duty' :
-                     selectedGuard.status === 'leave' ? 'On Leave' : 'Off Duty'}
+                      selectedGuard.status === 'leave' ? 'On Leave' : 'Off Duty'}
                   </Badge>
                 </div>
                 {selectedGuard.address && (
@@ -1007,7 +1010,7 @@ export default function GuardsManagementPage() {
                   </div>
                 ))}
               </div>
-              
+
               <div className="bg-blue-50 p-4 rounded-lg">
                 <h4 className="font-medium text-blue-900 mb-2">Current Assignment</h4>
                 <div className="grid grid-cols-2 gap-3 text-sm">
@@ -1068,7 +1071,7 @@ export default function GuardsManagementPage() {
                   date.setDate(date.getDate() - i);
                   const statuses = ['present', 'present', 'present', 'absent', 'leave'];
                   const status = statuses[i % 5];
-                  
+
                   return (
                     <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div>
