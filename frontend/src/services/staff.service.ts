@@ -3,11 +3,11 @@ import { API_CONFIG } from '@/config/api.config';
 
 export const StaffService = {
   getAll: async (type?: 'guard' | 'maid') => {
-    const url = type 
-      ? `${API_CONFIG.STAFF.LIST}?type=${type}` 
+    const url = type
+      ? `${API_CONFIG.STAFF.LIST}?type=${type}`
       : API_CONFIG.STAFF.LIST;
     const response = await api.get(url);
-    return response.data;
+    return response.data.data;
   },
 
   getGuards: async () => {

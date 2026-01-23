@@ -1,22 +1,22 @@
-const { prisma } = require('../lib/prisma');
+const prisma = require('../lib/prisma');
 
 // Get all patrol logs
 const getAll = async (req, res) => {
   try {
     const { societyId } = req.user;
-    
+
     // Simple filter support
     const { status } = req.query;
     const where = {
-        societyId,
-        ...(status ? { status } : {})
+      societyId,
+      ...(status ? { status } : {})
     };
 
     const logs = await prisma.patrolLog.findMany({
       where,
       include: {
         guard: {
-            select: { id: true, name: true }
+          select: { id: true, name: true }
         }
       },
       orderBy: { startTime: 'desc' }
@@ -32,7 +32,7 @@ const getAll = async (req, res) => {
 const create = async (req, res) => {
   try {
     const { area, notes, status } = req.body;
-    const { societyId, userId } = req.user;
+    const { societyId, id: userId } = req.user;
 
     const log = await prisma.patrolLog.create({
       data: {

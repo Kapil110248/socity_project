@@ -53,6 +53,9 @@ import { GuardService } from '@/services/guard.service'
 import { VisitorService } from '@/services/visitor.service'
 import { StaffService } from '@/services/staff.service'
 import { toast } from 'sonner'
+import { ParcelService } from '@/services/parcel.service'
+import { VehicleService } from '@/services/vehicle.service'
+import { UnitService } from '@/services/unit.service'
 
 export default function GuardDashboardPage() {
   const queryClient = useQueryClient()
@@ -63,6 +66,27 @@ export default function GuardDashboardPage() {
   const [incidentSeverity, setIncidentSeverity] = useState('medium')
   const [incidentDescription, setIncidentDescription] = useState('')
   const [incidentAssignee, setIncidentAssignee] = useState('')
+
+  // New Dialog States
+  const [showCheckInDialog, setShowCheckInDialog] = useState(false)
+  const [showLogParcelDialog, setShowLogParcelDialog] = useState(false)
+  const [showVehicleEntryDialog, setShowVehicleEntryDialog] = useState(false)
+
+  // Form States
+  const [checkInForm, setCheckInForm] = useState({
+    name: '',
+    phone: '',
+    vehicleNo: '',
+    purpose: '',
+    visitingUnitId: ''
+  })
+
+  const [parcelForm, setParcelForm] = useState({
+    unitId: '',
+    courierName: '',
+    trackingNumber: '',
+    description: ''
+  })
 
   // Queries
   const { data: statsData } = useQuery({
@@ -86,6 +110,11 @@ export default function GuardDashboardPage() {
   })
 
   const helpers = helpersData?.data || []
+
+  const { data: units = [] } = useQuery({
+    queryKey: ['units'],
+    queryFn: () => UnitService.getUnits()
+  })
 
   // Mutations
   const updateStatusMutation = useMutation({
@@ -125,6 +154,30 @@ export default function GuardDashboardPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['guard-activity'] })
       toast.error('Emergency Alert Sent!')
+    }
+  })
+
+  const checkInMutation = useMutation({
+    mutationFn: VisitorService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['visitors'] })
+      queryClient.invalidateQueries({ queryKey: ['guard-activity'] })
+      queryClient.invalidateQueries({ queryKey: ['guard-stats'] })
+      setShowCheckInDialog(false)
+      setCheckInForm({ name: '', phone: '', vehicleNo: '', purpose: '', visitingUnitId: '' })
+      toast.success('Visitor Checked In Successfully')
+    }
+  })
+
+  const logParcelMutation = useMutation({
+    mutationFn: ParcelService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parcels'] })
+      queryClient.invalidateQueries({ queryKey: ['guard-activity'] })
+      queryClient.invalidateQueries({ queryKey: ['guard-stats'] })
+      setShowLogParcelDialog(false)
+      setParcelForm({ unitId: '', courierName: '', trackingNumber: '', description: '' })
+      toast.success('Parcel Logged Successfully')
     }
   })
 
@@ -400,23 +453,43 @@ export default function GuardDashboardPage() {
         <Card className="p-4">
           <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
           <div className="grid grid-cols-2 gap-3">
-            <Button variant="outline" className="h-20 flex-col gap-2">
+            <Button
+              variant="outline"
+              className="h-20 flex-col gap-2"
+              onClick={() => setShowCheckInDialog(true)}
+            >
               <LogIn className="h-6 w-6 text-green-600" />
               <span className="text-xs">Check In</span>
             </Button>
-            <Button variant="outline" className="h-20 flex-col gap-2">
+            <Button
+              variant="outline"
+              className="h-20 flex-col gap-2"
+              onClick={() => toast.info('Please select a visitor from the list to check out')}
+            >
               <LogOut className="h-6 w-6 text-red-600" />
               <span className="text-xs">Check Out</span>
             </Button>
-            <Button variant="outline" className="h-20 flex-col gap-2">
+            <Button
+              variant="outline"
+              className="h-20 flex-col gap-2"
+              onClick={() => setShowLogParcelDialog(true)}
+            >
               <Package className="h-6 w-6 text-purple-600" />
               <span className="text-xs">Log Parcel</span>
             </Button>
-            <Button variant="outline" className="h-20 flex-col gap-2">
+            <Button
+              variant="outline"
+              className="h-20 flex-col gap-2"
+              onClick={() => toast.info('Photo feature coming soon!')}
+            >
               <Camera className="h-6 w-6 text-blue-600" />
               <span className="text-xs">Take Photo</span>
             </Button>
-            <Button variant="outline" className="h-20 flex-col gap-2">
+            <Button
+              variant="outline"
+              className="h-20 flex-col gap-2"
+              onClick={() => toast.info('Vehicle Entry feature coming soon!')}
+            >
               <Car className="h-6 w-6 text-orange-600" />
               <span className="text-xs">Vehicle Entry</span>
             </Button>
@@ -646,6 +719,177 @@ export default function GuardDashboardPage() {
             >
               <FileText className="h-4 w-4 mr-2" />
               Submit Report
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Check-In Dialog */}
+      <Dialog open={showCheckInDialog} onOpenChange={setShowCheckInDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <LogIn className="h-5 w-5 text-green-600" />
+              Visitor Check-In
+            </DialogTitle>
+            <DialogDescription> Register a new visitor entry </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Visitor Name</Label>
+                <Input
+                  placeholder="Full Name"
+                  value={checkInForm.name}
+                  onChange={(e) => setCheckInForm({ ...checkInForm, name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Phone Number</Label>
+                <Input
+                  placeholder="+91 XXX XXX XXXX"
+                  value={checkInForm.phone}
+                  onChange={(e) => setCheckInForm({ ...checkInForm, phone: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Vehicle No. (Optional)</Label>
+                <Input
+                  placeholder="MH 01 AB 1234"
+                  value={checkInForm.vehicleNo}
+                  onChange={(e) => setCheckInForm({ ...checkInForm, vehicleNo: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Purpose of Visit</Label>
+                <Select
+                  value={checkInForm.purpose}
+                  onValueChange={(v) => setCheckInForm({ ...checkInForm, purpose: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select purpose" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Personal">Personal Visit</SelectItem>
+                    <SelectItem value="Delivery">Delivery</SelectItem>
+                    <SelectItem value="Maintenance">Maintenance</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Visiting Unit</Label>
+              <Select
+                value={checkInForm.visitingUnitId}
+                onValueChange={(v) => setCheckInForm({ ...checkInForm, visitingUnitId: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Unit" />
+                </SelectTrigger>
+                <SelectContent>
+                  {units.map((unit: any) => (
+                    <SelectItem key={unit.id} value={unit.id.toString()}>
+                      {unit.block} - {unit.number}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCheckInDialog(false)}>Cancel</Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700"
+              disabled={!checkInForm.name || !checkInForm.phone || !checkInForm.visitingUnitId}
+              onClick={() => checkInMutation.mutate({
+                ...checkInForm,
+                visitingUnitId: parseInt(checkInForm.visitingUnitId)
+              })}
+            >
+              Register & Check-In
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Log Parcel Dialog */}
+      <Dialog open={showLogParcelDialog} onOpenChange={setShowLogParcelDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5 text-purple-600" />
+              Log New Parcel
+            </DialogTitle>
+            <DialogDescription> Record a parcel received at the gate </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Unit Number</Label>
+                <Select
+                  value={parcelForm.unitId}
+                  onValueChange={(v) => setParcelForm({ ...parcelForm, unitId: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Unit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {units.map((unit: any) => (
+                      <SelectItem key={unit.id} value={unit.id.toString()}>
+                        {unit.block} - {unit.number}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Courier Company</Label>
+                <Input
+                  placeholder="Amazon, Flipkart, etc."
+                  value={parcelForm.courierName}
+                  onChange={(e) => setParcelForm({ ...parcelForm, courierName: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tracking Number (Optional)</Label>
+              <Input
+                placeholder="TRK123456789"
+                value={parcelForm.trackingNumber}
+                onChange={(e) => setParcelForm({ ...parcelForm, trackingNumber: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Description/Notes</Label>
+              <Textarea
+                placeholder="Item description or special instructions..."
+                value={parcelForm.description}
+                onChange={(e) => setParcelForm({ ...parcelForm, description: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLogParcelDialog(false)}>Cancel</Button>
+            <Button
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+              disabled={!parcelForm.unitId || !parcelForm.courierName}
+              onClick={() => logParcelMutation.mutate({
+                ...parcelForm,
+                unitId: parseInt(parcelForm.unitId)
+              })}
+            >
+              Log Parcel
             </Button>
           </DialogFooter>
         </DialogContent>

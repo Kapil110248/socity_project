@@ -1,4 +1,4 @@
-const { prisma } = require('../lib/prisma');
+const prisma = require('../lib/prisma');
 
 // Get all incidents (with filters)
 const getAll = async (req, res) => {
@@ -6,27 +6,27 @@ const getAll = async (req, res) => {
     const { societyId } = req.user;
     const { status, severity, search } = req.query;
 
-    const where = { 
-        societyId,
-        ...(status && status !== 'all' ? { status } : {}),
-        ...(severity && severity !== 'all' ? { severity } : {}),
-        ...(search ? {
-            OR: [
-                { title: { contains: search } },
-                { description: { contains: search } },
-                { location: { contains: search } }
-            ]
-        } : {})
+    const where = {
+      societyId,
+      ...(status && status !== 'all' ? { status } : {}),
+      ...(severity && severity !== 'all' ? { severity } : {}),
+      ...(search ? {
+        OR: [
+          { title: { contains: search } },
+          { description: { contains: search } },
+          { location: { contains: search } }
+        ]
+      } : {})
     };
 
     const incidents = await prisma.incident.findMany({
       where,
       include: {
         reportedBy: {
-            select: { id: true, name: true, role: { select: { name: true } } }
+          select: { id: true, name: true, role: { select: { name: true } } }
         },
         assignedTo: {
-            select: { id: true, name: true }
+          select: { id: true, name: true }
         }
       },
       orderBy: { createdAt: 'desc' }
@@ -42,7 +42,7 @@ const getAll = async (req, res) => {
 const create = async (req, res) => {
   try {
     const { title, description, location, severity, images } = req.body;
-    const { societyId, userId } = req.user;
+    const { societyId, id: userId } = req.user;
 
     const incident = await prisma.incident.create({
       data: {
@@ -85,23 +85,23 @@ const updateStatus = async (req, res) => {
 
 // Get incident stats
 const getStats = async (req, res) => {
-    try {
-        const { societyId } = req.user;
-        
-        const [total, open, resolved, critical] = await Promise.all([
-            prisma.incident.count({ where: { societyId } }),
-            prisma.incident.count({ where: { societyId, status: 'open' } }),
-            prisma.incident.count({ where: { societyId, status: 'resolved' } }),
-            prisma.incident.count({ where: { societyId, severity: 'critical' } })
-        ]);
+  try {
+    const { societyId } = req.user;
 
-        res.json({
-            success: true,
-            data: { total, open, resolved, critical }
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
+    const [total, open, resolved, critical] = await Promise.all([
+      prisma.incident.count({ where: { societyId } }),
+      prisma.incident.count({ where: { societyId, status: 'open' } }),
+      prisma.incident.count({ where: { societyId, status: 'resolved' } }),
+      prisma.incident.count({ where: { societyId, severity: 'critical' } })
+    ]);
+
+    res.json({
+      success: true,
+      data: { total, open, resolved, critical }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
 
 module.exports = {

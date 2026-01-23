@@ -41,6 +41,14 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { GuardService } from '@/services/guard.service'
+import { VisitorService } from '@/services/visitor.service'
+import { EmergencyService } from '@/services/emergency.service'
+import { StaffService } from '@/services/staff.service'
+import { ComplaintService } from '@/services/complaint.service'
+import { toast } from 'sonner'
+import { format } from 'date-fns'
 
 // Daily visitor data for chart
 const visitorChartData = [
@@ -55,12 +63,12 @@ const visitorChartData = [
 
 // IGATESECURITY Gatekeeper features (page 31)
 const gatekeeperFeatures = [
-  { icon: Users, label: 'Visitor Management', count: '48', subtext: 'Today', color: 'bg-blue-500', href: '/dashboard/security/visitors' },
-  { icon: UserCheck, label: 'Staff Attendance', count: '12', subtext: 'Present', color: 'bg-purple-500', href: '/dashboard/security/visitors' },
-  { icon: Package, label: 'Parcel Tracking', count: '8', subtext: 'Pending', color: 'bg-orange-500', href: '/dashboard/security/parcels' },
-  { icon: AlertTriangle, label: 'Incident Report', count: '2', subtext: 'Open', color: 'bg-red-500', href: '/dashboard/admin/complaints' },
-  { icon: Car, label: 'Parking', count: '145', subtext: 'Occupied', color: 'bg-green-500', href: '/dashboard/security/vehicles' },
-  { icon: Shield, label: 'Guard Patrol', count: '4', subtext: 'Active', color: 'bg-teal-500', href: '/dashboard/security/visitors' },
+  { icon: Users, label: 'Visitor Management', count: 'visitorsToday', subtext: 'Today', color: 'bg-blue-500', href: '/dashboard/security/visitors' },
+  { icon: UserCheck, label: 'Staff Attendance', count: 'staffPresent', subtext: 'Present', color: 'bg-purple-500', href: '/dashboard/security/visitors' },
+  { icon: Package, label: 'Parcel Tracking', count: 'parcelsToDeliver', subtext: 'Pending', color: 'bg-orange-500', href: '/dashboard/security/parcels' },
+  { icon: AlertTriangle, label: 'Incident Report', count: 'incidentsCount', subtext: 'Open', color: 'bg-red-500', href: '/dashboard/admin/complaints' },
+  { icon: Car, label: 'Parking', count: 'vehiclesIn', subtext: 'Occupied', color: 'bg-green-500', href: '/dashboard/security/vehicles' },
+  { icon: Shield, label: 'Guard Patrol', count: 'guardsOnDuty', subtext: 'Active', color: 'bg-teal-500', href: '/dashboard/security/visitors' },
 ]
 
 // Recent visitors - IGATESECURITY style
@@ -138,18 +146,77 @@ export function SecurityDashboard() {
   const router = useRouter()
   const { user } = useAuthStore()
   const [showSuccess, setShowSuccess] = useState<string | null>(null)
+  const [activeCategory, setActiveCategory] = useState<'visitor' | 'parcel' | 'staff'>('visitor')
+  const queryClient = useQueryClient()
+
+  // Fetch Guard Stats
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ['guard-stats'],
+    queryFn: () => GuardService.getStats(),
+  })
+
+  // Fetch Recent Activity (for visitors and parcels)
+  const { data: activities, isLoading: activitiesLoading } = useQuery({
+    queryKey: ['guard-activity'],
+    queryFn: () => GuardService.getActivity(),
+  })
+
+  // Fetch Pending Visitor Approvals
+  const { data: visitors, isLoading: visitorsLoading } = useQuery({
+    queryKey: ['visitors', 'pending'],
+    queryFn: () => VisitorService.getAll({ status: 'pending' }),
+  })
+
+  // Fetch Emergency Contacts
+  const { data: contacts, isLoading: contactsLoading } = useQuery({
+    queryKey: ['emergency-contacts'],
+    queryFn: () => EmergencyService.listContacts(),
+  })
+
+  // Fetch Staff for attendance count
+  const { data: staff, isLoading: staffLoading } = useQuery({
+    queryKey: ['staff'],
+    queryFn: () => StaffService.getAll(),
+  })
+
+  // Fetch Complaints for incident count
+  const { data: complaintStats, isLoading: complaintsLoading } = useQuery({
+    queryKey: ['complaint-stats'],
+    queryFn: () => ComplaintService.getStats(),
+  })
+
+  // Mutations for Approving/Rejecting
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number | string; status: string }) =>
+      VisitorService.updateStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['visitors'] })
+      queryClient.invalidateQueries({ queryKey: ['guard-activity'] })
+      queryClient.invalidateQueries({ queryKey: ['guard-stats'] })
+      toast.success('Visitor status updated successfully')
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to update visitor status')
+    },
+  })
+
+  // Dynamic Chart Data
+  const currentDayName = format(new Date(), 'EEE')
+  const chartData = visitorChartData.map(d =>
+    d.day === currentDayName ? { ...d, visitors: stats?.visitorsToday || d.visitors } : d
+  )
 
   const showNotification = (message: string) => {
     setShowSuccess(message)
     setTimeout(() => setShowSuccess(null), 3000)
   }
 
-  const handleApprove = (id: number) => {
-    showNotification('Vehicle approved successfully!')
+  const handleApprove = (id: number | string) => {
+    updateStatusMutation.mutate({ id, status: 'APPROVED' })
   }
 
-  const handleReject = (id: number) => {
-    showNotification('Vehicle entry rejected')
+  const handleReject = (id: number | string) => {
+    updateStatusMutation.mutate({ id, status: 'REJECTED' })
   }
 
   return (
@@ -200,15 +267,15 @@ export function SecurityDashboard() {
         {/* Quick Stats Row */}
         <div className="grid grid-cols-3 gap-3 mt-4">
           <div className="bg-white/10 rounded-xl p-3 text-center">
-            <p className="text-2xl font-bold">8</p>
+            <p className="text-2xl font-bold">{stats?.visitorsToday || 0}</p>
             <p className="text-xs text-white/70">Visitors Today</p>
           </div>
           <div className="bg-white/10 rounded-xl p-3 text-center">
-            <p className="text-2xl font-bold">40</p>
+            <p className="text-2xl font-bold">{stats?.vehiclesIn || 0}</p>
             <p className="text-xs text-white/70">Still Inside</p>
           </div>
           <div className="bg-white/10 rounded-xl p-3 text-center">
-            <p className="text-2xl font-bold">0</p>
+            <p className="text-2xl font-bold">{stats?.parcelsToDeliver || 0}</p>
             <p className="text-xs text-white/70">Parcel</p>
           </div>
         </div>
@@ -218,6 +285,15 @@ export function SecurityDashboard() {
       <motion.div variants={containerVariants} className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {gatekeeperFeatures.map((feature, index) => {
           const Icon = feature.icon
+          let count: number | string = 0
+
+          if (feature.count === 'visitorsToday') count = stats?.visitorsToday || 0
+          if (feature.count === 'staffPresent') count = staff?.filter((s: any) => s.status === 'ON_DUTY').length || 0
+          if (feature.count === 'parcelsToDeliver') count = stats?.parcelsToDeliver || 0
+          if (feature.count === 'incidentsCount') count = complaintStats?.pending || 0
+          if (feature.count === 'vehiclesIn') count = stats?.vehiclesIn || 0
+          if (feature.count === 'guardsOnDuty') count = staff?.filter((s: any) => s.role === 'GUARD' && s.status === 'ON_DUTY').length || 0
+
           return (
             <motion.div key={index} variants={itemVariants}>
               <Link href={feature.href}>
@@ -227,7 +303,7 @@ export function SecurityDashboard() {
                       <Icon className="h-6 w-6 text-white" />
                     </div>
                     <p className="text-xs text-gray-500 mb-1">{feature.label}</p>
-                    <p className="text-xl font-bold text-gray-900">{feature.count}</p>
+                    <p className="text-xl font-bold text-gray-900">{count}</p>
                     <p className="text-[10px] text-gray-400">{feature.subtext}</p>
                   </CardContent>
                 </Card>
@@ -246,21 +322,21 @@ export function SecurityDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-lg font-bold text-gray-800">Daily Visitor-In</CardTitle>
-                  <CardDescription>Visitors Today: 8 | Still Inside: 40</CardDescription>
+                  <CardDescription>Visitors Today: {stats?.visitorsToday || 0} | Still Inside: {stats?.vehiclesIn || 0}</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" className="text-xs bg-teal-50 border-teal-200 text-teal-600">
+                  <Button variant="outline" size="sm" className="text-xs bg-teal-50 border-teal-200 text-teal-600" onClick={() => router.push('/dashboard/security/visitors')}>
                     Check-Out
                   </Button>
                   <Badge variant="outline" className="bg-orange-50 text-orange-600 border-orange-200">
-                    Parcel: 0
+                    Parcel: {stats?.parcelsToDeliver || 0}
                   </Badge>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={visitorChartData}>
+                <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="day" stroke="#6b7280" fontSize={12} />
                   <YAxis stroke="#6b7280" fontSize={12} />
@@ -290,45 +366,69 @@ export function SecurityDashboard() {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg font-bold text-gray-800">Recent Visitors</CardTitle>
                 <div className="flex gap-2">
-                  <Badge variant="outline">My Visitors</Badge>
-                  <Badge variant="secondary">Parcels</Badge>
-                  <Badge variant="secondary">Helpers</Badge>
+                  <Badge
+                    variant={activeCategory === 'visitor' ? 'default' : 'secondary'}
+                    className="cursor-pointer"
+                    onClick={() => setActiveCategory('visitor')}
+                  >
+                    My Visitors
+                  </Badge>
+                  <Badge
+                    variant={activeCategory === 'parcel' ? 'default' : 'secondary'}
+                    className="cursor-pointer"
+                    onClick={() => setActiveCategory('parcel')}
+                  >
+                    Parcels
+                  </Badge>
+                  <Badge
+                    variant={activeCategory === 'staff' ? 'default' : 'secondary'}
+                    className="cursor-pointer"
+                    onClick={() => setActiveCategory('staff')}
+                  >
+                    Helpers
+                  </Badge>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-3 max-h-[280px] overflow-y-auto">
-                {recentVisitors.map((visitor) => (
-                  <div
-                    key={visitor.id}
-                    className="p-3 rounded-xl border border-gray-100 hover:border-blue-200 transition-colors"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-3">
-                        <Avatar className="h-10 w-10">
-                          <AvatarFallback className="bg-gray-100 text-gray-600 text-xs">
-                            {visitor.visitor.charAt(0)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-semibold text-gray-900">{visitor.name}</p>
-                          <p className="text-sm text-blue-600">{visitor.visitor} • {visitor.time}</p>
-                          <p className="text-xs text-green-600 flex items-center gap-1 mt-1">
-                            <CheckCircle className="h-3 w-3" />
-                            Approved by {visitor.approvedBy}
-                          </p>
+                {activitiesLoading ? (
+                  <div className="text-center py-4 text-gray-500">Loading activity...</div>
+                ) : activities?.length === 0 ? (
+                  <div className="text-center py-4 text-gray-500">No recent activity</div>
+                ) : (
+                  activities?.filter((a: any) => a.id.startsWith(`${activeCategory}-`)).slice(0, 5).map((activity: any) => (
+                    <div
+                      key={activity.id}
+                      className="p-3 rounded-xl border border-gray-100 hover:border-blue-200 transition-colors"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3 w-full">
+                          <Avatar className="h-10 w-10 shrink-0">
+                            <AvatarFallback className="bg-gray-100 text-gray-600 text-xs text-[10px]">
+                              {activity.name.charAt(0)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-gray-900 truncate text-sm">{activity.action}</p>
+                            <p className="text-xs text-blue-600 truncate">{activity.name} • {format(new Date(activity.time), 'h:mm a')}</p>
+                            <p className="text-[10px] text-green-600 flex items-center gap-1 mt-0.5">
+                              <CheckCircle className="h-3 w-3" />
+                              {activeCategory === 'staff' ? activity.unit : `Unit ${activity.unit}`}
+                            </p>
+                          </div>
                         </div>
+                        <Button variant="ghost" size="sm" className="text-[10px] h-7 px-2 text-gray-500">
+                          Details
+                        </Button>
                       </div>
-                      <Button variant="ghost" size="sm" className="text-xs text-gray-500">
-                        Report wrong Entry
-                      </Button>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
-              <Link href="/dashboard/security/visitors">
+              <Link href={activeCategory === 'parcel' ? '/dashboard/security/parcels' : '/dashboard/security/visitors'}>
                 <Button variant="outline" className="w-full mt-4 border-teal-200 text-teal-600 hover:bg-teal-50">
-                  View All Visitors
+                  View All {activeCategory === 'visitor' ? 'Visitors' : activeCategory === 'parcel' ? 'Parcels' : 'Staff Activities'}
                 </Button>
               </Link>
             </CardContent>
@@ -344,46 +444,52 @@ export function SecurityDashboard() {
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg font-bold text-gray-800">Pending Approvals</CardTitle>
-                <Badge className="bg-orange-100 text-orange-600">{pendingApprovals.length} Pending</Badge>
+                <Badge className="bg-orange-100 text-orange-600">{(visitors as any)?.length || 0} Pending</Badge>
               </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {pendingApprovals.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-4 rounded-xl border border-orange-100 bg-orange-50/30 hover:border-orange-300 transition-colors"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <Car className="h-4 w-4 text-orange-600" />
-                          <h4 className="font-semibold text-gray-900">{item.vehicle}</h4>
+                {visitorsLoading ? (
+                  <div className="text-center py-4 text-gray-500">Loading pending approvals...</div>
+                ) : (visitors as any)?.length === 0 ? (
+                  <div className="text-center py-4 text-gray-500 italic">No pending approvals</div>
+                ) : (
+                  (visitors as any)?.slice(0, 3).map((item: any) => (
+                    <div
+                      key={item.id}
+                      className="p-4 rounded-xl border border-orange-100 bg-orange-50/30 hover:border-orange-300 transition-colors"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Users className="h-4 w-4 text-orange-600" />
+                            <h4 className="font-semibold text-gray-900">{item.name}</h4>
+                          </div>
+                          <p className="text-sm text-gray-600">
+                            Unit: {item.unit?.block}-{item.unit?.number} • {item.purpose}
+                          </p>
+                          <Badge variant="outline" className="mt-2 text-xs">{item.phone}</Badge>
                         </div>
-                        <p className="text-sm text-gray-600">
-                          Unit: {item.unit} • {item.resident}
-                        </p>
-                        <Badge variant="outline" className="mt-2 text-xs">{item.type}</Badge>
+                      </div>
+                      <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+                        <div className="flex items-center text-xs text-gray-500">
+                          <Clock className="h-3 w-3 mr-1" />
+                          {format(new Date(item.createdAt), 'MMM d, h:mm a')}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => handleReject(item.id)}>
+                            <XCircle className="h-4 w-4 mr-1" />
+                            Reject
+                          </Button>
+                          <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleApprove(item.id)}>
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Approve
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-                      <div className="flex items-center text-xs text-gray-500">
-                        <Clock className="h-3 w-3 mr-1" />
-                        {item.time}
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => handleReject(item.id)}>
-                          <XCircle className="h-4 w-4 mr-1" />
-                          Reject
-                        </Button>
-                        <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleApprove(item.id)}>
-                          <CheckCircle className="h-4 w-4 mr-1" />
-                          Approve
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
               <Link href="/dashboard/security/vehicles">
                 <Button variant="outline" className="w-full mt-4">
@@ -405,26 +511,50 @@ export function SecurityDashboard() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-3">
-                {emergencyContacts.map((contact, index) => {
-                  const Icon = contact.icon
-                  return (
+                {contactsLoading ? (
+                  <div className="col-span-2 text-center py-4 text-gray-500">Loading contacts...</div>
+                ) : (contacts as any)?.length === 0 ? (
+                  <>
+                    {emergencyContacts.map((contact, index) => {
+                      const Icon = contact.icon
+                      return (
+                        <a
+                          key={index}
+                          href={`tel:${contact.number}`}
+                          className="p-4 bg-white rounded-xl border border-gray-200 hover:shadow-md transition-all"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-red-100 rounded-lg">
+                              <Icon className="h-5 w-5 text-red-600" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{contact.name}</p>
+                              <p className="text-lg font-bold text-blue-600">{contact.number}</p>
+                            </div>
+                          </div>
+                        </a>
+                      )
+                    })}
+                  </>
+                ) : (
+                  (contacts as any)?.map((contact: any, index: number) => (
                     <a
                       key={index}
-                      href={`tel:${contact.number}`}
+                      href={`tel:${contact.phone}`}
                       className="p-4 bg-white rounded-xl border border-gray-200 hover:shadow-md transition-all"
                     >
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-red-100 rounded-lg">
-                          <Icon className="h-5 w-5 text-red-600" />
+                          <Phone className="h-5 w-5 text-red-600" />
                         </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{contact.name}</p>
-                          <p className="text-lg font-bold text-blue-600">{contact.number}</p>
+                        <div className="overflow-hidden">
+                          <p className="text-sm font-medium text-gray-900 truncate">{contact.name}</p>
+                          <p className="text-lg font-bold text-blue-600 truncate">{contact.phone}</p>
                         </div>
                       </div>
                     </a>
-                  )
-                })}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
