@@ -1358,7 +1358,7 @@ export default function MyUnitPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paymentHistory.map((payment) => (
+                  {paymentHistory.map((payment: any) => (
                     <TableRow key={payment.id} className="hover:bg-gray-50">
                       <TableCell className="font-medium text-[#1e3a5f]">
                         {payment.id}

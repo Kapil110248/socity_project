@@ -137,7 +137,6 @@ export default function GuardsManagementPage() {
     emergencyContact: staff.emergencyContact,
     idProof: staff.idProof,
     idNumber: staff.idNumber,
-    photo: staff.photo || '',
     workingDays: staff.workingDays || 'Mon,Tue,Wed,Thu,Fri,Sat,Sun',
   }))
 
@@ -234,6 +233,7 @@ export default function GuardsManagementPage() {
       idProof: guard.idProof || '',
       idNumber: guard.idNumber || '',
       photo: guard.photo || '',
+      workingDays: guard.workingDays || 'Mon,Tue,Wed,Thu,Fri,Sat,Sun',
     })
     setIsEditDialogOpen(true)
   }

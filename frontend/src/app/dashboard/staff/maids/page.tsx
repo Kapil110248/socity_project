@@ -128,7 +128,7 @@ export default function MaidsManagementPage() {
   ]
 
   // Filter helpers based on search and status
-  const filteredHelpers = helpers.filter(helper => {
+  const filteredHelpers = helpers.filter((helper: any) => {
     const matchesSearch = helper.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       helper.phone.includes(searchQuery)
     const matchesStatus = statusFilter === 'all' ||
@@ -326,7 +326,7 @@ export default function MaidsManagementPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredHelpers.map((helper) => (
+            {filteredHelpers.map((helper: any) => (
               <TableRow key={helper.id}>
                 <TableCell>
                   <div className="flex items-center gap-3">
@@ -353,7 +353,7 @@ export default function MaidsManagementPage() {
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
-                    {helper.units.slice(0, 3).map((unit) => (
+                    {helper.units.slice(0, 3).map((unit: string) => (
                       <Badge key={unit} variant="secondary" className="text-xs">
                         <Home className="h-3 w-3 mr-1" /> {unit}
                       </Badge>

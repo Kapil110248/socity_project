@@ -36,10 +36,10 @@ export const mockMarketplaceItems: MarketplaceItem[] = [
         condition: 'good',
         price: 15000,
         priceType: 'negotiable',
-        seller: {
+        owner: {
             id: 'res-001',
             name: 'Amit Sharma',
-            unit: 'A-502',
+            ownedUnits: [{ block: 'A', number: '502' }],
         },
         images: [],
         status: 'active',
@@ -54,10 +54,10 @@ export const mockMarketplaceItems: MarketplaceItem[] = [
         condition: 'fair',
         price: 8000,
         priceType: 'fixed',
-        seller: {
+        owner: {
             id: 'res-002',
             name: 'Priya Singh',
-            unit: 'B-304',
+            ownedUnits: [{ block: 'B', number: '304' }],
         },
         images: [],
         status: 'active',
@@ -72,10 +72,10 @@ export const mockMarketplaceItems: MarketplaceItem[] = [
         condition: 'good',
         price: 3000,
         priceType: 'negotiable',
-        seller: {
+        owner: {
             id: 'res-003',
             name: 'Rahul Verma',
-            unit: 'C-101',
+            ownedUnits: [{ block: 'C', number: '101' }],
         },
         images: [],
         status: 'active',

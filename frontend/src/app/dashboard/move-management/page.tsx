@@ -396,7 +396,7 @@ export default function MoveManagementPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {moveRequests.map((request) => (
+                {moveRequests.map((request: any) => (
                   <TableRow key={request.id} className="hover:bg-gray-50">
                     <TableCell className="font-mono font-medium">{request.id}</TableCell>
                     <TableCell>{getTypeBadge(request.type)}</TableCell>
@@ -506,7 +506,7 @@ export default function MoveManagementPage() {
                             <div>
                               <h4 className="font-semibold mb-2">Checklist</h4>
                               <div className="space-y-2">
-                                {(request.checklistItems || []).map((item, idx) => (
+                                {(request.checklistItems || []).map((item: any, idx: number) => (
                                   <div key={idx} className="flex items-center gap-2 text-sm">
                                     {item.completed ? (
                                       <CheckCircle className="h-4 w-4 text-green-500" />

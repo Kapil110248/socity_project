@@ -603,7 +603,7 @@ export default function AmenitiesPage() {
           <TabsContent value="amenities" className="mt-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <AnimatePresence>
-                {amenities.map((amenity, index) => {
+                {amenities.map((amenity: any, index: number) => {
                   const AmenityIcon = amenityIcons[amenity.type] || Building
                   const colors = amenityColors[amenity.type] || amenityColors.other
 
@@ -749,7 +749,7 @@ export default function AmenitiesPage() {
           {/* My Bookings Tab */}
           <TabsContent value="bookings" className="mt-6 space-y-4">
             {upcomingBookings.length > 0 ? (
-              upcomingBookings.map((booking, index) => {
+              upcomingBookings.map((booking: any, index: number) => {
                 const bookingAmenity = booking.amenity || {}
                 const AmenityIcon = amenityIcons[bookingAmenity.type] || Building
                 const colors = amenityColors[bookingAmenity.type] || amenityColors.other
@@ -843,7 +843,7 @@ export default function AmenitiesPage() {
           {/* History Tab */}
           <TabsContent value="history" className="mt-6 space-y-4">
             {pastBookings.length > 0 ? (
-              pastBookings.map((booking, index) => {
+              pastBookings.map((booking: any, index: number) => {
                 const bookingAmenity = booking.amenity || {}
                 const AmenityIcon = amenityIcons[bookingAmenity.type] || Building
 

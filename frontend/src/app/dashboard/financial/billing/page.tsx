@@ -435,7 +435,7 @@ export default function BillingPage() {
     if (selectedInvoices.length === filteredInvoices.length) {
       setSelectedInvoices([])
     } else {
-      setSelectedInvoices(filteredInvoices.map(i => i.id))
+      setSelectedInvoices(filteredInvoices.map((i: any) => i.id))
     }
   }
 

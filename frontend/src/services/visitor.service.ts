@@ -2,10 +2,16 @@ import api from '@/lib/api';
 import { API_CONFIG } from '@/config/api.config';
 
 export const VisitorService = {
-  getAll: async (params?: { search?: string }) => {
-    const url = params?.search
-      ? `${API_CONFIG.VISITOR.LIST}?search=${params.search}`
+  getAll: async (params?: { search?: string; status?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.status) queryParams.append('status', params.status);
+
+    const queryString = queryParams.toString();
+    const url = queryString
+      ? `${API_CONFIG.VISITOR.LIST}?${queryString}`
       : API_CONFIG.VISITOR.LIST;
+
     const response = await api.get(url);
     return response.data;
   },

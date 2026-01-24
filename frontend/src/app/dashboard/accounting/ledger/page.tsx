@@ -55,9 +55,9 @@ export default function GeneralLedgerPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [newAccount, setNewAccount] = useState({
-      name: '',
-      code: '',
-      type: 'ASSET'
+    name: '',
+    code: '',
+    type: 'ASSET'
   })
   // Missing Filters State
   const [accountTypeFilter, setAccountTypeFilter] = useState('all')
@@ -70,48 +70,48 @@ export default function GeneralLedgerPage() {
 
   // ... (useMutation logic same as before)
   const createMutation = useMutation({
-      mutationFn: LedgerService.createAccount,
-      onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ['ledger-stats'] })
-          setIsAddOpen(false)
-          setNewAccount({ name: '', code: '', type: 'ASSET' })
-          toast.success('Account created successfully')
-      },
-      onError: (error: any) => {
-          toast.error(error.response?.data?.error || 'Failed to create account')
-      }
+    mutationFn: LedgerService.createAccount,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ledger-stats'] })
+      setIsAddOpen(false)
+      setNewAccount({ name: '', code: '', type: 'ASSET' })
+      toast.success('Account created successfully')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Failed to create account')
+    }
   })
 
   // Export Logic
   const handleExport = () => {
-      // Flaten groups to accounts
-      const allAccounts = filteredGroups.flatMap(g => g.accounts.map(a => ({
-          ...a,
-          group: g.name
-      })))
+    // Flaten groups to accounts
+    const allAccounts = filteredGroups.flatMap((g: any) => g.accounts.map((a: any) => ({
+      ...a,
+      group: g.name
+    })))
 
-      if (!allAccounts.length) return toast.error("No data to export")
+    if (!allAccounts.length) return toast.error("No data to export")
 
-      const headers = ['Group', 'Code', 'Account Name', 'Type', 'Balance']
-      const csvContent = [
-          headers.join(','),
-          ...allAccounts.map((a: any) => [
-              a.group,
-              a.code,
-              `"${a.name}"`,
-              a.type,
-              a.balance
-          ].join(','))
-      ].join('\n')
+    const headers = ['Group', 'Code', 'Account Name', 'Type', 'Balance']
+    const csvContent = [
+      headers.join(','),
+      ...allAccounts.map((a: any) => [
+        a.group,
+        a.code,
+        `"${a.name}"`,
+        a.type,
+        a.balance
+      ].join(','))
+    ].join('\n')
 
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-      const link = document.createElement('a')
-      const url = URL.createObjectURL(blob)
-      link.setAttribute('href', url)
-      link.setAttribute('download', 'general_ledger_export.csv')
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', 'general_ledger_export.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   const toggleGroup = (groupId: number) => {
@@ -129,46 +129,46 @@ export default function GeneralLedgerPage() {
       maximumFractionDigits: 0,
     }).format(amount)
   }
-  
+
   const handleCreate = () => {
-    if(!newAccount.name || !newAccount.code) return toast.error("Please fill all fields")
+    if (!newAccount.name || !newAccount.code) return toast.error("Please fill all fields")
     createMutation.mutate(newAccount)
   }
 
   // Filter Logic Updated
   const filteredGroups = accountGroups.map((group: any) => {
-     // Filter by Account Type Logic (Asset/Liability etc)
-     // Since backend returns predefined groups (1=Asset, 2=Liability, etc), we filter groups entirely or filtered accounts inside
-     
-     // Correct mapping:
-     // If accountTypeFilter is 'asset', only show Group 1 (Assets).
-     const typeMap: Record<string, string> = {
-         'asset': 'Asset',
-         'liability': 'Liability',
-         'income': 'Income',
-         'expense': 'Expense'
-     }
+    // Filter by Account Type Logic (Asset/Liability etc)
+    // Since backend returns predefined groups (1=Asset, 2=Liability, etc), we filter groups entirely or filtered accounts inside
 
-     if (accountTypeFilter !== 'all' && typeMap[accountTypeFilter] !== group.type) {
-         return { ...group, accounts: [] } 
-     }
+    // Correct mapping:
+    // If accountTypeFilter is 'asset', only show Group 1 (Assets).
+    const typeMap: Record<string, string> = {
+      'asset': 'Asset',
+      'liability': 'Liability',
+      'income': 'Income',
+      'expense': 'Expense'
+    }
 
-     return {
-        ...group,
-        accounts: group.accounts.filter((acc: any) => 
-          (acc.name.toLowerCase().includes(searchQuery.toLowerCase()) || acc.code.includes(searchQuery))
-        )
-     }
+    if (accountTypeFilter !== 'all' && typeMap[accountTypeFilter] !== group.type) {
+      return { ...group, accounts: [] }
+    }
+
+    return {
+      ...group,
+      accounts: group.accounts.filter((acc: any) =>
+        (acc.name.toLowerCase().includes(searchQuery.toLowerCase()) || acc.code.includes(searchQuery))
+      )
+    }
   }).filter((group: any) => group.accounts.length > 0)
 
 
   if (isLoading) {
-      // ... (skeleton)
-      return (
+    // ... (skeleton)
+    return (
       <div className="p-6 space-y-6">
         <Skeleton className="h-12 w-1/3" />
         <div className="grid grid-cols-4 gap-4">
-           {[1,2,3,4].map(i => <Skeleton key={i} className="h-24 w-full" />)}
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-24 w-full" />)}
         </div>
         <Skeleton className="h-64 w-full" />
       </div>
@@ -180,8 +180,8 @@ export default function GeneralLedgerPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
         <div>
-           {/* ... Title ... */}
-           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2">
+          {/* ... Title ... */}
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2">
             <BookOpen className="h-8 w-8 text-blue-600" />
             General Ledger
           </h1>
@@ -192,56 +192,56 @@ export default function GeneralLedgerPage() {
             <Download className="h-4 w-4" />
             Export
           </Button>
-          
+
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-              {/* ... Dialog implementation ... */}
-              <DialogTrigger asChild>
-                <Button className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    New Account
-                </Button>
+            {/* ... Dialog implementation ... */}
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                New Account
+              </Button>
             </DialogTrigger>
             <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Create New Ledger Account</DialogTitle>
-                    <DialogDescription>Add a new account head to your chart of accounts</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                        <Label>Account Name</Label>
-                        <Input 
-                            placeholder="e.g. Festival Fund" 
-                            value={newAccount.name}
-                            onChange={(e) => setNewAccount({...newAccount, name: e.target.value})}
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Account Code</Label>
-                        <Input 
-                            placeholder="e.g. 5001" 
-                            value={newAccount.code}
-                            onChange={(e) => setNewAccount({...newAccount, code: e.target.value})}
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Type</Label>
-                        <Select value={newAccount.type} onValueChange={(v) => setNewAccount({...newAccount, type: v})}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="ASSET">Asset</SelectItem>
-                                <SelectItem value="LIABILITY">Liability</SelectItem>
-                                <SelectItem value="INCOME">Income</SelectItem>
-                                <SelectItem value="EXPENSE">Expense</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="flex justify-end gap-2 pt-4">
-                        <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
-                        <Button onClick={handleCreate} disabled={createMutation.isPending}>
-                            {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Create Account'}
-                        </Button>
-                    </div>
+              <DialogHeader>
+                <DialogTitle>Create New Ledger Account</DialogTitle>
+                <DialogDescription>Add a new account head to your chart of accounts</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Account Name</Label>
+                  <Input
+                    placeholder="e.g. Festival Fund"
+                    value={newAccount.name}
+                    onChange={(e) => setNewAccount({ ...newAccount, name: e.target.value })}
+                  />
                 </div>
+                <div className="space-y-2">
+                  <Label>Account Code</Label>
+                  <Input
+                    placeholder="e.g. 5001"
+                    value={newAccount.code}
+                    onChange={(e) => setNewAccount({ ...newAccount, code: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Type</Label>
+                  <Select value={newAccount.type} onValueChange={(v) => setNewAccount({ ...newAccount, type: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ASSET">Asset</SelectItem>
+                      <SelectItem value="LIABILITY">Liability</SelectItem>
+                      <SelectItem value="INCOME">Income</SelectItem>
+                      <SelectItem value="EXPENSE">Expense</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
+                  <Button onClick={handleCreate} disabled={createMutation.isPending}>
+                    {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Create Account'}
+                  </Button>
+                </div>
+              </div>
             </DialogContent>
           </Dialog>
         </div>
@@ -250,7 +250,7 @@ export default function GeneralLedgerPage() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {/* ... Summary Cards Mapping ... */}
-         {accountGroups.map((group: any, index: number) => (
+        {accountGroups.map((group: any, index: number) => (
           <motion.div
             key={group.id}
             initial={{ opacity: 0, y: 20 }}
@@ -326,11 +326,11 @@ export default function GeneralLedgerPage() {
           </TableHeader>
           <TableBody>
             {filteredGroups.length === 0 ? (
-                 <TableRow><TableCell colSpan={7} className="text-center py-6 text-gray-500">No accounts match your filters</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-6 text-gray-500">No accounts match your filters</TableCell></TableRow>
             ) : filteredGroups.map((group: any) => (
               <Fragment key={group.id}>
                 {/* ... Rows ... */}
-                 <TableRow
+                <TableRow
                   key={group.id}
                   className="bg-blue-50 cursor-pointer hover:bg-blue-100"
                   onClick={() => toggleGroup(group.id)}

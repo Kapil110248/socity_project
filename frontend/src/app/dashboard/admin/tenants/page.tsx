@@ -71,6 +71,7 @@ interface Tenant {
   parkingSlot: string;
   vehicleNumber: string;
   emergencyContact: string;
+  familyMembers: number;
   status: string;
 }
 
@@ -206,7 +207,7 @@ export default function TenantsPage() {
     const headers = ['Tenant ID', 'Name', 'Email', 'Phone', 'Unit', 'Block', 'Floor', 'Rent', 'Lease End', 'Status']
     const csvContent = [
       headers.join(','),
-      ...tenants.map(t => [
+      ...tenants.map((t: any) => [
         t.id,
         `"${t.name}"`,
         t.email,
@@ -242,7 +243,7 @@ export default function TenantsPage() {
     }
   }
 
-  const filteredTenants = tenants.filter((tenant) => {
+  const filteredTenants = tenants.filter((tenant: any) => {
     const matchesSearch =
       tenant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       tenant.unit.toLowerCase().includes(searchQuery.toLowerCase()) ||

@@ -361,8 +361,13 @@
 
 
 import ClientPage from '../ClientPage'
+import { mockTickets } from '@/lib/mocks/tickets'
 
-
+export async function generateStaticParams() {
+  return mockTickets.map((ticket) => ({
+    id: ticket.id,
+  }))
+}
 
 export default function Page() {
   return <ClientPage />

@@ -133,6 +133,9 @@ interface Vendor {
   lastPayment: string
   pendingAmount: number
   joinDate: string
+  createdAt?: string // Optional as it might be missing in mock data but present in API
+  serviceType?: string
+  contact?: string
 }
 
 const vendors: Vendor[] = [
@@ -318,6 +321,7 @@ export default function VendorsPage() {
   const [ratingVendor, setRatingVendor] = useState<Vendor | null>(null)
   const [renewingVendor, setRenewingVendor] = useState<Vendor | null>(null)
   const [paymentHistoryVendor, setPaymentHistoryVendor] = useState<any | null>(null)
+  const [selectedRating, setSelectedRating] = useState(0)
   const queryClient = useQueryClient()
 
   // Add Vendor Form State
@@ -1329,7 +1333,7 @@ export default function VendorsPage() {
                       <Label>Status</Label>
                       <Select
                         value={editingVendor.status?.toLowerCase()}
-                        onValueChange={(value) => setEditingVendor({ ...editingVendor, status: value })}
+                        onValueChange={(value) => setEditingVendor({ ...editingVendor, status: value as 'active' | 'inactive' })}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -1419,7 +1423,7 @@ export default function VendorsPage() {
                       <Input
                         type="number"
                         value={editingVendor.contractValue || ''}
-                        onChange={(e) => setEditingVendor({ ...editingVendor, contractValue: e.target.value })}
+                        onChange={(e) => setEditingVendor({ ...editingVendor, contractValue: parseFloat(e.target.value) || 0 })}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1446,7 +1450,7 @@ export default function VendorsPage() {
                       <Label>Contract Status</Label>
                       <Select
                         value={editingVendor.contractStatus}
-                        onValueChange={(value) => setEditingVendor({ ...editingVendor, contractStatus: value })}
+                        onValueChange={(value) => setEditingVendor({ ...editingVendor, contractStatus: value as 'active' | 'expiring' | 'expired' })}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -1552,8 +1556,11 @@ export default function VendorsPage() {
                     <button
                       key={star}
                       className="hover:scale-110 transition-transform"
+                      onClick={() => setSelectedRating(star)}
                     >
-                      <Star className="h-10 w-10 text-yellow-400 hover:text-yellow-500 fill-yellow-400" />
+                      <Star
+                        className={`h-10 w-10 ${star <= selectedRating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'} hover:text-yellow-500`}
+                      />
                     </button>
                   ))}
                 </div>
@@ -1573,7 +1580,7 @@ export default function VendorsPage() {
             )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setRatingVendor(null)}>Cancel</Button>
-              <Button className="bg-yellow-600 hover:bg-yellow-700 text-white" onClick={handleRateVendor}>
+              <Button className="bg-yellow-600 hover:bg-yellow-700 text-white" onClick={() => handleRateVendor(selectedRating)}>
                 <Star className="h-4 w-4 mr-2" />
                 Submit Rating
               </Button>
